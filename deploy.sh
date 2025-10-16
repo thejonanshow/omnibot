@@ -1,284 +1,128 @@
 #!/bin/bash
 set -e
 
-# Source environment variables
-if [ -f .env ]; then
-    set -a
-    source .env
-    set +a
-fi
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-echo "🚀 OMNI-AGENT DEPLOYMENT"
+echo -e "${BLUE}🚀 OMNIBOT DEPLOYMENT${NC}"
 echo "========================"
 echo ""
 
-# Check if basic deployment is requested (function calling is now default)
-if [ "$1" = "--basic" ] || [ "$1" = "-b" ]; then
-    echo "🔧 Basic deployment requested (legacy mode)"
-    echo "This will deploy without function calling capabilities"
+# Determine environment
+ENV=${1:-staging}
+
+if [ "$ENV" = "production" ]; then
+    echo -e "${RED}⚠️  WARNING: PRODUCTION DEPLOYMENT${NC}"
     echo ""
-    read -p "Continue with basic deployment? (y/n): " confirm
-    if [ "$confirm" = "y" ]; then
-        echo "Proceeding with basic deployment..."
-    else
-        echo "Basic deployment cancelled"
+    echo "You are about to deploy to PRODUCTION."
+    echo "This should only be done after successful staging tests."
+    echo ""
+    read -p "Are you absolutely sure? Type 'DEPLOY TO PRODUCTION' to confirm: " confirm
+    
+    if [ "$confirm" != "DEPLOY TO PRODUCTION" ]; then
+        echo -e "${YELLOW}Production deployment cancelled.${NC}"
         exit 0
     fi
+    
+    WORKER_ENV="production"
+    PAGES_PROJECT="omnibot-ui"
+    echo -e "${GREEN}✓ Production deployment confirmed${NC}"
 else
-    # Function calling deployment is now the default
-    echo "🔧 Deploying with function calling capabilities"
-    echo "This includes web browsing, command execution, and shared context"
-    echo ""
-    read -p "Continue with deployment? (y/n): " confirm
-    if [ "$confirm" = "y" ]; then
-        echo "🚀 Deploying with function calling capabilities..."
-
-        # Create backup only if this is a production deployment
-        if [ "$2" = "--backup" ] || [ "$2" = "-b" ]; then
-            BACKUP_DIR="backup-$(date +%Y%m%d-%H%M%S)"
-            mkdir -p "$BACKUP_DIR"
-            if [ -f "cloudflare-worker/wrangler.toml" ]; then
-                cp "cloudflare-worker/wrangler.toml" "$BACKUP_DIR/wrangler.toml"
-            fi
-            if [ -f "deployment-urls.txt" ]; then
-                cp "deployment-urls.txt" "$BACKUP_DIR/deployment-urls.txt"
-            fi
-            if [ -f ".env" ]; then
-                cp ".env" "$BACKUP_DIR/.env"
-            fi
-            echo "✓ Backup created in: $BACKUP_DIR"
-        else
-            echo "ℹ️  No backup created (use --backup flag for production deployments)"
-        fi
-
-        # Deploy Runloop with function calling using blueprint manager
-        if [ -n "$RUNLOOP_API_KEY" ]; then
-            echo "🌐 Deploying Runloop services with blueprint manager..."
-            python3 blueprint_manager.py
-            if [ $? -eq 0 ]; then
-                echo "✓ Runloop deployment successful"
-            else
-                echo "❌ Runloop deployment failed"
-                exit 1
-            fi
-        else
-            echo "⚠️  RUNLOOP_API_KEY not set, skipping Runloop deployment"
-        fi
-
-        # Deploy Cloudflare Worker
-        echo "📦 Deploying Cloudflare Worker with function calling..."
-        cd cloudflare-worker
-
-        # Check if CONTEXT namespace exists
-        CONTEXT_ID=$(npx wrangler kv:namespace list 2>&1 | grep -oE 'id = "[^"]+"' | grep -v "USAGE\|CHALLENGES" | head -1 | cut -d'"' -f2 || echo "")
-
-        if [ -z "$CONTEXT_ID" ]; then
-            echo "📦 Creating CONTEXT KV namespace..."
-            CONTEXT_ID=$(npx wrangler kv:namespace create "CONTEXT" 2>&1 | grep -oE 'id = "[^"]+"' | head -1 | cut -d'"' -f2)
-            echo "✓ CONTEXT namespace created: $CONTEXT_ID"
-        else
-            echo "✓ CONTEXT namespace already exists: $CONTEXT_ID"
-        fi
-
-        # Update wrangler.toml with CONTEXT namespace
-        if [ -f "wrangler.toml" ] && ! grep -q "binding = \"CONTEXT\"" wrangler.toml; then
-            cat >> wrangler.toml << EOF
-
-[[kv_namespaces]]
-binding = "CONTEXT"
-id = "$CONTEXT_ID"
-EOF
-            echo "✓ CONTEXT namespace added to wrangler.toml"
-        fi
-
-        # Deploy worker
-        DEPLOY_OUTPUT=$(npx wrangler deploy 2>&1)
-        echo "$DEPLOY_OUTPUT"
-
-        # Extract worker URL
-        WORKER_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]+\.workers\.dev' | head -1)
-        if [ -z "$WORKER_URL" ]; then
-            WORKER_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^/]+workers\.dev[^ ]*' | head -1)
-        fi
-        if [ -z "$WORKER_URL" ]; then
-            WORKER_URL="https://omni-agent-router.YOUR_SUBDOMAIN.workers.dev"
-        fi
-
-        cd ..
-
-        # Deploy frontend
-        echo "🎨 Deploying Frontend..."
-        cd frontend
-        if [ -f "index.html" ]; then
-            echo "✓ Frontend files present"
-        else
-            echo "❌ Frontend files missing"
-            exit 1
-        fi
-        cd ..
-
-        echo "✅ DEPLOYMENT COMPLETE!"
-        echo "======================="
-        echo ""
-        echo "🎯 Worker API: $WORKER_URL"
-        echo "🌐 Frontend UI: https://omni-agent-ui.pages.dev"
-        echo ""
-        echo "🔧 NEW CAPABILITIES:"
-        echo "   • Function calling for Groq"
-        echo "   • Command execution via Runloop"
-        echo "   • Web browsing with Playwright"
-        echo "   • File operations"
-        echo "   • Shared context storage"
-        echo ""
-        echo "🎤 To Test Function Calling Features:"
-        echo ""
-        echo "1. Open: https://omni-agent-ui.pages.dev"
-        echo "2. Click ⚙️ Settings"
-        echo "3. Router URL: $WORKER_URL"
-        echo "4. Shared Secret: $SHARED_SECRET"
-        echo "5. Click Save"
-        echo "6. Try: 'List the files in the current directory'"
-        echo "7. Try: 'Browse to https://example.com'"
-        echo "8. Try: 'Run the command: ls -la'"
-        echo ""
-        echo "💾 Backup saved in: $BACKUP_DIR"
-        echo "🔄 Rollback command: ./rollback.sh $BACKUP_DIR"
-        echo ""
-        exit 0
-    else
-        echo "Deployment cancelled"
-        exit 0
-    fi
+    WORKER_ENV="staging"
+    PAGES_PROJECT="omnibot-ui-staging"
+    echo -e "${GREEN}📦 Deploying to STAGING environment${NC}"
 fi
 
-# Check if .env exists and has required keys
-if [ ! -f .env ]; then
-    echo "No configuration found. Running setup..."
-    ./setup.sh
-else
-    # Source and check for required keys
-    set -a
-    source .env 2>/dev/null || true
-    set +a
+echo ""
+echo "Environment: $WORKER_ENV"
+echo "Worker: omnibot-router-$WORKER_ENV"
+echo "Pages: $PAGES_PROJECT"
+echo ""
 
-    if [ -z "$SHARED_SECRET" ] || [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$GROQ_API_KEY" ] && [ -z "$GEMINI_API_KEY" ]; then
-        echo "Incomplete configuration. Running setup..."
-        ./setup.sh
-    else
-        echo "✓ Configuration found"
-
-        # Re-source after potential setup
-        set -a
-        source .env 2>/dev/null || true
-        set +a
-    fi
+# Run tests first
+echo -e "${BLUE}🧪 Running tests...${NC}"
+npm test
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Tests failed! Deployment aborted.${NC}"
+    exit 1
 fi
+echo -e "${GREEN}✓ All tests passed${NC}"
+echo ""
 
 # Deploy Cloudflare Worker
-echo ""
-echo "📦 Deploying Cloudflare Worker..."
+echo -e "${BLUE}📦 Deploying Cloudflare Worker to $WORKER_ENV...${NC}"
 cd cloudflare-worker
-npm install
 
-# Deploy and capture output
-DEPLOY_OUTPUT=$(npx wrangler deploy 2>&1)
+DEPLOY_OUTPUT=$(npx wrangler deploy --env $WORKER_ENV 2>&1)
 echo "$DEPLOY_OUTPUT"
 
 # Extract worker URL
 WORKER_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]+\.workers\.dev' | head -1)
 
 if [ -z "$WORKER_URL" ]; then
-    # Try alternative pattern
-    WORKER_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^/]+workers\.dev[^ ]*' | head -1)
+    echo -e "${RED}❌ Could not extract worker URL from deploy output${NC}"
+    exit 1
 fi
 
-if [ -z "$WORKER_URL" ]; then
-    echo "⚠️  Could not extract worker URL from deploy output"
-    WORKER_URL="https://omni-agent-router.YOUR_SUBDOMAIN.workers.dev"
-fi
-
+echo -e "${GREEN}✓ Worker deployed: $WORKER_URL${NC}"
 cd ..
 
-# Deploy frontend
+# Deploy Frontend
 echo ""
-echo "🎨 Deploying Frontend..."
+echo -e "${BLUE}🎨 Deploying Frontend to $PAGES_PROJECT...${NC}"
 cd frontend
 
-# Create _routes.json
-cat > _routes.json << EOF
-{
-  "version": 1,
-  "include": ["/*"],
-  "exclude": []
-}
-EOF
-
-# Ensure project exists
-echo "Checking if Pages project exists..."
-if ! npx wrangler pages project list 2>&1 | grep -q "omni-agent-ui"; then
+# Check if project exists
+if ! npx wrangler pages project list 2>&1 | grep -q "$PAGES_PROJECT"; then
     echo "Creating Pages project..."
-    npx wrangler pages project create omni-agent-ui --production-branch main
+    npx wrangler pages project create $PAGES_PROJECT --production-branch main
 fi
 
 # Deploy to Pages
-echo "Deploying to Cloudflare Pages..."
-FRONTEND_DEPLOY=$(npx wrangler pages deploy . --project-name omni-agent-ui --commit-dirty=true 2>&1)
+FRONTEND_DEPLOY=$(npx wrangler pages deploy . --project-name $PAGES_PROJECT --commit-dirty=true 2>&1)
 echo "$FRONTEND_DEPLOY"
 
 # Extract frontend URL
 FRONTEND_URL=$(echo "$FRONTEND_DEPLOY" | grep -oE 'https://[^ ]+\.pages\.dev' | head -1)
 
 if [ -z "$FRONTEND_URL" ]; then
-    # Try to get from pages list
-    FRONTEND_URL=$(npx wrangler pages deployment list --project-name omni-agent-ui 2>&1 | grep -oE 'https://[^ ]+\.pages\.dev' | head -1)
+    FRONTEND_URL="https://$PAGES_PROJECT.pages.dev"
 fi
 
-if [ -z "$FRONTEND_URL" ]; then
-    echo "⚠️  Could not extract frontend URL"
-    FRONTEND_URL="https://omni-agent-ui.pages.dev"
-fi
-
+echo -e "${GREEN}✓ Frontend deployed: $FRONTEND_URL${NC}"
 cd ..
 
-# Save URLs
-cat > deployment-urls.txt << EOF
+# Save deployment info
+DEPLOYMENT_FILE="deployment-${ENV}.txt"
+cat > $DEPLOYMENT_FILE << EOF
+ENVIRONMENT=$ENV
 WORKER_URL=$WORKER_URL
 FRONTEND_URL=$FRONTEND_URL
-SHARED_SECRET=$SHARED_SECRET
+DEPLOYED_AT=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 EOF
 
 echo ""
-echo "✅ DEPLOYMENT COMPLETE!"
+echo -e "${GREEN}✅ DEPLOYMENT COMPLETE!${NC}"
 echo "======================="
 echo ""
-echo "🎯 Worker API: $WORKER_URL"
-echo "🌐 Frontend UI: $FRONTEND_URL"
+echo -e "${BLUE}🎯 Worker API:${NC} $WORKER_URL"
+echo -e "${BLUE}🌐 Frontend UI:${NC} $FRONTEND_URL"
 echo ""
-echo "🔐 Configuration:"
-echo "   Shared Secret: $SHARED_SECRET"
+echo -e "${YELLOW}📝 Configuration for Settings:${NC}"
+echo "   Router URL: $WORKER_URL"
+echo "   Shared Secret: (use the secret from .env)"
 echo ""
-echo "🎤 To Start Using Omni-Agent:"
-echo ""
-echo "1. Open: $FRONTEND_URL"
-echo "2. Click ⚙️ Settings"
-echo "3. Router URL: $WORKER_URL"
-echo "4. Shared Secret: $SHARED_SECRET"
-echo "5. Click Save"
-echo "6. Click 🎤 Speak and start talking!"
-echo ""
-if [ -n "$RUNLOOP_URL" ]; then
-    echo "🎙️  Voice Services: $RUNLOOP_URL"
+echo -e "${GREEN}💾 Deployment info saved to: $DEPLOYMENT_FILE${NC}"
+
+if [ "$ENV" = "staging" ]; then
     echo ""
+    echo -e "${YELLOW}🔄 To promote to production after testing:${NC}"
+    echo "   ./deploy.sh production"
 fi
-echo "💾 URLs saved to: deployment-urls.txt"
-echo ""
-echo "🔧 Want self-upgrade capability?"
-echo "   Say: 'upgrade mode' then describe changes"
-echo "   (Requires GitHub setup - run ./setup.sh if not configured)"
-echo ""
-echo "🔧 Function calling is now the default!"
-echo "   Run: ./deploy.sh (with function calling capabilities)"
-echo "   Run: ./deploy.sh --basic (legacy mode without function calling)"
-echo "   Run: ./deploy.sh --backup (create backup before deployment)"
-echo "   Includes: command execution, web browsing, and shared context"
+
 echo ""

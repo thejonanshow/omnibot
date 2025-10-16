@@ -1,6 +1,7 @@
 {
   "name": "omnibot-router",
   "version": "1.0.0",
+  "type": "module",
   "description": "Multi-provider AI router",
   "main": "src/index.js",
   "scripts": {

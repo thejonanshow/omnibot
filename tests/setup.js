@@ -2,6 +2,9 @@
  * Jest setup file for global test configuration
  */
 
+import { jest } from '@jest/globals';
+import { randomUUID } from 'crypto';
+
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,
@@ -11,6 +14,13 @@ global.console = {
   warn: jest.fn(),
   error: jest.fn()
 };
+
+// Mock crypto.randomUUID for Node < 19 or browser-like behavior
+if (!global.crypto) {
+  global.crypto = {
+    randomUUID: randomUUID
+  };
+}
 
 // Mock environment variables
 process.env.NODE_ENV = 'test';

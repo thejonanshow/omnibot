@@ -11,7 +11,10 @@ GITHUB_BRANCH = "main"
 # Development environment
 [env.dev]
 name = "omnibot-router-dev"
-vars = { GITHUB_BRANCH = "dev" }
+
+[env.dev.vars]
+GITHUB_REPO = "thejonanshow/omnibot"
+GITHUB_BRANCH = "dev"
 
 [[env.dev.kv_namespaces]]
 binding = "USAGE"
@@ -28,23 +31,30 @@ id = "dev_context_namespace_id"  # Create new KV namespace for dev
 # Staging environment
 [env.staging]
 name = "omnibot-router-staging"
-vars = { GITHUB_BRANCH = "staging" }
+
+[env.staging.vars]
+GITHUB_REPO = "thejonanshow/omnibot"
+GITHUB_BRANCH = "staging"
 
 [[env.staging.kv_namespaces]]
 binding = "USAGE"
-id = "staging_usage_namespace_id"  # Create new KV namespace for staging
+id = "7ad795c4446047aa92baa160044616e9"
 
 [[env.staging.kv_namespaces]]
 binding = "CHALLENGES"
-id = "staging_challenges_namespace_id"  # Create new KV namespace for staging
+id = "ca0226c2ecbd45d9ba178d65e3723e2b"
 
 [[env.staging.kv_namespaces]]
 binding = "CONTEXT"
-id = "staging_context_namespace_id"  # Create new KV namespace for staging
+id = "5378b14dab9842c6900b3bd5bbc0a4a8"
 
 # Production environment (default)
 [env.production]
 name = "omnibot-router"
+
+[env.production.vars]
+GITHUB_REPO = "thejonanshow/omnibot"
+GITHUB_BRANCH = "main"
 
 [[env.production.kv_namespaces]]
 binding = "USAGE"

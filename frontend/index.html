@@ -701,7 +701,7 @@
         }
         
         /* ========================================
-           INPUT AREA (Enhanced)
+           INPUT AREA (Enhanced with Secondary Buttons)
            ======================================== */
         .input-container {
             padding: var(--spacing-lg);
@@ -710,12 +710,63 @@
             box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
         }
         
-        .input-wrapper {
+        .input-inner {
             max-width: 900px;
             margin: 0 auto;
             display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+        
+        .input-wrapper {
+            display: flex;
             gap: var(--spacing-md);
             align-items: flex-end;
+        }
+        
+        .secondary-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .secondary-btn {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-sm);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            font-family: inherit;
+            transition: all var(--transition-fast);
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            white-space: nowrap;
+        }
+        
+        .secondary-btn:hover:not(:disabled) {
+            background: var(--button-hover-bg);
+            color: var(--button-hover-text);
+            border-color: var(--accent-primary);
+            transform: translateY(-1px);
+            box-shadow: 0 0 12px var(--accent-primary);
+        }
+        
+        .secondary-btn.active {
+            background: var(--accent-primary);
+            color: var(--bg-primary);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 16px var(--accent-primary);
+            font-weight: 600;
+        }
+        
+        .secondary-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
         
         textarea {
@@ -762,10 +813,70 @@
         }
         
         #voice-btn.recording {
-            background: var(--accent-primary);
-            color: var(--button-hover-text);
+            background: #ff0000;
+            color: #ffffff;
             animation: recordingPulse 1.5s infinite;
-            border-color: var(--accent-primary);
+            border-color: #ff0000;
+        }
+        
+        /* Live Transcription Overlay */
+        .transcription-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(12px);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-xl);
+        }
+        
+        .transcription-overlay.active {
+            display: flex;
+        }
+        
+        .transcription-content {
+            text-align: center;
+            max-width: 800px;
+            width: 100%;
+        }
+        
+        .transcription-text {
+            font-size: 2rem;
+            line-height: 1.4;
+            color: var(--accent-primary);
+            text-shadow: 0 0 20px var(--accent-primary);
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .transcription-status {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-md);
+        }
+        
+        .recording-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff0000;
+            animation: recordingBlink 1s infinite;
+        }
+        
+        @keyframes recordingBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
         
         @keyframes recordingPulse {
@@ -784,7 +895,7 @@
         }
         
         /* ========================================
-           SETTINGS PANEL (Improved)
+           SETTINGS PANEL (Glassmorphism Design)
            ======================================== */
         .settings-overlay {
             position: fixed;
@@ -793,7 +904,7 @@
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(8px);
             display: none;
             z-index: 999;
             opacity: 0;
@@ -812,17 +923,41 @@
             max-width: 450px;
             width: 90%;
             height: 100vh;
-            background: var(--bg-secondary);
-            border-left: 1px solid var(--border-color);
+            background: rgba(26, 26, 26, 0.85);
+            backdrop-filter: blur(20px) saturate(180%);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
             padding: var(--spacing-xl);
             overflow-y: auto;
             z-index: 1000;
             transition: right var(--transition-slow);
-            box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+            box-shadow: -4px 0 32px rgba(0, 0, 0, 0.5);
         }
         
         .settings-panel.active {
             right: 0;
+        }
+        
+        .settings-section {
+            margin-bottom: var(--spacing-xl);
+            padding: var(--spacing-lg);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--border-radius-md);
+            backdrop-filter: blur(10px);
+        }
+        
+        .settings-section-header {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+        
+        .settings-section-icon {
+            font-size: 1.25rem;
         }
         
         .settings-panel h2 {
@@ -832,7 +967,7 @@
         }
         
         .setting-group {
-            margin-bottom: var(--spacing-lg);
+            margin-bottom: var(--spacing-md);
         }
         
         .setting-label {
@@ -841,6 +976,30 @@
             font-size: 0.875rem;
             font-weight: 500;
             color: var(--text-secondary);
+        }
+        
+        /* Theme Previews */
+        .theme-option {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            padding: var(--spacing-sm);
+            border-radius: var(--border-radius-sm);
+            transition: background var(--transition-fast);
+        }
+        
+        .theme-preview {
+            display: flex;
+            gap: 2px;
+            padding: 4px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+        }
+        
+        .theme-swatch {
+            width: 16px;
+            height: 16px;
+            border-radius: 2px;
         }
         
         input[type="text"],
@@ -1123,9 +1282,6 @@
             <button id="status-btn" title="Refresh Status" aria-label="Refresh status">
                 📊 Status
             </button>
-            <button id="upgrade-btn" title="Toggle Upgrade Mode" aria-label="Toggle upgrade mode">
-                🔧 Upgrade
-            </button>
             <button id="settings-btn" title="Settings" aria-label="Open settings">
                 ⚙️ Settings
             </button>
@@ -1147,22 +1303,54 @@
         ↓
     </button>
 
+    <!-- Live Transcription Overlay -->
+    <div class="transcription-overlay" id="transcription-overlay">
+        <div class="transcription-content">
+            <div class="transcription-text" id="transcription-text">
+                Listening...
+            </div>
+            <div class="transcription-status">
+                <div class="recording-indicator"></div>
+                <span>Speak now - Click anywhere to cancel</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Input Area -->
     <div class="input-container">
-        <div class="input-wrapper">
-            <textarea 
-                id="message-input" 
-                placeholder="Type your message or click 🎤 to speak..."
-                rows="1"
-                aria-label="Message input"
-            ></textarea>
-            <div class="voice-controls">
-                <button id="voice-btn" title="Click to speak" aria-label="Voice input">
-                    🎤
+        <div class="input-inner">
+            <!-- Secondary Action Buttons -->
+            <div class="secondary-actions">
+                <button class="secondary-btn" id="code-btn" title="Code mode" aria-label="Toggle code mode">
+                    </> Code
                 </button>
-                <button id="send-btn" title="Send message" aria-label="Send message">
-                    ➤
+                <button class="secondary-btn" id="translate-btn" title="Translate" aria-label="Toggle translate mode">
+                    🌐 Translate
                 </button>
+                <button class="secondary-btn" id="swarm-btn" title="Swarm mode" aria-label="Toggle swarm mode">
+                    🔗 Swarm
+                </button>
+                <button class="secondary-btn" id="upgrade-mode-btn" title="Upgrade mode" aria-label="Toggle upgrade mode">
+                    🔧 Upgrade
+                </button>
+            </div>
+            
+            <!-- Primary Input Row -->
+            <div class="input-wrapper">
+                <textarea 
+                    id="message-input" 
+                    placeholder="Type your message or click 🎤 to speak..."
+                    rows="1"
+                    aria-label="Message input"
+                ></textarea>
+                <div class="voice-controls">
+                    <button id="voice-btn" title="Click to speak" aria-label="Voice input">
+                        🎤
+                    </button>
+                    <button id="send-btn" title="Send message" aria-label="Send message">
+                        ➤
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1172,44 +1360,58 @@
     <div class="settings-panel" id="settings-panel">
         <h2>⚙️ Settings</h2>
         
-        <div class="setting-group">
-            <label class="setting-label" for="theme-select">Theme</label>
-            <select id="theme-select">
-                <option value="matrix">Matrix (Green Terminal)</option>
-                <option value="cyberpunk">Cyberpunk (Neon Pink/Cyan)</option>
-                <option value="borg">Borg (Assimilation Green)</option>
-                <option value="hal">HAL 9000 (Menacing Red)</option>
-                <option value="wargames">War Games (Classic Green)</option>
-                <option value="modern">Modern Dark (Blue/Gray)</option>
-                <option value="tron">Tron Legacy (Electric Blue)</option>
-                <option value="neuromancer">Neuromancer (Purple Cyberspace)</option>
-                <option value="alien">Alien Isolation (CRT Green)</option>
-                <option value="dune">Dune (Desert & Spice)</option>
-                <option value="ghost">Ghost in the Shell (Holographic)</option>
-                <option value="interstellar">Interstellar (Deep Space)</option>
-                <option value="synthwave">Synthwave (Retro Neon)</option>
-                <option value="portal">Portal (Aperture Science)</option>
-            </select>
+        <!-- Theme Settings Section -->
+        <div class="settings-section">
+            <div class="settings-section-header">
+                <span class="settings-section-icon">🎨</span>
+                <span>Theme Settings</span>
+            </div>
+            <div class="setting-group">
+                <label class="setting-label" for="theme-select">Visual Theme</label>
+                <select id="theme-select">
+                    <option value="matrix">Matrix (Green Terminal)</option>
+                    <option value="cyberpunk">Cyberpunk (Neon Pink/Cyan)</option>
+                    <option value="borg">Borg (Assimilation Green)</option>
+                    <option value="hal">HAL 9000 (Menacing Red)</option>
+                    <option value="wargames">War Games (Classic Green)</option>
+                    <option value="modern">Modern Dark (Blue/Gray)</option>
+                    <option value="tron">Tron Legacy (Electric Blue)</option>
+                    <option value="neuromancer">Neuromancer (Purple Cyberspace)</option>
+                    <option value="alien">Alien Isolation (CRT Green)</option>
+                    <option value="dune">Dune (Desert & Spice)</option>
+                    <option value="ghost">Ghost in the Shell (Holographic)</option>
+                    <option value="interstellar">Interstellar (Deep Space)</option>
+                    <option value="synthwave">Synthwave (Retro Neon)</option>
+                    <option value="portal">Portal (Aperture Science)</option>
+                </select>
+            </div>
         </div>
         
-        <div class="setting-group">
-            <label class="setting-label" for="router-url">Router URL</label>
-            <input 
-                type="text" 
-                id="router-url" 
-                placeholder="https://your-worker.workers.dev"
-                aria-label="Router URL"
-            >
-        </div>
-        
-        <div class="setting-group">
-            <label class="setting-label" for="secret">Shared Secret</label>
-            <input 
-                type="password" 
-                id="secret" 
-                placeholder="Your shared secret key"
-                aria-label="Shared secret"
-            >
+        <!-- Connection Settings Section -->
+        <div class="settings-section">
+            <div class="settings-section-header">
+                <span class="settings-section-icon">🔌</span>
+                <span>Connection Settings</span>
+            </div>
+            <div class="setting-group">
+                <label class="setting-label" for="router-url">Router URL</label>
+                <input 
+                    type="text" 
+                    id="router-url" 
+                    placeholder="https://your-worker.workers.dev"
+                    aria-label="Router URL"
+                >
+            </div>
+            
+            <div class="setting-group">
+                <label class="setting-label" for="secret">Shared Secret</label>
+                <input 
+                    type="password" 
+                    id="secret" 
+                    placeholder="Your shared secret key"
+                    aria-label="Shared secret"
+                >
+            </div>
         </div>
         
         <div class="settings-actions">
@@ -1251,6 +1453,9 @@
         let isVoiceInput = false;
         let micPermissionGranted = false;
         let isLoading = false;
+        let codeMode = false;
+        let translateMode = false;
+        let swarmMode = false;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -1290,10 +1495,22 @@
             themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
 
             document.getElementById('status-btn').addEventListener('click', updateStatus);
-            document.getElementById('upgrade-btn').addEventListener('click', toggleUpgradeMode);
             document.getElementById('settings-btn').addEventListener('click', openSettings);
             document.getElementById('settings-overlay').addEventListener('click', closeSettings);
             document.getElementById('scroll-to-bottom').addEventListener('click', scrollToBottom);
+            
+            // Secondary action buttons
+            document.getElementById('code-btn').addEventListener('click', toggleCodeMode);
+            document.getElementById('translate-btn').addEventListener('click', toggleTranslateMode);
+            document.getElementById('swarm-btn').addEventListener('click', toggleSwarmMode);
+            document.getElementById('upgrade-mode-btn').addEventListener('click', toggleUpgradeMode);
+            
+            // Transcription overlay click to cancel
+            document.getElementById('transcription-overlay').addEventListener('click', () => {
+                if (isRecording && recognition) {
+                    recognition.stop();
+                }
+            });
         }
 
         // Scroll Behavior
@@ -1576,19 +1793,19 @@
         function toggleUpgradeMode() {
             upgradeMode = !upgradeMode;
             const modeStatus = document.getElementById('mode-status');
-            const upgradeBtn = document.getElementById('upgrade-btn');
+            const upgradeBtn = document.getElementById('upgrade-mode-btn');
             
             if (upgradeMode) {
                 document.body.classList.add('upgrade-mode-active');
                 modeStatus.textContent = 'UPGRADE';
                 modeStatus.style.color = '#ff6600';
-                upgradeBtn.textContent = '⚠️ Exit';
+                upgradeBtn.classList.add('active');
                 addMessage('system', '⚠️ UPGRADE MODE ACTIVATED - Next command will modify the system');
             } else {
                 document.body.classList.remove('upgrade-mode-active');
                 modeStatus.textContent = 'Normal';
                 modeStatus.style.color = '';
-                upgradeBtn.textContent = '🔧 Upgrade';
+                upgradeBtn.classList.remove('active');
                 addMessage('system', '✅ Normal mode resumed');
             }
         }
@@ -1718,6 +1935,25 @@
             if (config.routerUrl) {
                 updateStatus();
             }
+        }
+
+        // Mode Toggle Functions
+        function toggleCodeMode() {
+            codeMode = !codeMode;
+            document.getElementById('code-btn').classList.toggle('active');
+            addMessage('system', codeMode ? '💻 Code mode activated' : '✅ Code mode deactivated');
+        }
+
+        function toggleTranslateMode() {
+            translateMode = !translateMode;
+            document.getElementById('translate-btn').classList.toggle('active');
+            addMessage('system', translateMode ? '🌐 Translate mode activated' : '✅ Translate mode deactivated');
+        }
+
+        function toggleSwarmMode() {
+            swarmMode = !swarmMode;
+            document.getElementById('swarm-btn').classList.toggle('active');
+            addMessage('system', swarmMode ? '🔗 Swarm mode activated' : '✅ Swarm mode deactivated');
         }
     </script>
 </body>
