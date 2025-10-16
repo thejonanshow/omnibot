@@ -1,0 +1,15 @@
+name = "omni-agent-router"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+SHARED_SECRET = ""
+RUNLOOP_URL = ""
+
+[[kv_namespaces]]
+binding = "USAGE"
+id = ""
+
+[[kv_namespaces]]
+binding = "CHALLENGES"
+id = ""

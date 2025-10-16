@@ -1,0 +1,157 @@
+## 🔧 FIXED: Setup & Deployment Scripts
+
+### What Was Wrong:
+1. ❌ Scripts weren't reading .env file properly
+2. ❌ No prompts for Runloop/Oracle setup
+3. ❌ Missing package-lock.json causing npm audit error
+4. ❌ Sed commands incompatible with macOS
+
+### What's Fixed:
+1. ✅ Scripts now properly source .env file
+2. ✅ Full interactive prompts for all services
+3. ✅ Generates package-lock.json automatically
+4. ✅ macOS-compatible sed commands
+
+### What Setup Now Does:
+
+```
+1. Checks existing .env configuration
+2. Prompts for MISSING API keys only
+3. Asks: "Deploy voice services to Runloop? (y/n)"
+   - If yes: Deploys Whisper + Piper automatically
+4. Asks: "Enable self-upgrade? (y/n)"
+   - If yes: Configures GitHub + Cloudflare API
+5. Creates Cloudflare KV namespaces
+6. Sets all secrets in Cloudflare
+7. Ready to deploy!
+```
+
+### Your Current Status:
+
+✅ API keys from listlift-ai are in .env:
+- Anthropic (Claude)
+- Groq (FREE Llama)
+- Gemini (FREE Google)
+- Runloop API key
+
+### Next Steps:
+
+**Option 1: Full Interactive Setup (Recommended)**
+```bash
+cd /Users/jonan/src/claudebox/omni-agent
+./setup.sh
+```
+
+This will:
+- Detect your existing keys ✓
+- Skip prompting for them
+- Ask about Runloop voice services
+- Ask about self-upgrade capability
+- Configure everything
+
+**Option 2: Quick Deploy (Skip Runloop)**
+```bash
+cd /Users/jonan/src/claudebox/omni-agent
+./deploy.sh
+```
+
+This will:
+- Run setup automatically if needed
+- Deploy worker + frontend
+- Return URLs immediately
+
+### Setup Flow Example:
+
+```
+$ ./setup.sh
+
+⚙️  OMNI-AGENT SETUP
+===================
+
+🔍 Checking existing configuration...
+
+✓ Shared secret configured
+✓ Anthropic API key configured
+✓ Groq API key configured
+✓ Gemini API key configured
+
+🎤 Voice Services (Runloop)
+===========================
+Deploy voice services to Runloop? (y/n): y
+
+✓ Runloop API Key already configured
+
+🚀 Deploying to Runloop...
+This will set up Whisper (speech-to-text) and Piper (text-to-speech)
+[Deploys Whisper + Piper automatically]
+✓ Runloop deployed: https://devbox-123.runloop.dev:8000
+
+🔧 Self-Upgrade Capability (Optional)
+======================================
+This allows you to modify the system using voice commands!
+Enable self-upgrade? (y/n): y
+
+📖 Opening https://github.com/settings/tokens/new...
+Enter your GitHub Personal Access Token: [paste token]
+Enter GitHub repo (format: username/repo): yourname/omni-agent
+
+✓ Self-upgrade enabled!
+   Say 'upgrade mode' then describe changes
+
+📦 Creating Cloudflare KV Namespaces...
+[Creates namespaces]
+
+🔐 Setting Cloudflare Secrets...
+[Sets all secrets]
+
+✅ Setup complete!
+
+Next: Run ./deploy.sh to deploy everything
+```
+
+### What You'll Be Asked:
+
+1. **Runloop voice services?**
+   - Yes → Deploys Whisper + Piper (FREE or your Runloop tier)
+   - No → Uses browser Speech API only (still works!)
+
+2. **Self-upgrade capability?**
+   - Yes → Can modify system with voice commands
+   - No → Can add later by running ./setup.sh again
+
+### Recommendation:
+
+**Start with Runloop:**
+```bash
+./setup.sh
+# Answer 'y' to Runloop
+# Answer 'y' to self-upgrade (optional but cool!)
+```
+
+Then:
+```bash
+./deploy.sh
+```
+
+You'll have:
+- ✅ Multi-provider LLM rotation
+- ✅ Voice input/output (Whisper + Piper)
+- ✅ Self-upgrading capability
+- ✅ Zero downtime deployments
+- ✅ ~$2/month cost
+
+### If You Just Want It Working NOW:
+
+```bash
+./deploy.sh
+```
+
+Will prompt for everything during deployment!
+
+---
+
+**Ready?**
+```bash
+cd /Users/jonan/src/claudebox/omni-agent
+./setup.sh
+```

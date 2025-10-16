@@ -1,0 +1,74 @@
+name = "omnibot-router"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Public configuration (safe to commit)
+[vars]
+# Non-sensitive configuration only
+GITHUB_REPO = "thejonanshow/omnibot"
+GITHUB_BRANCH = "main"
+
+# Development environment
+[env.dev]
+name = "omnibot-router-dev"
+vars = { GITHUB_BRANCH = "dev" }
+
+[[env.dev.kv_namespaces]]
+binding = "USAGE"
+id = "dev_usage_namespace_id"  # Create new KV namespace for dev
+
+[[env.dev.kv_namespaces]]
+binding = "CHALLENGES"
+id = "dev_challenges_namespace_id"  # Create new KV namespace for dev
+
+[[env.dev.kv_namespaces]]
+binding = "CONTEXT"
+id = "dev_context_namespace_id"  # Create new KV namespace for dev
+
+# Staging environment
+[env.staging]
+name = "omnibot-router-staging"
+vars = { GITHUB_BRANCH = "staging" }
+
+[[env.staging.kv_namespaces]]
+binding = "USAGE"
+id = "staging_usage_namespace_id"  # Create new KV namespace for staging
+
+[[env.staging.kv_namespaces]]
+binding = "CHALLENGES"
+id = "staging_challenges_namespace_id"  # Create new KV namespace for staging
+
+[[env.staging.kv_namespaces]]
+binding = "CONTEXT"
+id = "staging_context_namespace_id"  # Create new KV namespace for staging
+
+# Production environment (default)
+[env.production]
+name = "omnibot-router"
+
+[[env.production.kv_namespaces]]
+binding = "USAGE"
+id = "28fd308ff5654f60af3ae273404b2105"
+
+[[env.production.kv_namespaces]]
+binding = "CHALLENGES"
+id = "ada9771b831848cb96345e18aec380ba"
+
+[[env.production.kv_namespaces]]
+binding = "CONTEXT"
+id = "ced8e533dc524a5797546bacfd98f03f"
+
+# NOTE: All sensitive values (API keys, secrets) are stored as Cloudflare secrets
+# Use: wrangler secret put <KEY_NAME> --env <environment>
+# Required secrets:
+# - SHARED_SECRET
+# - ANTHROPIC_API_KEY
+# - OPENAI_API_KEY (optional)
+# - GROQ_API_KEY
+# - GEMINI_API_KEY
+# - RUNLOOP_API_KEY (optional)
+# - RUNLOOP_URL (optional)
+# - RUNLOOP_DEVOX_ID (optional)
+# - GITHUB_TOKEN (optional, for self-upgrade)
+# - CLOUDFLARE_ACCOUNT_ID (for self-upgrade)
+# - CLOUDFLARE_API_TOKEN (for self-upgrade)

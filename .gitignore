@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment files (NEVER COMMIT THESE!)
+.env
+.env.*
+!.env.example
+.env.local
+.env.development
+.env.staging
+.env.production
+.env.bak
+
+# Wrangler
+.wrangler/
+dist/
+worker-build/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Deployment
+deployment-urls.txt
+.runloop_url
+
+# Secrets (CRITICAL - NEVER COMMIT)
+*secret*
+*token*
+*key*.txt
+credentials.json
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary
+tmp/
+temp/
+*.tmp
