@@ -366,9 +366,18 @@ describe('Epic 1: LLM Provider Integration', () => {
     });
   });
 
-  describe('Story 1.4: Qwen Mock Implementation', () => {
-    describe('Given coding request, when calling Qwen, then coding template is returned', () => {
-      it('should return coding template response', async () => {
+  describe('Story 1.4: Qwen Implementation', () => {
+    describe('Given coding request, when calling Qwen, then response is returned', () => {
+      it('should return Qwen response from Runloop', async () => {
+        // Mock Runloop Qwen response
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ 
+            response: 'Here is a Python function to sort a list:\n\n```python\ndef sort_list(items):\n    return sorted(items)\n```' 
+          })
+        }));
+
         const result = await callQwen('Write a Python function to sort a list', [], mockEnv, 'session1');
 
         assert.ok(result.choices);
@@ -377,12 +386,20 @@ describe('Epic 1: LLM Provider Integration', () => {
 
         const content = result.choices[0].message.content;
         assert.ok(content.includes('Python'));
-        assert.ok(content.includes('def solve_problem'));
+        assert.ok(content.includes('def sort_list'));
         assert.ok(content.includes('```python'));
-        assert.ok(content.includes('Write a Python function to sort a list'));
       });
 
       it('should include user message in response', async () => {
+        // Mock Runloop Qwen response
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ 
+            response: 'Here is a REST API endpoint for your request: Create a REST API endpoint' 
+          })
+        }));
+
         const userMessage = 'Create a REST API endpoint';
         const result = await callQwen(userMessage, [], mockEnv, 'session1');
 
@@ -391,6 +408,13 @@ describe('Epic 1: LLM Provider Integration', () => {
       });
 
       it('should return consistent response structure', async () => {
+        // Mock Runloop Qwen response
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ response: 'Test response' })
+        }));
+
         const result1 = await callQwen('Message 1', [], mockEnv, 'session1');
         const result2 = await callQwen('Message 2', [], mockEnv, 'session1');
 
@@ -399,12 +423,58 @@ describe('Epic 1: LLM Provider Integration', () => {
         assert.equal(result1.choices[0].message.role, result2.choices[0].message.role);
       });
 
-      it('should not require API keys or external calls', async () => {
-        // Should work even with empty env
-        const result = await callQwen('Test message', [], {}, 'session1');
+      it('should handle local Qwen in development environment', async () => {
+        // Mock local Ollama Qwen response
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ 
+            message: { content: 'Local Qwen response' }
+          })
+        }));
+
+        const devEnv = { ...mockEnv, NODE_ENV: 'development' };
+        const result = await callQwen('Test message', [], devEnv, 'session1');
 
         assert.ok(result.choices);
         assert.equal(result.choices[0].message.role, 'assistant');
+        assert.equal(result.choices[0].message.content, 'Local Qwen response');
+      });
+
+      it('should fallback to Runloop when local Qwen fails', async () => {
+        // Mock local failure, then Runloop success
+        let callCount = 0;
+        global.fetch = mock.fn(() => {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.reject(new Error('ECONNREFUSED'));
+          } else {
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({ response: 'Runloop Qwen response' })
+            });
+          }
+        });
+
+        const devEnv = { ...mockEnv, NODE_ENV: 'development' };
+        const result = await callQwen('Test message', [], devEnv, 'session1');
+
+        assert.ok(result.choices);
+        assert.equal(result.choices[0].message.content, 'Runloop Qwen response');
+        assert.equal(callCount, 2); // Local attempt + Runloop fallback
+      });
+
+      it('should handle both local and Runloop failures', async () => {
+        // Mock both failures
+        global.fetch = mock.fn(() => Promise.reject(new Error('Service unavailable')));
+
+        const devEnv = { ...mockEnv, NODE_ENV: 'development' };
+        
+        await assert.rejects(
+          async () => callQwen('Test message', [], devEnv, 'session1'),
+          { message: 'Qwen failed: Service unavailable' }
+        );
       });
     });
   });

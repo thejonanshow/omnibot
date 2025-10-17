@@ -85,34 +85,119 @@ SHARED CONTEXT: ${JSON.stringify(context, null, 2)}`;
 }
 
 export async function callQwen(message, conversation, env, sessionId) {
-  // Mock implementation - returns template code
-  const codingResponse = `Here's a coding solution for: "${message}"
+  const context = await getSharedContext(env.CONTEXT, sessionId);
+  
+  // Determine Qwen endpoint based on environment
+  const isLocal = env.NODE_ENV === 'development';
+  const qwenUrl = isLocal 
+    ? 'http://localhost:11434' 
+    : env.QWEN_RUNLOOP_URL || 'https://dbx_test.runloop.dev:8000';
+  
+  // Log which Qwen instance is being used
+  console.log(`Using Qwen instance: ${qwenUrl} (${isLocal ? 'local' : 'remote'})`);
+  
+  // Build conversation context
+  const conversationText = conversation
+    .map(m => `${m.role}: ${m.content}`)
+    .join('\n');
+  
+  const systemPrompt = `You are Qwen, a specialized coding AI assistant.
 
-\`\`\`python
-def solve_problem():
-    """
-    Solution for: ${message}
-    """
-    result = "Implementation placeholder"
-    return result
+SHARED CONTEXT (from previous sessions):
+${JSON.stringify(context, null, 2)}
 
-if __name__ == "__main__":
-    output = solve_problem()
-    print(output)
-\`\`\`
+CONVERSATION HISTORY:
+${conversationText}
 
-**Implementation Notes:**
-- This is a template implementation
-- Customize for your specific requirements
-- Add error handling and validation
-- Follow best practices
+You specialize in:
+- Code generation and implementation
+- Debugging and optimization
+- Best practices and patterns
+- Technical explanations
 
-I'm Qwen, specialized in coding tasks!`;
+Provide helpful, production-ready code with clear explanations.`;
 
+  try {
+    // Try local Qwen first if in development
+    if (isLocal) {
+      try {
+        return await callLocalQwen(message, systemPrompt, qwenUrl);
+      } catch (localError) {
+        console.log(`Local Qwen unavailable: ${localError.message}`);
+        console.log('Falling back to Runloop Qwen...');
+        
+        // Fallback to Runloop Qwen
+        const runloopUrl = env.QWEN_RUNLOOP_URL || 'https://dbx_test.runloop.dev:8000';
+        return await callRunloopQwen(message, systemPrompt, runloopUrl);
+      }
+    } else {
+      // Use Runloop Qwen directly in staging/production
+      return await callRunloopQwen(message, systemPrompt, qwenUrl);
+    }
+  } catch (error) {
+    console.error(`Qwen call failed: ${error.message}`);
+    throw new Error(`Qwen failed: ${error.message}`);
+  }
+}
+
+async function callLocalQwen(message, systemPrompt, baseUrl) {
+  // Call local Ollama Qwen
+  const response = await fetch(`${baseUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'qwen2.5:7b',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message }
+      ],
+      stream: false,
+      options: {
+        temperature: 0.7,
+        top_p: 0.9,
+        max_tokens: 2048
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Local Qwen failed: ${response.status} - ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  
   return {
     choices: [{
       message: {
-        content: codingResponse,
+        content: data.message?.content || 'No response generated',
+        role: 'assistant'
+      }
+    }]
+  };
+}
+
+async function callRunloopQwen(message, systemPrompt, baseUrl) {
+  // Call Runloop Qwen server
+  const response = await fetch(`${baseUrl}/qwen/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      conversation: [{ role: 'system', content: systemPrompt }],
+      sessionId: 'default'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Runloop Qwen failed: ${response.status} - ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  
+  return {
+    choices: [{
+      message: {
+        content: data.response || 'No response generated',
         role: 'assistant'
       }
     }]
