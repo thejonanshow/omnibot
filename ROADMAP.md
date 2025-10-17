@@ -101,9 +101,9 @@ async function executeSwarm(task, subtasks, env) {
 
 ### 3. Conversational Planning + Qwen Implementation
 
-**Goal:** Use conversational model for planning, Qwen for fast implementation
+**Goal:** Use conversational model for planning, Qwen swarm for fast implementation
 
-**Two-Stage Process:**
+**Three-Stage Process:**
 
 **Stage 1: Planning (Conversational Model)**
 ```
@@ -118,16 +118,28 @@ Groq/Claude:
 Planning Document
 ```
 
-**Stage 2: Implementation (Qwen)**
+**Stage 2: Implementation (Qwen Swarm)**
 ```
 Planning Document
     ↓
-Qwen on Runloop:
-  - Generate code for each component
-  - Fast, parallel execution
-  - No API costs
+Qwen Swarm (3 nodes):
+  - Node 1: Core implementation
+  - Node 2: Testing & validation
+  - Node 3: Documentation & polish
     ↓
 Implementation Complete
+```
+
+**Stage 3: Review (Conversational Model)**
+```
+Implementation + Test Results
+    ↓
+Groq/Claude:
+  - Review code quality
+  - Validate against requirements
+  - Suggest improvements
+    ↓
+Final Response
 ```
 
 **Benefits:**
@@ -403,6 +415,7 @@ fetch(url)
 
 ## 💡 Future Ideas (Backlog)
 
+- **Headless Cursor Integration** - Use Cursor CLI for advanced code generation and editing
 - **Voice-first interface** for mobile
 - **Persistent sessions** across devices
 - **Collaborative mode** (multiple users, one bot)
