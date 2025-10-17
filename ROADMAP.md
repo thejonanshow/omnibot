@@ -21,19 +21,31 @@
 
 **Goal:** Free-tier code generation with smart routing
 
-**Status:** ⚠️ BLOCKED - Runloop blueprint creation issues
+**Status:** 🟡 PARTIALLY COMPLETE - Local works, Runloop blocked
 
-**Current Blocker:**
-- Unable to get a working Runloop devbox blueprint for Qwen
-- Attempted multiple configurations but blueprints fail to boot
-- Need to resolve Runloop setup before proceeding
+**✅ Completed:**
+- Local Qwen via Ollama fully operational (qwen3-coder:30b)
+- Integration test passing
+- Worker routing to local Qwen in development
+- Smart model detection and fallback logic
 
-**Once unblocked:**
-- Smart routing: Chat → Conversational model, Code → Qwen
-- Two-stage processing: Fast local Qwen, optional polish with premium APIs
-- Cost savings: ~$50-100/month estimated
+**⚠️ Still Blocked - Runloop Blueprint Issues:**
+- 4 "build_complete" blueprints found but all fail at runtime
+- Devboxes start but services don't respond to health checks
+- DNS/network connectivity issues
+- Likely startup script or dependency problems in blueprints
 
-**Timeline:** On hold until Runloop blueprint issue resolved
+**Attempted Blueprints:**
+- `bpt_31LMPbEKy68bacw71iCRH` (qwen-ollama-working): execution_failed
+- `bpt_31LLx3FQXVOaSEgFB3ZrD` (qwen-ollama-fixed): runs but endpoints unreachable
+- 2 others with similar issues
+
+**Next Steps:**
+1. Debug blueprint startup scripts
+2. Test with minimal Ollama setup (no complex services)
+3. Or: Use local Qwen only (already working)
+
+**Timeline:** Local is ready now. Runloop needs blueprint debugging.
 
 ---
 
