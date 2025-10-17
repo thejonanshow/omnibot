@@ -1,4 +1,5 @@
 import { handleUpgrade, getCodebaseContext } from './upgrade.js';
+import { getUsage, getDateKey } from './lib/usage.js';
 
 // API Endpoints
 const API_ENDPOINTS = {
@@ -693,7 +694,7 @@ async function handleStatus(env) {
 
   // Get LLM usage
   for (const provider of providers) {
-    const usage = await getUsage(env, provider);
+    const usage = await getUsage(env.USAGE, provider);
     const limits = { groq: 30, gemini: 15, qwen: 1000, claude: 50 };
     status.llm_providers[provider] = {
       usage: usage,
@@ -729,24 +730,15 @@ async function handleStatus(env) {
   });
 }
 
-async function getUsage(env, provider) {
-  const key = `usage:${provider}:${getDateKey()}`;
-  const data = await env.USAGE.get(key);
-  return data ? parseInt(data) : 0;
-}
 
 async function incrementUsage(env, provider) {
   const key = `usage:${provider}:${getDateKey()}`;
-  const current = await getUsage(env, provider);
+  const current = await getUsage(env.USAGE, provider);
   await env.USAGE.put(key, (current + 1).toString(), {
     expirationTtl: 86400
   });
 }
 
-function getDateKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-}
 
 // Function calling and context management
 async function handleFunctionCall(functionName, args, env, sessionId) {
