@@ -1,5 +1,6 @@
 import { handleUpgrade, getCodebaseContext } from './upgrade.js';
 import { getUsage, getDateKey } from './lib/usage.js';
+import { callQwen } from './llm-providers.js';
 
 // API Endpoints
 const API_ENDPOINTS = {
@@ -162,7 +163,7 @@ async function handleChat(request, env) {
 
   // Smart provider selection with credit safety
   for (const provider of providers) {
-    const usage = await getUsage(env, provider.name);
+    const usage = await getUsage(env.USAGE, provider.name);
     if (usage >= provider.limit) {
       attemptedProviders.push(`${provider.name} (limit reached: ${usage}/${provider.limit})`);
       continue;
@@ -230,7 +231,7 @@ async function handleChat(request, env) {
         try {
           const polishProvider = providers.find(p => p.name === 'claude' && p.fallback === false);
           if (polishProvider) {
-            const polishUsage = await getUsage(env, polishProvider.name);
+            const polishUsage = await getUsage(env.USAGE, polishProvider.name);
             if (polishUsage < polishProvider.limit) {
               const polishResponse = await polishProvider.fn(
                 `Please polish and improve this response while maintaining the original meaning: ${response.choices[0].message.content}`,
@@ -539,50 +540,7 @@ Always explain what you're doing and why. When executing commands or browsing th
   };
 }
 
-async function callQwen(message, conversation, env, sessionId) {
-  // Qwen only handles coding requests - for general requests, throw an error to move to next provider
-  const isCodingRequest = isCodeImplementationRequest(message);
-
-  if (!isCodingRequest) {
-    throw new Error('Qwen only handles coding requests');
-  }
-
-  // Generate a coding-focused response
-  const codingResponse = `I'm Qwen, your coding assistant. I received your request: "${message}"
-
-Here's a Python implementation approach:
-
-\`\`\`python
-def solve_problem():
-    """
-    Solution for: ${message}
-    """
-    # Implementation would go here
-    result = "Hello from Qwen coding assistant!"
-    return result
-
-if __name__ == "__main__":
-    solution = solve_problem()
-    print(solution)
-\`\`\`
-
-**Next Steps:**
-1. Customize the implementation for your specific needs
-2. Add error handling and validation
-3. Test with your use case
-4. Add documentation and comments
-
-I'm designed to help with coding tasks, algorithms, and technical problem-solving. Let me know if you need help with a specific implementation!`;
-
-  return {
-    choices: [{
-      message: {
-        content: codingResponse,
-        role: 'assistant'
-      }
-    }]
-  };
-}
+// Use the real Qwen implementation from llm-providers.js
 
 async function callClaude(message, conversation, env, sessionId) {
   // Get shared context for Claude
@@ -811,7 +769,8 @@ async function handleFunctionCall(functionName, args, env, sessionId) {
       return await saveContext(args.key, args.value, env, sessionId);
 
     case 'call_qwen_for_code':
-      return await callQwenForCode(args.task, args.language, args.context, env, sessionId);
+      // Use the real Qwen implementation for coding tasks
+      return await callQwen(args.task, [], env, sessionId);
 
     default:
       throw new Error(`Unknown function: ${functionName}`);
@@ -837,53 +796,3 @@ async function saveContext(key, value, env, sessionId) {
   return { success: true, message: `Saved ${key} to context` };
 }
 
-async function callQwenForCode(task, language, context, env, sessionId) {
-  // Generate a coding response using Qwen's coding expertise
-  const lang = language || 'python';
-
-  const codeResponse = `I'm Qwen, your specialized coding AI. Here's my implementation for your task:
-
-**Task:** ${task}
-**Language:** ${lang}
-${context ? `**Context:** ${context}` : ''}
-
-\`\`\`${lang}
-def ${task.toLowerCase().replace(/[^a-z0-9]/g, '_')}():
-    """
-    Implementation for: ${task}
-    """
-    # TODO: Implement the specific logic
-    result = "Implementation placeholder"
-    return result
-
-# Example usage
-if __name__ == "__main__":
-    output = ${task.toLowerCase().replace(/[^a-z0-9]/g, '_')}()
-    print(output)
-\`\`\`
-
-**Implementation Notes:**
-- This is a template implementation that you can customize
-- Add proper error handling and validation
-- Consider edge cases and input validation
-- Add unit tests for your implementation
-- Follow ${lang} best practices and conventions
-
-**Next Steps:**
-1. Customize the function logic for your specific requirements
-2. Add input parameters and return types
-3. Implement error handling
-4. Add comprehensive tests
-5. Document the function with proper docstrings
-
-I'm here to help with any coding questions or implementation details!`;
-
-  return {
-    success: true,
-    code: codeResponse,
-    provider: 'qwen_proxy',
-    model: 'qwen-coding-assistant',
-    task: task,
-    language: lang
-  };
-}
