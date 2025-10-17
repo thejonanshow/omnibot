@@ -133,20 +133,33 @@ function isCodeImplementationRequest(message) {
 async function handleChat(request, env) {
   const { message, conversation = [], sessionId = 'default' } = await request.json();
 
-  const providers = [
-    { name: 'groq', fn: callGroq, limit: 30, priority: 1, fallback: true }, // Free, high priority
-    { name: 'gemini', fn: callGemini, limit: 15, priority: 2, fallback: true }, // Free, medium priority
-    { name: 'qwen', fn: callQwen, limit: 1000, priority: 3, fallback: true }, // Local, unlimited, code specialist
-    { name: 'claude', fn: callClaude, limit: 50, priority: 4, fallback: false } // Paid, polish only
-  ];
-
   // Determine if this is a code implementation request
   const isCodeRequest = isCodeImplementationRequest(message);
+  
+  // Log routing decision for observability
+  console.log(`Routing decision: message="${message.substring(0, 50)}...", isCodeRequest=${isCodeRequest}, environment=${env.NODE_ENV || 'production'}`);
+
+  // Smart routing: prioritize Qwen for coding requests
+  const providers = isCodeRequest 
+    ? [
+        { name: 'qwen', fn: callQwen, limit: 1000, priority: 1, fallback: true, isCodeSpecialist: true }, // Code specialist, first priority
+        { name: 'groq', fn: callGroq, limit: 30, priority: 2, fallback: true }, // Free fallback
+        { name: 'gemini', fn: callGemini, limit: 15, priority: 3, fallback: true }, // Free fallback
+        { name: 'claude', fn: callClaude, limit: 50, priority: 4, fallback: false } // Paid polish only
+      ]
+    : [
+        { name: 'groq', fn: callGroq, limit: 30, priority: 1, fallback: true }, // General purpose, first priority
+        { name: 'gemini', fn: callGemini, limit: 15, priority: 2, fallback: true }, // General purpose
+        { name: 'qwen', fn: callQwen, limit: 1000, priority: 3, fallback: true, isCodeSpecialist: true }, // Code specialist, lower priority for general requests
+        { name: 'claude', fn: callClaude, limit: 50, priority: 4, fallback: false } // Paid polish only
+      ];
 
   let lastError = null;
   let attemptedProviders = [];
+  let response = null;
+  let usedProviders = [];
 
-  // Simple provider rotation - try providers in priority order
+  // Smart provider selection with credit safety
   for (const provider of providers) {
     const usage = await getUsage(env, provider.name);
     if (usage >= provider.limit) {
@@ -154,9 +167,25 @@ async function handleChat(request, env) {
       continue;
     }
 
+    // Credit safety: don't use paid providers in local development without explicit confirmation
+    if (env.NODE_ENV === 'development' && (provider.name === 'claude' || provider.name === 'groq' || provider.name === 'gemini')) {
+      // In development, only use free/local providers unless explicitly approved
+      if (!env.ALLOW_PAID_PROVIDERS_IN_DEV) {
+        attemptedProviders.push(`${provider.name} (blocked in development - credit safety)`);
+        continue;
+      }
+    }
+
     try {
-      const response = await provider.fn(message, conversation, env, sessionId);
+      const startTime = Date.now();
+      response = await provider.fn(message, conversation, env, sessionId);
+      const responseTime = Date.now() - startTime;
+      
       await incrementUsage(env, provider.name);
+      usedProviders.push(provider.name);
+
+      // Log successful routing
+      console.log(`Successfully routed to ${provider.name} (${responseTime}ms) for ${isCodeRequest ? 'coding' : 'general'} request`);
 
       // Handle function calls
       if (response.choices && response.choices[0].message.function_call) {
@@ -181,18 +210,56 @@ async function handleChat(request, env) {
           provider: provider.name,
           usage: usage + 1,
           limit: provider.limit,
-          function_calls: [functionCall.name]
+          function_calls: [functionCall.name],
+          isCodeRequest: isCodeRequest,
+          routingTime: responseTime,
+          providers: usedProviders
         }), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
 
+      // Assess response quality for potential polishing
+      const qualityAssessment = assessResponseQuality(response);
+      let finalResponse = response;
+      let polished = false;
+
+      // Polish low-quality responses with premium provider (if available and approved)
+      if (qualityAssessment.needsPolishing && provider.name !== 'claude' && env.ALLOW_RESPONSE_POLISHING !== 'false') {
+        try {
+          const polishProvider = providers.find(p => p.name === 'claude' && p.fallback === false);
+          if (polishProvider) {
+            const polishUsage = await getUsage(env, polishProvider.name);
+            if (polishUsage < polishProvider.limit) {
+              const polishResponse = await polishProvider.fn(
+                `Please polish and improve this response while maintaining the original meaning: ${response.choices[0].message.content}`,
+                [],
+                env,
+                sessionId
+              );
+              finalResponse = polishResponse;
+              usedProviders.push(polishProvider.name);
+              polished = true;
+              await incrementUsage(env, polishProvider.name);
+              console.log(`Response polished by ${polishProvider.name}`);
+            }
+          }
+        } catch (polishError) {
+          console.warn(`Response polishing failed: ${polishError.message}`);
+          // Continue with original response
+        }
+      }
+
       return new Response(JSON.stringify({
-        response: response.choices ? response.choices[0].message.content : response,
+        response: finalResponse.choices ? finalResponse.choices[0].message.content : finalResponse,
         provider: provider.name,
         usage: usage + 1,
         limit: provider.limit,
-        isCodeRequest: isCodeRequest
+        isCodeRequest: isCodeRequest,
+        routingTime: responseTime,
+        providers: usedProviders,
+        polished: polished,
+        qualityScore: qualityAssessment.score
       }), {
         headers: { 'Content-Type': 'application/json' }
       });
@@ -200,12 +267,21 @@ async function handleChat(request, env) {
       lastError = error;
       attemptedProviders.push(`${provider.name} (error: ${error.message})`);
       console.error(`Provider ${provider.name} failed:`, error.message);
+      
+      // Log fallback scenario
+      if (provider.name === 'qwen' && isCodeRequest) {
+        console.warn(`Qwen unavailable for coding request, falling back to other providers`);
+      }
+      
       continue;
     }
   }
 
   // If we get here, all providers failed
   const errorMessage = `All providers failed. Attempted: ${attemptedProviders.join(', ')}. Last error: ${lastError?.message || 'Unknown error'}`;
+  
+  // Log routing failure
+  console.error(`Routing failure: ${errorMessage}`);
 
   // Return a graceful error response instead of throwing
   return new Response(JSON.stringify({
@@ -215,11 +291,60 @@ async function handleChat(request, env) {
     limit: 0,
     error: true,
     attemptedProviders: attemptedProviders,
-    isCodeRequest: isCodeRequest
+    isCodeRequest: isCodeRequest,
+    providers: usedProviders
   }), {
     status: 503, // Service Unavailable
     headers: { 'Content-Type': 'application/json' }
   });
+}
+
+// Response quality assessment function
+function assessResponseQuality(response) {
+  if (!response.choices || !response.choices[0] || !response.choices[0].message) {
+    return { score: 0, needsPolishing: true, reasons: ['Invalid response format'] };
+  }
+
+  const content = response.choices[0].message.content;
+  let score = 0;
+  const reasons = [];
+
+  // Check for code presence
+  if (content.includes('```') || content.includes('def ') || content.includes('function ') || content.includes('class ')) {
+    score += 2;
+  } else {
+    reasons.push('No code detected');
+  }
+
+  // Check for explanation
+  if (content.length > 100) {
+    score += 1;
+  } else {
+    reasons.push('Response too short');
+  }
+
+  // Check for completeness
+  if (content.includes('return') || content.includes('print') || content.includes('console.log') || content.includes('//') || content.includes('#')) {
+    score += 1;
+  } else {
+    reasons.push('Incomplete implementation');
+  }
+
+  // Check for proper formatting
+  if (content.includes('\n') && content.split('\n').length > 3) {
+    score += 1;
+  } else {
+    reasons.push('Poor formatting');
+  }
+
+  const needsPolishing = score < 3;
+  
+  return {
+    score,
+    needsPolishing,
+    reasons: needsPolishing ? reasons : [],
+    maxScore: 5
+  };
 }
 
 async function callGroq(message, conversation, env, sessionId) {
