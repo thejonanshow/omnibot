@@ -242,35 +242,35 @@ function calculateQualityScore(response) {
   if (!response || typeof response !== 'string') {
     return 0.0;
   }
-  
+
   let score = 0.0;
-  
+
   // Check for code presence
   if (response.includes('```') || response.includes('def ') || response.includes('function ')) {
     score += 0.3;
   }
-  
+
   // Check for explanation
   if (response.length > 200) {
     score += 0.2;
   }
-  
+
   // Check for structure
   const structureKeywords = ['implementation', 'example', 'usage', 'test', 'function', 'class'];
   if (structureKeywords.some(keyword => response.toLowerCase().includes(keyword))) {
     score += 0.2;
   }
-  
+
   // Check for completeness
   if (response.length > 500) {
     score += 0.2;
   }
-  
+
   // Check for formatting
   if ((response.match(/\n/g) || []).length > 5) {
     score += 0.1;
   }
-  
+
   return Math.min(score, 1.0);
 }
 
@@ -338,18 +338,18 @@ function calculateSimilarity(text1, text2) {
   if (!text1 || !text2 || typeof text1 !== 'string' || typeof text2 !== 'string') {
     return 0.0;
   }
-  
+
   // Simple similarity based on common words
   const words1 = new Set(text1.toLowerCase().split(/\s+/));
   const words2 = new Set(text2.toLowerCase().split(/\s+/));
-  
+
   if (words1.size === 0 || words2.size === 0) {
     return 0.0;
   }
-  
+
   const intersection = new Set([...words1].filter(x => words2.has(x)));
   const union = new Set([...words1, ...words2]);
-  
+
   return intersection.size / union.size;
 }
 
@@ -363,24 +363,24 @@ export function shouldUseSwarm(message, env) {
   if (!message || typeof message !== 'string') {
     return false;
   }
-  
+
   const lowerMessage = message.toLowerCase();
-  
+
   // Check for swarm indicators
   const swarmKeywords = ['swarm', 'multiple', 'parallel', 'compare', 'best', 'optimize'];
-  const hasSwarmKeyword = swarmKeywords.some(keyword => 
+  const hasSwarmKeyword = swarmKeywords.some(keyword =>
     lowerMessage.includes(keyword)
   );
-  
+
   // Check for complex coding tasks
   const complexKeywords = ['implement', 'create', 'build', 'develop', 'design', 'architecture'];
-  const hasComplexKeyword = complexKeywords.some(keyword => 
+  const hasComplexKeyword = complexKeywords.some(keyword =>
     lowerMessage.includes(keyword)
   );
-  
+
   // Check for swarm mode flag
   const swarmMode = env.SWARM_MODE === 'true';
-  
+
   return swarmMode || (hasSwarmKeyword && hasComplexKeyword);
 }
 
