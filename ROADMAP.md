@@ -21,14 +21,19 @@
 
 **Goal:** Free-tier code generation with smart routing
 
-**Implementation:**
+**Status:** ⚠️ BLOCKED - Runloop blueprint creation issues
+
+**Current Blocker:**
+- Unable to get a working Runloop devbox blueprint for Qwen
+- Attempted multiple configurations but blueprints fail to boot
+- Need to resolve Runloop setup before proceeding
+
+**Once unblocked:**
 - Smart routing: Chat → Conversational model, Code → Qwen
 - Two-stage processing: Fast local Qwen, optional polish with premium APIs
 - Cost savings: ~$50-100/month estimated
 
-**Details:** See `QWEN-IMPLEMENTATION-PLAN.md`
-
-**Timeline:** 1-2 weeks
+**Timeline:** On hold until Runloop blueprint issue resolved
 
 ---
 
