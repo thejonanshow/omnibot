@@ -561,7 +561,7 @@ async def main():
     # Initialize orchestrator
     orchestrator = SwarmOrchestrator(
         cloudflare_worker_url="https://omni-agent-router.jonanscheffler.workers.dev",
-        shared_secret="4c87cc9dee7fa8d8f4af8cae53b1116c3dfc070dddeb39ddb12c6274b07db7b2"
+        shared_secret=os.getenv("SHARED_SECRET", "test-secret-for-development-only")
     )
 
     # Create a sample project

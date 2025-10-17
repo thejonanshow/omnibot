@@ -7,7 +7,7 @@ const https = require('https');
 const crypto = require('crypto');
 
 const WORKER_URL = 'https://omni-agent-router.jonanscheffler.workers.dev';
-const SHARED_SECRET = '4c87cc9dee7fa8d8f4af8cae53b1116c3dfc070dddeb39ddb12c6274b07db7b2';
+const SHARED_SECRET = process.env.SHARED_SECRET || 'test-secret-for-development-only';
 
 async function makeRequest(url, options, data) {
   return new Promise((resolve, reject) => {

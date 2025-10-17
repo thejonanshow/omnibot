@@ -511,8 +511,8 @@ describe('Epic 1: LLM Provider Integration', () => {
           statusText: 'Service Unavailable'
         }));
 
-        const devEnv = { 
-          ...mockEnv, 
+        const devEnv = {
+          ...mockEnv,
           NODE_ENV: 'development',
           DISABLE_QWEN_FALLBACK: 'true' // Disable fallback to test local error path
         };
@@ -545,8 +545,8 @@ describe('Epic 1: LLM Provider Integration', () => {
           }
         });
 
-        const devEnv = { 
-          ...mockEnv, 
+        const devEnv = {
+          ...mockEnv,
           NODE_ENV: 'development'
           // DISABLE_QWEN_FALLBACK not set, so fallback should work
         };

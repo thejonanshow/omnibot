@@ -124,12 +124,12 @@ Provide helpful, production-ready code with clear explanations.`;
         return await callLocalQwen(message, systemPrompt, qwenUrl);
       } catch (localError) {
         console.log(`Local Qwen unavailable: ${localError.message}`);
-        
+
         // Skip fallback if explicitly disabled (for testing)
         if (env.DISABLE_QWEN_FALLBACK === 'true') {
           throw localError;
         }
-        
+
         console.log('Falling back to Runloop Qwen...');
 
         // Fallback to Runloop Qwen

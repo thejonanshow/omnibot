@@ -2,8 +2,8 @@
 
 /**
  * BDD Tests for Local Qwen Development Support
- * 
- * User Story: As a developer working locally, I want to use a local Qwen instance 
+ *
+ * User Story: As a developer working locally, I want to use a local Qwen instance
  * instead of Runloop credits so that I can develop and test without consuming paid resources.
  */
 
@@ -30,10 +30,10 @@ describe('Local Qwen Development Support', () => {
     // Reset all mocks
     mockFetch.mock.resetCalls();
     mockCallQwen.mock.resetCalls();
-    
+
     // Set up environment
     process.env = { ...process.env, ...mockEnv };
-    
+
     // Mock global fetch
     global.fetch = mockFetch;
   });
@@ -47,10 +47,10 @@ describe('Local Qwen Development Support', () => {
     it('should detect local development environment', () => {
       // Given: Local development environment
       process.env.NODE_ENV = 'development';
-      
+
       // When: Checking environment
       const isLocal = process.env.NODE_ENV === 'development';
-      
+
       // Then: Should be detected as local
       assert.equal(isLocal, true);
     });
@@ -58,10 +58,10 @@ describe('Local Qwen Development Support', () => {
     it('should detect staging environment', () => {
       // Given: Staging environment
       process.env.NODE_ENV = 'staging';
-      
+
       // When: Checking environment
       const isLocal = process.env.NODE_ENV === 'development';
-      
+
       // Then: Should not be detected as local
       assert.equal(isLocal, false);
     });
@@ -69,10 +69,10 @@ describe('Local Qwen Development Support', () => {
     it('should detect production environment', () => {
       // Given: Production environment
       process.env.NODE_ENV = 'production';
-      
+
       // When: Checking environment
       const isLocal = process.env.NODE_ENV === 'development';
-      
+
       // Then: Should not be detected as local
       assert.equal(isLocal, false);
     });
@@ -83,10 +83,10 @@ describe('Local Qwen Development Support', () => {
       // Given: Development environment with local Qwen available
       process.env.NODE_ENV = 'development';
       const localUrl = 'http://localhost:11434';
-      
+
       // When: Selecting Qwen endpoint
       const selectedUrl = process.env.NODE_ENV === 'development' ? localUrl : mockEnv.QWEN_RUNLOOP_URL;
-      
+
       // Then: Should use local URL
       assert.equal(selectedUrl, localUrl);
     });
@@ -94,10 +94,10 @@ describe('Local Qwen Development Support', () => {
     it('should use Runloop Qwen URL in staging', () => {
       // Given: Staging environment
       process.env.NODE_ENV = 'staging';
-      
+
       // When: Selecting Qwen endpoint
       const selectedUrl = process.env.NODE_ENV === 'development' ? mockEnv.QWEN_LOCAL_URL : mockEnv.QWEN_RUNLOOP_URL;
-      
+
       // Then: Should use Runloop URL
       assert.equal(selectedUrl, mockEnv.QWEN_RUNLOOP_URL);
     });
@@ -105,10 +105,10 @@ describe('Local Qwen Development Support', () => {
     it('should use Runloop Qwen URL in production', () => {
       // Given: Production environment
       process.env.NODE_ENV = 'production';
-      
+
       // When: Selecting Qwen endpoint
       const selectedUrl = process.env.NODE_ENV === 'development' ? mockEnv.QWEN_LOCAL_URL : mockEnv.QWEN_RUNLOOP_URL;
-      
+
       // Then: Should use Runloop URL
       assert.equal(selectedUrl, mockEnv.QWEN_RUNLOOP_URL);
     });
@@ -117,7 +117,7 @@ describe('Local Qwen Development Support', () => {
   describe('Local Qwen Health Check', () => {
     it('should check local Qwen service health', async () => {
       // Given: Local Qwen service running
-      mockFetch.mock.mockImplementationOnce(() => 
+      mockFetch.mock.mockImplementationOnce(() =>
         Promise.resolve({
           ok: true,
           status: 200,
@@ -137,7 +137,7 @@ describe('Local Qwen Development Support', () => {
 
     it('should handle local Qwen service unavailable', async () => {
       // Given: Local Qwen service not running
-      mockFetch.mock.mockImplementationOnce(() => 
+      mockFetch.mock.mockImplementationOnce(() =>
         Promise.reject(new Error('ECONNREFUSED'))
       );
 
@@ -156,12 +156,12 @@ describe('Local Qwen Development Support', () => {
 
     it('should check local Qwen model availability', async () => {
       // Given: Local Qwen with model loaded
-      mockFetch.mock.mockImplementationOnce(() => 
+      mockFetch.mock.mockImplementationOnce(() =>
         Promise.resolve({
           ok: true,
           status: 200,
-          json: async () => ({ 
-            models: [{ name: 'qwen2.5:7b', size: 1234567890 }] 
+          json: async () => ({
+            models: [{ name: 'qwen2.5:7b', size: 1234567890 }]
           })
         })
       );
@@ -197,7 +197,7 @@ describe('Local Qwen Development Support', () => {
       // When: Attempting to use Qwen with fallback
       let response = null;
       let error = null;
-      
+
       try {
         // Try local first
         response = await fetch('http://localhost:11434/api/chat');
@@ -217,10 +217,10 @@ describe('Local Qwen Development Support', () => {
       // Given: Environment detection
       const isLocal = process.env.NODE_ENV === 'development';
       const qwenUrl = isLocal ? mockEnv.QWEN_LOCAL_URL : mockEnv.QWEN_RUNLOOP_URL;
-      
+
       // When: Logging Qwen instance usage
       const logMessage = `Using Qwen instance: ${qwenUrl} (${isLocal ? 'local' : 'remote'})`;
-      
+
       // Then: Should provide clear logging
       assert(logMessage.includes('Using Qwen instance:'));
       assert(logMessage.includes(isLocal ? 'local' : 'remote'));
@@ -241,13 +241,13 @@ describe('Local Qwen Development Support', () => {
       // When: Attempting to use Qwen with both failing
       let localError = null;
       let runloopError = null;
-      
+
       try {
         await fetch('http://localhost:11434/api/chat');
       } catch (e) {
         localError = e;
       }
-      
+
       try {
         await fetch('https://dbx_test.runloop.dev:8000/qwen/chat');
       } catch (e) {
@@ -288,10 +288,10 @@ describe('Local Qwen Development Support', () => {
       // Given: Local test environment
       const isLocalTest = process.env.NODE_ENV === 'development';
       const isTestEnvironment = process.env.NODE_TEST === 'true';
-      
+
       // When: Checking if fallback to paid services is allowed
       const allowPaidFallback = !isLocalTest || !isTestEnvironment;
-      
+
       // Then: Should not allow paid fallback in local tests
       if (isLocalTest && isTestEnvironment) {
         assert.equal(allowPaidFallback, false);
@@ -357,7 +357,7 @@ describe('Local Qwen Development Support', () => {
     it('should prioritize local Qwen in development environment', () => {
       // Given: Development environment
       process.env.NODE_ENV = 'development';
-      
+
       // When: Selecting Qwen provider
       const selectQwenProvider = () => {
         if (process.env.NODE_ENV === 'development') {
@@ -387,7 +387,7 @@ describe('Local Qwen Development Support', () => {
         process.env.NODE_ENV = env;
         const isLocal = process.env.NODE_ENV === 'development';
         const feedback = `Qwen instance: ${isLocal ? 'local' : 'remote'} (${env})`;
-        
+
         // Then: Should provide appropriate feedback
         assert(feedback.includes(expected));
         assert(feedback.includes(env));
@@ -414,7 +414,7 @@ describe('Local Qwen Development Support', () => {
       let success = false;
       let attempts = 0;
       const maxAttempts = 5;
-      
+
       while (!success && attempts < maxAttempts) {
         try {
           const response = await fetch('http://localhost:11434/api/tags');

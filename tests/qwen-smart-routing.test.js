@@ -2,9 +2,9 @@
 
 /**
  * BDD Tests for Smart Routing to Qwen
- * 
- * User Story: As a user asking coding questions, I want my implementation requests 
- * automatically routed to Qwen so that I get specialized, free code generation 
+ *
+ * User Story: As a user asking coding questions, I want my implementation requests
+ * automatically routed to Qwen so that I get specialized, free code generation
  * without manual provider selection.
  */
 
@@ -108,7 +108,7 @@ describe('Smart Routing to Qwen', () => {
       codingRequests.forEach(request => {
         mockIsCodeImplementationRequest.mock.mockImplementationOnce(() => true);
         const isCodeRequest = mockIsCodeImplementationRequest(request);
-        
+
         // Then: Should detect as coding request
         assert.equal(isCodeRequest, true, `Failed to detect coding request: "${request}"`);
       });
@@ -131,7 +131,7 @@ describe('Smart Routing to Qwen', () => {
       generalRequests.forEach(request => {
         mockIsCodeImplementationRequest.mock.mockImplementationOnce(() => false);
         const isCodeRequest = mockIsCodeImplementationRequest(request);
-        
+
         // Then: Should not detect as coding request
         assert.equal(isCodeRequest, false, `Incorrectly detected as coding request: "${request}"`);
       });
@@ -153,7 +153,7 @@ describe('Smart Routing to Qwen', () => {
       const isCodeRequest = mockIsCodeImplementationRequest(codingMessage);
       let response = null;
       let error = null;
-      
+
       if (isCodeRequest) {
         try {
           response = await mockCallQwen(codingMessage, [], mockEnv, 'session1');
@@ -187,7 +187,7 @@ describe('Smart Routing to Qwen', () => {
       // When: Processing with all providers failing
       const isCodeRequest = mockIsCodeImplementationRequest(codingMessage);
       let finalError = null;
-      
+
       if (isCodeRequest) {
         try {
           await mockCallQwen(codingMessage, [], mockEnv, 'session1');
@@ -222,7 +222,7 @@ describe('Smart Routing to Qwen', () => {
       errorScenarios.forEach(scenario => {
         // Then: Should provide meaningful error message
         assert(scenario.expected.length > 0, 'Error message should not be empty');
-        assert(scenario.expected.includes('Qwen') || scenario.expected.includes('provider'), 
+        assert(scenario.expected.includes('Qwen') || scenario.expected.includes('provider'),
                'Error message should be descriptive');
       });
     });
@@ -279,7 +279,7 @@ describe('Smart Routing to Qwen', () => {
       const codingMessage = 'Write a Python function';
       mockIsCodeImplementationRequest.mock.mockImplementationOnce(() => true);
       mockCallQwen.mock.mockImplementationOnce(() => Promise.reject(new Error('Local Qwen unavailable')));
-      
+
       // Mock that fallback requires credit confirmation
       const requiresCreditConfirmation = (provider) => {
         return provider === 'groq' || provider === 'gemini' || provider === 'claude';
@@ -289,7 +289,7 @@ describe('Smart Routing to Qwen', () => {
       const isCodeRequest = mockIsCodeImplementationRequest(codingMessage);
       let error = null;
       let usedCredits = false;
-      
+
       if (isCodeRequest) {
         try {
           await mockCallQwen(codingMessage, [], devEnv, 'session1');
@@ -315,11 +315,11 @@ describe('Smart Routing to Qwen', () => {
     it('should assess Qwen response quality', async () => {
       // Given: Qwen response
       const qwenResponse = {
-        choices: [{ 
-          message: { 
+        choices: [{
+          message: {
             content: 'def quick_sort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quick_sort(left) + middle + quick_sort(right)',
-            role: 'assistant' 
-          } 
+            role: 'assistant'
+          }
         }]
       };
 
@@ -329,7 +329,7 @@ describe('Smart Routing to Qwen', () => {
         const hasCode = content.includes('def ') || content.includes('```');
         const hasExplanation = content.length > 100;
         const isComplete = content.includes('return') || content.includes('print');
-        
+
         return {
           hasCode,
           hasExplanation,
@@ -350,11 +350,11 @@ describe('Smart Routing to Qwen', () => {
     it('should polish low-quality Qwen responses', async () => {
       // Given: Low-quality Qwen response
       const lowQualityResponse = {
-        choices: [{ 
-          message: { 
+        choices: [{
+          message: {
             content: 'def func(): pass',
-            role: 'assistant' 
-          } 
+            role: 'assistant'
+          }
         }]
       };
 
@@ -370,14 +370,14 @@ describe('Smart Routing to Qwen', () => {
       if (needsPolishing) {
         // Mock polishing by premium provider
         mockCallGroq.mock.mockImplementationOnce(() => Promise.resolve({
-          choices: [{ 
-            message: { 
+          choices: [{
+            message: {
               content: 'Here is a well-documented Python function:\n\ndef example_function():\n    """\n    Example function with proper documentation.\n    \n    Returns:\n        str: A greeting message\n    """\n    return "Hello, World!"\n\n# Usage example\nif __name__ == "__main__":\n    result = example_function()\n    print(result)',
-              role: 'assistant' 
-            } 
+              role: 'assistant'
+            }
           }]
         }));
-        
+
         polishedResponse = await mockCallGroq('Polish this response', [], mockEnv, 'session1');
       }
 
@@ -391,11 +391,11 @@ describe('Smart Routing to Qwen', () => {
       // Given: Response from multiple providers
       const providerChain = ['qwen', 'groq'];
       const response = {
-        choices: [{ 
-          message: { 
+        choices: [{
+          message: {
             content: 'Polished response from Qwen + Groq',
-            role: 'assistant' 
-          } 
+            role: 'assistant'
+          }
         }],
         providers: providerChain,
         polished: true
@@ -418,7 +418,7 @@ describe('Smart Routing to Qwen', () => {
     it('should make fast routing decisions', async () => {
       // Given: Fast classifier and provider selection
       const startTime = Date.now();
-      
+
       mockIsCodeImplementationRequest.mock.mockImplementationOnce(() => true);
       mockCallQwen.mock.mockImplementationOnce(() => Promise.resolve({
         choices: [{ message: { content: 'Fast response', role: 'assistant' } }]
@@ -441,7 +441,7 @@ describe('Smart Routing to Qwen', () => {
     it('should cache routing decisions appropriately', () => {
       // Given: Routing decision cache
       const routingCache = new Map();
-      
+
       const cacheKey = 'coding_request_pattern';
       const cachedDecision = { provider: 'qwen', timestamp: Date.now() };
 
@@ -479,7 +479,7 @@ describe('Smart Routing to Qwen', () => {
         }
         return Promise.resolve(null);
       });
-      
+
       const responses = await Promise.all(promises);
       const totalTime = Date.now() - startTime;
 
@@ -531,7 +531,7 @@ describe('Smart Routing to Qwen', () => {
       };
 
       // When: Checking fallback logging
-      const isFallbackLog = fallbackLog.level === 'warn' && 
+      const isFallbackLog = fallbackLog.level === 'warn' &&
                            fallbackLog.message.includes('fallback');
 
       // Then: Should log fallback scenarios

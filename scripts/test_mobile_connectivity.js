@@ -10,7 +10,7 @@ const http = require('http');
 
 // Configuration
 const WORKER_URL = process.env.WORKER_URL || 'https://omni-agent-router.jonanscheffler.workers.dev';
-const SHARED_SECRET = process.env.SHARED_SECRET || '4c87cc9dee7fa8d8f4af8cae53b1116c3dfc070dddeb39ddb12c6274b07db7b2';
+const SHARED_SECRET = process.env.SHARED_SECRET || 'test-secret-for-development-only';
 
 console.log('🔍 Omnibot Mobile Connectivity Tests');
 console.log('====================================\n');

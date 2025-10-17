@@ -9,6 +9,18 @@
     "test:coverage": "node --test --experimental-test-coverage tests/**/*.test.js && node scripts/check-coverage.js",
     "test:coverage-only": "node --test --experimental-test-coverage tests/**/*.test.js",
     "check:coverage": "node scripts/check-coverage.js",
+    "test:unit": "node --test tests/**/*.test.js",
+    "test:integration": "node --test tests/integration/**/*.spec.js",
+    "test:api": "node --test tests/api/**/*.spec.js",
+    "test:security": "node --test tests/security/**/*.spec.js",
+    "test:smoke": "node --test tests/smoke/**/*.spec.js",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui",
+    "test:e2e:headed": "npx playwright test --headed",
+    "test:e2e:debug": "npx playwright test --debug",
+    "test:e2e:report": "npx playwright show-report",
+    "test:all": "npm run test && npm run test:e2e",
+    "test:comprehensive": "npm run test:unit && npm run test:integration && npm run test:api && npm run test:security && npm run test:smoke && npm run test:e2e",
     "deploy": "./deploy.sh",
     "setup": "./setup.sh",
     "log:worker:staging": "cd cloudflare-worker && npx wrangler tail --env staging",
@@ -25,5 +37,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
   }
 }

@@ -135,12 +135,12 @@ async function handleChat(request, env) {
 
   // Determine if this is a code implementation request
   const isCodeRequest = isCodeImplementationRequest(message);
-  
+
   // Log routing decision for observability
   console.log(`Routing decision: message="${message.substring(0, 50)}...", isCodeRequest=${isCodeRequest}, environment=${env.NODE_ENV || 'production'}`);
 
   // Smart routing: prioritize Qwen for coding requests
-  const providers = isCodeRequest 
+  const providers = isCodeRequest
     ? [
         { name: 'qwen', fn: callQwen, limit: 1000, priority: 1, fallback: true, isCodeSpecialist: true }, // Code specialist, first priority
         { name: 'groq', fn: callGroq, limit: 30, priority: 2, fallback: true }, // Free fallback
@@ -180,7 +180,7 @@ async function handleChat(request, env) {
       const startTime = Date.now();
       response = await provider.fn(message, conversation, env, sessionId);
       const responseTime = Date.now() - startTime;
-      
+
       await incrementUsage(env, provider.name);
       usedProviders.push(provider.name);
 
@@ -267,19 +267,19 @@ async function handleChat(request, env) {
       lastError = error;
       attemptedProviders.push(`${provider.name} (error: ${error.message})`);
       console.error(`Provider ${provider.name} failed:`, error.message);
-      
+
       // Log fallback scenario
       if (provider.name === 'qwen' && isCodeRequest) {
         console.warn(`Qwen unavailable for coding request, falling back to other providers`);
       }
-      
+
       continue;
     }
   }
 
   // If we get here, all providers failed
   const errorMessage = `All providers failed. Attempted: ${attemptedProviders.join(', ')}. Last error: ${lastError?.message || 'Unknown error'}`;
-  
+
   // Log routing failure
   console.error(`Routing failure: ${errorMessage}`);
 
@@ -338,7 +338,7 @@ function assessResponseQuality(response) {
   }
 
   const needsPolishing = score < 3;
-  
+
   return {
     score,
     needsPolishing,

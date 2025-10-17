@@ -20,10 +20,10 @@ AI models can hallucinate facts, make up features, or provide incorrect informat
 ```javascript
 async function handleRequestWithConsensus(message, env, sessionId) {
   const isCodeRequest = isCodeImplementationRequest(message);
-  
+
   // Determine swarm configuration
   const swarmConfig = getSwarmConfig(message, env);
-  
+
   if (swarmConfig.enabled) {
     return await executeConsensusSwarm(message, swarmConfig, env, sessionId);
   } else {
@@ -39,10 +39,10 @@ async function executeConsensusSwarm(message, config, env, sessionId) {
     callVerificationModel(message, config.verification, env, sessionId),
     callConsensusModel(message, config.consensus, env, sessionId)
   ]);
-  
+
   // Analyze consensus
   const consensusResult = await analyzeConsensus(primary, verification, consensus);
-  
+
   if (consensusResult.confidence > 0.8) {
     return consensusResult.response;
   } else {
@@ -95,20 +95,20 @@ const factCheckSwarmConfig = {
 ```javascript
 async function analyzeConsensus(primary, verification, consensus) {
   const responses = [primary, verification, consensus];
-  
+
   // 1. Semantic similarity analysis
   const similarities = await calculateSimilarities(responses);
-  
+
   // 2. Fact extraction and comparison
   const facts = await extractFacts(responses);
   const factConsensus = await compareFacts(facts);
-  
+
   // 3. Code quality analysis (for code requests)
   const codeQuality = await analyzeCodeQuality(responses);
-  
+
   // 4. Confidence scoring
   const confidence = calculateConfidence(similarities, factConsensus, codeQuality);
-  
+
   return {
     confidence,
     response: selectBestResponse(responses, confidence),
@@ -132,14 +132,14 @@ class SwarmCostManager {
     this.currentSpend = 0;
     this.requestCount = 0;
   }
-  
+
   async canAffordSwarm(config) {
     const estimatedCost = this.estimateCost(config);
     const dailySpend = await this.getDailySpend();
-    
+
     return (dailySpend + estimatedCost) <= this.dailyBudget;
   }
-  
+
   estimateCost(config) {
     // Estimate cost based on model and request complexity
     const modelCosts = {
@@ -148,7 +148,7 @@ class SwarmCostManager {
       'gemini-2.0-flash': 0.03,
       'claude-3-haiku': 0.08
     };
-    
+
     return (modelCosts[config.primary.model] || 0.05) +
            (modelCosts[config.verification.model] || 0.05) +
            (modelCosts[config.consensus.model] || 0.05);
@@ -168,23 +168,23 @@ class HallucinationDetector {
       this.checkForMadeUpFeatures(response),
       this.checkForImpossibleClaims(response)
     ]);
-    
+
     const hallucinationScore = checks.reduce((sum, check) => sum + check.score, 0) / checks.length;
-    
+
     return {
       isHallucination: hallucinationScore > 0.7,
       score: hallucinationScore,
       details: checks
     };
   }
-  
+
   async checkForMadeUpFeatures(response) {
     // Check if response mentions features that don't exist
     const knownFeatures = await this.getKnownFeatures();
     const mentionedFeatures = this.extractFeatures(response);
-    
+
     const unknownFeatures = mentionedFeatures.filter(f => !knownFeatures.includes(f));
-    
+
     return {
       score: unknownFeatures.length / mentionedFeatures.length,
       unknownFeatures
@@ -239,7 +239,7 @@ async function handleLowConfidence(consensusResult, env) {
   if (env.SWARM_FALLBACK_TO_SINGLE === 'true') {
     // Fall back to single model with warning
     const fallbackResponse = await callPrimaryModel(consensusResult.originalMessage, env);
-    
+
     return {
       ...fallbackResponse,
       warning: 'Low consensus confidence - response may be less reliable',

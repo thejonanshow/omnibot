@@ -81,16 +81,16 @@ Before running, the paid test suite shows:
 ═══════════════════════════════════════════════════════
 Groq API Calls:        15 requests (~150K tokens)
   Cost: Free tier (30/day remaining)
-  
+
 Runloop Devboxes:      3 deployments (~5 min total)
   Cost: ~0.25 credits (22.5 remaining before reset at 2am)
-  
+
 GitHub API:            8 requests (test repo only)
   Cost: Free tier (unlimited)
-  
+
 Cloudflare API:        2 deployments (staging only)
   Cost: Free tier
-  
+
 TOTAL ESTIMATED COST:  ~0.25 Runloop credits
 ═══════════════════════════════════════════════════════
 
@@ -113,10 +113,10 @@ describe('Paid Test Suite: Qwen Integration', () => {
     // Real API call - consumes credits
     const devbox = await createDevbox('qwen-test');
     assert.ok(devbox.id);
-    
+
     const response = await callQwenOnRunloop(devbox.id, 'Write a hello world function');
     assert.ok(response.includes('def hello_world'));
-    
+
     await cleanupDevbox(devbox.id);
   });
 });
@@ -294,4 +294,3 @@ The two-tier testing architecture ensures:
 - **Safety first** with explicit confirmation requirements
 
 This approach enables **continuous integration without continuous spending** while maintaining comprehensive test coverage and quality assurance.
-
