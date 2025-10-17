@@ -34,11 +34,11 @@ class QwenHandler(BaseHTTPRequestHandler):
         if self.path == '/chat':
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
-            
+
             try:
                 data = json.loads(post_data.decode('utf-8'))
                 message = data.get('message', '')
-                
+
                 # Simulate Qwen response
                 response = {
                     "response": f"Qwen response to: {message}",
@@ -46,12 +46,12 @@ class QwenHandler(BaseHTTPRequestHandler):
                     "timestamp": int(time.time()),
                     "status": "success"
                 }
-                
+
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps(response).encode())
-                
+
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
