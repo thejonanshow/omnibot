@@ -1667,8 +1667,14 @@
                 }
                 
             } catch (error) {
-                addMessage('error', `❌ Error: ${error.message}`);
-                console.error('Error:', error);
+                console.error('Send message error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach server. Check your connection.`);
+                } else if (error.message.includes('challenge')) {
+                    addMessage('error', `❌ Authentication failed. Check your Shared Secret in Settings.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
             } finally {
                 hideTypingIndicator();
                 isVoiceInput = false;
@@ -1812,9 +1818,18 @@
 
         // Status Update
         async function updateStatus() {
+            if (!config.routerUrl) {
+                addMessage('error', '⚙️ Configure Router URL in Settings first');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${config.routerUrl}/status`);
-                if (!response.ok) throw new Error('Failed to fetch status');
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => response.statusText);
+                    throw new Error(`Server returned ${response.status}: ${errorText}`);
+                }
                 
                 const status = await response.json();
                 
@@ -1839,9 +1854,14 @@
                 }
                 
                 document.getElementById('usage-status').textContent = `${totalUsage}/${totalLimit}`;
-                addMessage('system', `📊 Status: ${providers.join(' • ')}`);
+                addMessage('system', `📊 ${providers.join(' • ')}`);
             } catch (error) {
-                addMessage('error', `❌ Status check failed: ${error.message}`);
+                console.error('Status check error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach ${config.routerUrl}. Check your connection or Router URL.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
             }
         }
 
