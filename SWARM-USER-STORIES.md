@@ -3,9 +3,9 @@
 ## 🎯 **SWARM IMPLEMENTATION ROADMAP**
 
 ### **Story 1: Swarm Orchestration System**
-**As a** system administrator  
-**I want to** orchestrate multiple Qwen instances for parallel processing  
-**So that** I can get multiple implementations and collate the best results  
+**As a** system administrator
+**I want to** orchestrate multiple Qwen instances for parallel processing
+**So that** I can get multiple implementations and collate the best results
 
 **Acceptance Criteria:**
 - [ ] Create swarm orchestrator that manages multiple Runloop devboxes
@@ -25,9 +25,9 @@
 ---
 
 ### **Story 2: Swarm Response Collation & Refinement**
-**As a** developer  
-**I want to** automatically collate and refine responses from multiple Qwen instances  
-**So that** I get the best possible implementation with multiple perspectives  
+**As a** developer
+**I want to** automatically collate and refine responses from multiple Qwen instances
+**So that** I get the best possible implementation with multiple perspectives
 
 **Acceptance Criteria:**
 - [ ] Implement response comparison algorithms
@@ -47,9 +47,9 @@
 ---
 
 ### **Story 3: Swarm Button Integration**
-**As a** user  
-**I want to** activate swarm mode with a simple button click  
-**So that** I can get multiple implementations for complex tasks  
+**As a** user
+**I want to** activate swarm mode with a simple button click
+**So that** I can get multiple implementations for complex tasks
 
 **Acceptance Criteria:**
 - [ ] Add swarm toggle button to the frontend
@@ -69,9 +69,9 @@
 ---
 
 ### **Story 4: Swarm Performance Optimization**
-**As a** system administrator  
-**I want to** optimize swarm performance and resource usage  
-**So that** the system is efficient and cost-effective  
+**As a** system administrator
+**I want to** optimize swarm performance and resource usage
+**So that** the system is efficient and cost-effective
 
 **Acceptance Criteria:**
 - [ ] Implement intelligent swarm sizing based on task complexity
@@ -92,9 +92,9 @@
 ---
 
 ### **Story 5: Swarm Quality Assurance**
-**As a** developer  
-**I want to** ensure swarm responses meet quality standards  
-**So that** I can trust the output and use it in production  
+**As a** developer
+**I want to** ensure swarm responses meet quality standards
+**So that** I can trust the output and use it in production
 
 **Acceptance Criteria:**
 - [ ] Implement comprehensive quality checks for swarm responses

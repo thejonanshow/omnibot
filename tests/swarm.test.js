@@ -22,7 +22,7 @@ describe('Swarm Integration', () => {
     fetchCallCount = 0;
     global.fetch = async (url, options) => {
       fetchCallCount++;
-      
+
       if (url.includes('/qwen/chat')) {
         return {
           ok: true,
@@ -33,7 +33,7 @@ describe('Swarm Integration', () => {
           })
         };
       }
-      
+
       return {
         ok: false,
         status: 404,
@@ -103,7 +103,7 @@ describe('Swarm Integration', () => {
           fetchCallCount++;
           throw new Error('Swarm instance failed');
         }
-        
+
         if (url.includes('/qwen/chat')) {
           fetchCallCount++;
           return {
@@ -115,7 +115,7 @@ describe('Swarm Integration', () => {
             })
           };
         }
-        
+
         return {
           ok: false,
           status: 404,
@@ -163,35 +163,35 @@ describe('Swarm Integration', () => {
     it('should detect swarm mode from environment', () => {
       const message = 'Write a simple function';
       const env = { SWARM_MODE: 'true' };
-      
+
       assert.strictEqual(shouldUseSwarm(message, env), true);
     });
 
     it('should detect swarm keywords', () => {
       const message = 'Use swarm to implement a complex system';
       const env = { SWARM_MODE: 'false' };
-      
+
       assert.strictEqual(shouldUseSwarm(message, env), true);
     });
 
     it('should detect complex coding tasks', () => {
       const message = 'Implement a distributed system architecture';
       const env = { SWARM_MODE: 'false' };
-      
+
       assert.strictEqual(shouldUseSwarm(message, env), true);
     });
 
     it('should not use swarm for simple tasks', () => {
       const message = 'What is the weather today?';
       const env = { SWARM_MODE: 'false' };
-      
+
       assert.strictEqual(shouldUseSwarm(message, env), false);
     });
 
     it('should not use swarm when disabled', () => {
       const message = 'Implement a complex system';
       const env = { SWARM_MODE: 'false' };
-      
+
       assert.strictEqual(shouldUseSwarm(message, env), false);
     });
   });
@@ -199,7 +199,7 @@ describe('Swarm Integration', () => {
   describe('Swarm Configuration', () => {
     it('should return correct swarm configuration', () => {
       const config = getSwarmConfig();
-      
+
       assert.strictEqual(config.DEFAULT_SIZE, 3);
       assert.strictEqual(config.MAX_SIZE, 7);
       assert.strictEqual(config.MIN_SIZE, 2);
@@ -240,7 +240,7 @@ describe('Swarm Integration', () => {
 
       assert.ok(result.responses);
       assert.strictEqual(result.responses.length, 3);
-      
+
       result.responses.forEach(response => {
         assert.ok(response.instanceId);
         assert.ok(response.qualityScore >= 0);
@@ -298,7 +298,7 @@ describe('Swarm Integration', () => {
   describe('Performance', () => {
     it('should complete within reasonable time', async () => {
       const startTime = Date.now();
-      
+
       const args = {
         message: 'Write a Python function',
         conversation: [],

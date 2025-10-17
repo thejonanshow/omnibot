@@ -28,26 +28,26 @@ const SWARM_CONFIG = {
  */
 export async function handleSwarmRequest(args, env) {
   const { message, conversation = [], sessionId, swarmSize = SWARM_CONFIG.DEFAULT_SIZE } = args;
-  
+
   console.log(`[SWARM] Processing swarm request: ${message.substring(0, 50)}...`);
   console.log(`[SWARM] Swarm size: ${swarmSize}`);
-  
+
   try {
     // Validate swarm size
     const validatedSwarmSize = Math.max(
       SWARM_CONFIG.MIN_SIZE,
       Math.min(swarmSize, SWARM_CONFIG.MAX_SIZE)
     );
-    
+
     if (validatedSwarmSize !== swarmSize) {
       console.log(`[SWARM] Adjusted swarm size from ${swarmSize} to ${validatedSwarmSize}`);
     }
-    
+
     // Process with swarm
     const result = await processSwarmTask(message, conversation, sessionId, validatedSwarmSize, env);
-    
+
     console.log(`[SWARM] Swarm processing complete: ${result.successful_instances}/${validatedSwarmSize} instances`);
-    
+
     return {
       success: true,
       swarm: true,
@@ -63,10 +63,10 @@ export async function handleSwarmRequest(args, env) {
       })),
       usedProviders: ['qwen-swarm']
     };
-    
+
   } catch (error) {
     console.error(`[SWARM] Swarm processing failed:`, error);
-    
+
     // Fallback to single Qwen instance
     console.log(`[SWARM] Falling back to single Qwen instance`);
     try {
@@ -96,27 +96,27 @@ export async function handleSwarmRequest(args, env) {
  */
 async function processSwarmTask(task, conversation, sessionId, swarmSize, env) {
   const startTime = Date.now();
-  
+
   // Get swarm instances
   const instances = await getSwarmInstances(swarmSize, env);
   if (instances.length === 0) {
     throw new Error('No swarm instances available');
   }
-  
+
   console.log(`[SWARM] Using ${instances.length} instances for processing`);
-  
+
   // Process task in parallel
-  const processingPromises = instances.map(instance => 
+  const processingPromises = instances.map(instance =>
     processWithInstance(instance, task, conversation, sessionId, env)
   );
-  
+
   // Wait for all responses with timeout
   const responses = await Promise.allSettled(processingPromises);
-  
+
   // Process results
   const validResponses = [];
   const errors = [];
-  
+
   responses.forEach((result, index) => {
     if (result.status === 'fulfilled' && result.value) {
       validResponses.push(result.value);
@@ -125,21 +125,21 @@ async function processSwarmTask(task, conversation, sessionId, swarmSize, env) {
       errors.push(`Instance ${index + 1}: ${error}`);
     }
   });
-  
+
   if (validResponses.length === 0) {
     throw new Error(`All swarm instances failed: ${errors.join(', ')}`);
   }
-  
+
   console.log(`[SWARM] ${validResponses.length}/${instances.length} instances responded successfully`);
-  
+
   // Collate responses
   const collatedResult = collateResponses(task, validResponses);
-  
+
   const processingTime = Date.now() - startTime;
   collatedResult.processing_time_ms = processingTime;
   collatedResult.swarm_size = swarmSize;
   collatedResult.successful_instances = validResponses.length;
-  
+
   return collatedResult;
 }
 
@@ -156,7 +156,7 @@ async function getSwarmInstances(swarmSize, env) {
   if (!baseUrl) {
     throw new Error('QWEN_RUNLOOP_URL not configured');
   }
-  
+
   // Create multiple instances (in real implementation, these would be different devboxes)
   const instances = [];
   for (let i = 0; i < swarmSize; i++) {
@@ -166,7 +166,7 @@ async function getSwarmInstances(swarmSize, env) {
       index: i
     });
   }
-  
+
   return instances;
 }
 
@@ -181,19 +181,19 @@ async function getSwarmInstances(swarmSize, env) {
  */
 async function processWithInstance(instance, task, conversation, sessionId, env) {
   const startTime = Date.now();
-  
+
   try {
     // Add some variation to the task to get different perspectives
     const variedTask = addTaskVariation(task, instance.index);
-    
+
     // Call Qwen with the varied task
     const result = await callQwen(variedTask, conversation, env, `${sessionId}-${instance.id}`);
-    
+
     const responseTime = Date.now() - startTime;
-    
+
     // Calculate quality score
     const qualityScore = calculateQualityScore(result.response);
-    
+
     return {
       instance_id: instance.id,
       response: result.response,
@@ -206,7 +206,7 @@ async function processWithInstance(instance, task, conversation, sessionId, env)
         instance_url: instance.url
       }
     };
-    
+
   } catch (error) {
     console.error(`[SWARM] Instance ${instance.id} failed:`, error);
     throw error;
@@ -229,7 +229,7 @@ function addTaskVariation(task, index) {
     `${task} Make it production-ready with proper validation.`,
     `${task} Include unit tests and edge case handling.`
   ];
-  
+
   return variations[index % variations.length];
 }
 
@@ -239,6 +239,10 @@ function addTaskVariation(task, index) {
  * @returns {number} Quality score (0-1)
  */
 function calculateQualityScore(response) {
+  if (!response || typeof response !== 'string') {
+    return 0.0;
+  }
+  
   let score = 0.0;
   
   // Check for code presence
@@ -280,13 +284,13 @@ function collateResponses(task, responses) {
   if (responses.length === 0) {
     throw new Error('No responses to collate');
   }
-  
+
   // Sort by quality score
   responses.sort((a, b) => b.quality_score - a.quality_score);
-  
+
   // Select consensus response (highest quality)
   const consensusResponse = responses[0].response;
-  
+
   // Analyze quality
   const qualityAnalysis = {
     average_quality: responses.reduce((sum, r) => sum + r.quality_score, 0) / responses.length,
@@ -295,7 +299,7 @@ function collateResponses(task, responses) {
     response_count: responses.length,
     consensus_confidence: calculateConsensusConfidence(responses)
   };
-  
+
   return {
     task,
     responses,
@@ -313,14 +317,14 @@ function calculateConsensusConfidence(responses) {
   if (responses.length < 2) {
     return 1.0;
   }
-  
+
   // Calculate similarity between top responses
   const topResponses = responses.slice(0, 2);
   const similarity = calculateSimilarity(
     topResponses[0].response,
     topResponses[1].response
   );
-  
+
   return similarity;
 }
 
@@ -331,6 +335,10 @@ function calculateConsensusConfidence(responses) {
  * @returns {number} Similarity score (0-1)
  */
 function calculateSimilarity(text1, text2) {
+  if (!text1 || !text2 || typeof text1 !== 'string' || typeof text2 !== 'string') {
+    return 0.0;
+  }
+  
   // Simple similarity based on common words
   const words1 = new Set(text1.toLowerCase().split(/\s+/));
   const words2 = new Set(text2.toLowerCase().split(/\s+/));
@@ -352,16 +360,22 @@ function calculateSimilarity(text1, text2) {
  * @returns {boolean} Whether to use swarm mode
  */
 export function shouldUseSwarm(message, env) {
+  if (!message || typeof message !== 'string') {
+    return false;
+  }
+  
+  const lowerMessage = message.toLowerCase();
+  
   // Check for swarm indicators
   const swarmKeywords = ['swarm', 'multiple', 'parallel', 'compare', 'best', 'optimize'];
   const hasSwarmKeyword = swarmKeywords.some(keyword => 
-    message.toLowerCase().includes(keyword)
+    lowerMessage.includes(keyword)
   );
   
   // Check for complex coding tasks
   const complexKeywords = ['implement', 'create', 'build', 'develop', 'design', 'architecture'];
   const hasComplexKeyword = complexKeywords.some(keyword => 
-    message.toLowerCase().includes(keyword)
+    lowerMessage.includes(keyword)
   );
   
   // Check for swarm mode flag
