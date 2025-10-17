@@ -128,19 +128,23 @@ class RunloopAPI:
             print(f"Error deleting devbox {devbox_id}: {e}")
             return False
 
-    def execute_command(self, devbox_id: str, command: str, show_output: bool = False) -> Dict[str, Any]:
-        """Execute a command in a devbox"""
-        response = self.make_request('POST', f'/devboxes/{devbox_id}/execute_sync', {
-            'command': command
-        })
-        if response.status_code == 200:
-            result = response.json()
-            if show_output:
-                print(f"Command: {command}")
-                if result.get('stdout'):
-                    print("STDOUT:", result['stdout'])
-                if result.get('stderr'):
-                    print("STDERR:", result['stderr'])
-                print(f"EXIT STATUS: {result.get('exit_status', 0)}")
-            return result
-        return {'error': f'Command failed with status {response.status_code}'}
+    def execute_command(self, devbox_id: str, command: str, show_output: bool = False, timeout: int = 60) -> Dict[str, Any]:
+        """Execute a command in a devbox with timeout support"""
+        try:
+            response = self.make_request('POST', f'/devboxes/{devbox_id}/execute_sync', {
+                'command': command,
+                'timeout': timeout
+            })
+            if response.status_code == 200:
+                result = response.json()
+                if show_output:
+                    print(f"Command: {command}")
+                    if result.get('stdout'):
+                        print("STDOUT:", result['stdout'])
+                    if result.get('stderr'):
+                        print("STDERR:", result['stderr'])
+                    print(f"EXIT STATUS: {result.get('exit_status', 0)}")
+                return result
+            return {'error': f'Command failed with status {response.status_code}'}
+        except Exception as e:
+            return {'error': f'Command execution failed: {str(e)}', 'exit_status': -1}
