@@ -27,7 +27,7 @@ describe('Function Calling', () => {
 
     // Save original fetch
     originalFetch = global.fetch;
-    
+
     // Mock fetch
     global.fetch = mock.fn(() => Promise.resolve({
       ok: true,
@@ -86,7 +86,7 @@ describe('Function Calling', () => {
 
       assert.equal(global.fetch.mock.calls.length, 1);
       const [url, options] = global.fetch.mock.calls[0].arguments;
-      
+
       assert.ok(url.includes('/devboxes/'));
       assert.equal(options.method, 'POST');
       assert.ok(options.headers['Authorization'].includes('mock-runloop-key'));
@@ -133,6 +133,25 @@ describe('Function Calling', () => {
       assert.ok(callBody.command.includes('/path/to/file.txt'));
     });
 
+    it('should escape special characters in file content', async () => {
+      global.fetch = mock.fn(() => Promise.resolve({
+        ok: true,
+        json: async () => ({ output: 'success' })
+      }));
+
+      await handleFunctionCall(
+        'write_file',
+        { path: '/path/to/file.txt', content: 'Hello "World" with $variables' },
+        mockEnv,
+        'session1'
+      );
+
+      const [, options] = global.fetch.mock.calls[0].arguments;
+      const callBody = JSON.parse(options.body);
+      assert.ok(callBody.command.includes('\\"'));
+      assert.ok(callBody.command.includes('\\$'));
+    });
+
     it('should list files with ls command', async () => {
       global.fetch = mock.fn(() => Promise.resolve({
         ok: true,
@@ -168,6 +187,61 @@ describe('Function Calling', () => {
       const [, options] = global.fetch.mock.calls[0].arguments;
       const callBody = JSON.parse(options.body);
       assert.ok(callBody.command.includes('.'));
+    });
+  });
+
+  describe('Web Browsing', () => {
+    it('should browse web with curl command', async () => {
+      global.fetch = mock.fn(() => Promise.resolve({
+        ok: true,
+        json: async () => ({ output: 'web content' })
+      }));
+
+      await handleFunctionCall(
+        'browse_web',
+        { url: 'https://example.com' },
+        mockEnv,
+        'session1'
+      );
+
+      const [, options] = global.fetch.mock.calls[0].arguments;
+      const callBody = JSON.parse(options.body);
+      assert.ok(callBody.command.includes('curl'));
+      assert.ok(callBody.command.includes('https://example.com'));
+    });
+
+    it('should require Runloop API key for web browsing', async () => {
+      mockEnv.RUNLOOP_API_KEY = null;
+
+      await assert.rejects(
+        async () => handleFunctionCall('browse_web', { url: 'https://example.com' }, mockEnv, 'session1'),
+        { message: 'Runloop API key not configured' }
+      );
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle Runloop API failures gracefully', async () => {
+      global.fetch = mock.fn(() => Promise.resolve({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Internal server error' })
+      }));
+
+      const result = await handleFunctionCall('execute_command', { command: 'ls' }, mockEnv, 'session1');
+
+      // The function should return the error response, not throw
+      assert.ok(result.error);
+      assert.equal(result.error, 'Internal server error');
+    });
+
+    it('should handle network failures', async () => {
+      global.fetch = mock.fn(() => Promise.reject(new Error('Network error')));
+
+      await assert.rejects(
+        async () => handleFunctionCall('execute_command', { command: 'ls' }, mockEnv, 'session1'),
+        { message: 'Network error' }
+      );
     });
   });
 });

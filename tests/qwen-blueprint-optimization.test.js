@@ -2,9 +2,9 @@
 
 /**
  * BDD Tests for Qwen Blueprint Optimization & Health Check
- * 
- * User Story: As a system administrator, I want to ensure the Qwen Ollama blueprint 
- * is optimized with snapshots and health checks so that deployment is fast and reliable 
+ *
+ * User Story: As a system administrator, I want to ensure the Qwen Ollama blueprint
+ * is optimized with snapshots and health checks so that deployment is fast and reliable
  * with proper failure handling.
  */
 
@@ -45,7 +45,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     // Reset all mocks
     Object.values(mockRunloopAPI).forEach(mockFn => mockFn.mock.resetCalls());
     Object.values(mockDevboxLifecycleManager).forEach(mockFn => mockFn.mock.resetCalls());
-    
+
     // Set up environment
     process.env = { ...originalEnv, ...mockEnv };
   });
@@ -57,7 +57,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
   describe('Blueprint Status Validation', () => {
     it('should validate blueprint is ready before deployment', async () => {
       // Given: A blueprint exists and is ready
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.resolve({
           id: 'bpt_test_123',
           status: 'build_complete',
@@ -75,7 +75,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should handle blueprint not ready status', async () => {
       // Given: A blueprint exists but is not ready
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.resolve({
           id: 'bpt_test_123',
           status: 'building',
@@ -93,7 +93,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should handle blueprint not found', async () => {
       // Given: A blueprint does not exist
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.resolve(null)
       );
 
@@ -108,7 +108,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
   describe('Devbox Creation from Blueprint', () => {
     it('should create devbox from ready blueprint', async () => {
       // Given: A ready blueprint
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.resolve({
           id: 'bpt_test_123',
           status: 'build_complete'
@@ -116,7 +116,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
       );
 
       // And: Devbox creation succeeds
-      mockRunloopAPI.create_devbox.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.create_devbox.mock.mockImplementationOnce(() =>
         Promise.resolve('dbx_new_789')
       );
 
@@ -130,7 +130,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should handle devbox creation failure', async () => {
       // Given: A ready blueprint
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.resolve({
           id: 'bpt_test_123',
           status: 'build_complete'
@@ -138,7 +138,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
       );
 
       // And: Devbox creation fails
-      mockRunloopAPI.create_devbox.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.create_devbox.mock.mockImplementationOnce(() =>
         Promise.resolve(null)
       );
 
@@ -154,9 +154,9 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should run comprehensive health checks on devbox', async () => {
       // Given: A running devbox
       const devboxId = 'dbx_test_456';
-      
+
       // And: Health checks pass
-      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() => 
+      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() =>
         Promise.resolve(true)
       );
 
@@ -171,9 +171,9 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should handle health check failures', async () => {
       // Given: A running devbox
       const devboxId = 'dbx_test_456';
-      
+
       // And: Health checks fail
-      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() => 
+      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() =>
         Promise.resolve(false)
       );
 
@@ -187,9 +187,9 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should check Ollama service readiness', async () => {
       // Given: A devbox with Ollama service
       const devboxId = 'dbx_test_456';
-      
+
       // And: Ollama health check command succeeds
-      mockRunloopAPI.execute_command.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.execute_command.mock.mockImplementationOnce(() =>
         Promise.resolve({
           exit_status: 0,
           stdout: '{"status": "ok", "service": "qwen_ollama_server", "model": "qwen2.5:7b", "ollama_ready": true}',
@@ -210,9 +210,9 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should check model loading status', async () => {
       // Given: A devbox with Ollama service
       const devboxId = 'dbx_test_456';
-      
+
       // And: Model status check succeeds
-      mockRunloopAPI.execute_command.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.execute_command.mock.mockImplementationOnce(() =>
         Promise.resolve({
           exit_status: 0,
           stdout: '{"models": [{"name": "qwen2.5:7b", "size": 1234567890}], "current_model": "qwen2.5:7b"}',
@@ -246,7 +246,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
       // When: Attempting deployment with retry
       let devboxId = await mockDevboxLifecycleManager.get_or_create_healthy_devbox();
-      
+
       // First attempt fails
       if (!devboxId) {
         devboxId = await mockDevboxLifecycleManager.get_or_create_healthy_devbox();
@@ -259,13 +259,13 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should not retry more than once', async () => {
       // Given: Both deployment attempts fail
-      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementation(() => 
+      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementation(() =>
         Promise.resolve(null)
       );
 
       // When: Attempting deployment with retry
       let devboxId = await mockDevboxLifecycleManager.get_or_create_healthy_devbox();
-      
+
       // First attempt fails
       if (!devboxId) {
         devboxId = await mockDevboxLifecycleManager.get_or_create_healthy_devbox();
@@ -279,14 +279,14 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should handle suspended devbox corruption', async () => {
       // Given: A corrupted suspended devbox
       const corruptedDevboxId = 'dbx_corrupted_456';
-      
+
       // And: Resume fails due to corruption
-      mockRunloopAPI.resume_devbox.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.resume_devbox.mock.mockImplementationOnce(() =>
         Promise.resolve(false)
       );
 
       // And: Health checks fail
-      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() => 
+      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() =>
         Promise.resolve(false)
       );
 
@@ -301,7 +301,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should implement automatic rollback on persistent failures', async () => {
       // Given: All deployment attempts fail
-      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementation(() => 
+      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementation(() =>
         Promise.resolve(null)
       );
 
@@ -329,8 +329,8 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should use snapshots for sub-30-second deployment', async () => {
       // Given: A blueprint with snapshots
       const startTime = Date.now();
-      
-      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementationOnce(() => 
+
+      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementationOnce(() =>
         Promise.resolve('dbx_fast_789')
       );
 
@@ -346,13 +346,13 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
     it('should prioritize suspended devbox resume over fresh creation', async () => {
       // Given: A suspended devbox exists
       const suspendedDevboxId = 'dbx_suspended_123';
-      
+
       // And: Resume is faster than fresh creation
-      mockRunloopAPI.resume_devbox.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.resume_devbox.mock.mockImplementationOnce(() =>
         Promise.resolve(true)
       );
 
-      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() => 
+      mockDevboxLifecycleManager.run_health_checks.mock.mockImplementationOnce(() =>
         Promise.resolve(true)
       );
 
@@ -367,7 +367,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should validate blueprint before attempting deployment', async () => {
       // Given: A blueprint that needs validation
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.resolve({
           id: 'bpt_test_123',
           status: 'build_complete',
@@ -395,7 +395,7 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
         retryCount: 0
       };
 
-      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementationOnce(() => 
+      mockDevboxLifecycleManager.get_or_create_healthy_devbox.mock.mockImplementationOnce(() =>
         Promise.resolve(null)
       );
 
@@ -410,14 +410,14 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
 
     it('should handle API timeout errors gracefully', async () => {
       // Given: An API call that times out
-      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() => 
+      mockRunloopAPI.get_blueprint.mock.mockImplementationOnce(() =>
         Promise.reject(new Error('Request timeout'))
       );
 
       // When: Making API call
       let blueprintData = null;
       let error = null;
-      
+
       try {
         blueprintData = await mockRunloopAPI.get_blueprint('bpt_test_123');
       } catch (e) {
@@ -444,9 +444,9 @@ describe('Qwen Blueprint Optimization & Health Check', () => {
         // Then: Should provide meaningful error message
         assert(scenario.expected.length > 0, 'Error message should not be empty');
         // Check that the error message contains key descriptive words
-        const hasDescriptiveWords = scenario.expected.includes('Blueprint') || 
-                                   scenario.expected.includes('Devbox') || 
-                                   scenario.expected.includes('Health') || 
+        const hasDescriptiveWords = scenario.expected.includes('Blueprint') ||
+                                   scenario.expected.includes('Devbox') ||
+                                   scenario.expected.includes('Health') ||
                                    scenario.expected.includes('Model') ||
                                    scenario.expected.includes('Qwen') ||
                                    scenario.expected.includes('Failed') ||
