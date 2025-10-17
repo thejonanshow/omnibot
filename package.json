@@ -8,7 +8,18 @@
     "test:watch": "node --test --watch tests/**/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage tests/**/*.test.js",
     "deploy": "./deploy.sh",
-    "setup": "./setup.sh"
+    "setup": "./setup.sh",
+    "log:worker:staging": "cd cloudflare-worker && npx wrangler tail --env staging",
+    "log:worker:prod": "cd cloudflare-worker && npx wrangler tail --env production",
+    "log:worker": "npm run log:worker:staging",
+    "log:pages:staging": "cd frontend && npx wrangler pages deployment tail --project-name omnibot-ui-staging",
+    "log:pages:prod": "cd frontend && npx wrangler pages deployment tail --project-name omni-agent-ui",
+    "log:pages": "npm run log:pages:staging",
+    "log:devbox:alpha": "echo 'Devbox alpha logs - TODO: implement Runloop log streaming'",
+    "log:devbox:beta": "echo 'Devbox beta logs - TODO: implement Runloop log streaming'",
+    "log:devbox:omega": "echo 'Devbox omega logs - TODO: implement Runloop log streaming'",
+    "log:all": "echo 'Multi-tail all services - TODO: implement'",
+    "status:runloop": "curl -s -H 'Authorization: Bearer $RUNLOOP_API_KEY' https://api.runloop.ai/v1/account | jq '.credit_balance, .credit_limit'"
   },
   "engines": {
     "node": ">=18.0.0"

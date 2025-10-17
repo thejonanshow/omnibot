@@ -564,13 +564,42 @@ async function handleSTT(request, env) {
 
 async function handleStatus(env) {
   const providers = ['groq', 'gemini', 'qwen', 'claude'];
-  const status = {};
+  const status = { llm_providers: {} };
 
+  // Get LLM usage
   for (const provider of providers) {
-    status[provider] = await getUsage(env, provider);
+    const usage = await getUsage(env, provider);
+    const limits = { groq: 30, gemini: 15, qwen: 1000, claude: 50 };
+    status.llm_providers[provider] = {
+      usage: usage,
+      limit: limits[provider],
+      remaining: limits[provider] - usage
+    };
   }
 
-  return new Response(JSON.stringify(status), {
+  // Get Runloop credit info
+  if (env.RUNLOOP_API_KEY) {
+    try {
+      const response = await fetch('https://api.runloop.ai/v1/account', {
+        headers: { 'Authorization': `Bearer ${env.RUNLOOP_API_KEY}` }
+      });
+      if (response.ok) {
+        const account = await response.json();
+        const creditUsed = account.credit_limit - account.credit_balance;
+        status.runloop = {
+          credit_balance: account.credit_balance,
+          credit_limit: account.credit_limit,
+          credit_used: creditUsed,
+          credit_remaining_pct: parseFloat(((account.credit_balance / account.credit_limit) * 100).toFixed(1))
+        };
+      }
+    } catch (error) {
+      console.error('Failed to fetch Runloop status:', error);
+      status.runloop = { error: 'Failed to fetch credit info' };
+    }
+  }
+
+  return new Response(JSON.stringify(status, null, 2), {
     headers: { 'Content-Type': 'application/json' }
   });
 }
