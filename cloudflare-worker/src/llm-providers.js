@@ -41,7 +41,7 @@ You can use tools to help users with coding, web research, file management, and 
     const error = await response.text();
     throw new Error(`Groq failed: ${response.status} - ${error}`);
   }
-  
+
   return response.json();
 }
 
@@ -71,7 +71,7 @@ SHARED CONTEXT: ${JSON.stringify(context, null, 2)}`;
     const errorData = await response.json().catch(() => ({}));
     throw new Error(`Gemini failed: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
   }
-  
+
   const data = await response.json();
 
   return {
@@ -86,21 +86,21 @@ SHARED CONTEXT: ${JSON.stringify(context, null, 2)}`;
 
 export async function callQwen(message, conversation, env, sessionId) {
   const context = await getSharedContext(env.CONTEXT, sessionId);
-  
+
   // Determine Qwen endpoint based on environment
   const isLocal = env.NODE_ENV === 'development';
-  const qwenUrl = isLocal 
-    ? 'http://localhost:11434' 
+  const qwenUrl = isLocal
+    ? 'http://localhost:11434'
     : env.QWEN_RUNLOOP_URL || 'https://dbx_test.runloop.dev:8000';
-  
+
   // Log which Qwen instance is being used
   console.log(`Using Qwen instance: ${qwenUrl} (${isLocal ? 'local' : 'remote'})`);
-  
+
   // Build conversation context
   const conversationText = conversation
     .map(m => `${m.role}: ${m.content}`)
     .join('\n');
-  
+
   const systemPrompt = `You are Qwen, a specialized coding AI assistant.
 
 SHARED CONTEXT (from previous sessions):
@@ -124,8 +124,14 @@ Provide helpful, production-ready code with clear explanations.`;
         return await callLocalQwen(message, systemPrompt, qwenUrl);
       } catch (localError) {
         console.log(`Local Qwen unavailable: ${localError.message}`);
-        console.log('Falling back to Runloop Qwen...');
         
+        // Skip fallback if explicitly disabled (for testing)
+        if (env.DISABLE_QWEN_FALLBACK === 'true') {
+          throw localError;
+        }
+        
+        console.log('Falling back to Runloop Qwen...');
+
         // Fallback to Runloop Qwen
         const runloopUrl = env.QWEN_RUNLOOP_URL || 'https://dbx_test.runloop.dev:8000';
         return await callRunloopQwen(message, systemPrompt, runloopUrl);
@@ -165,7 +171,7 @@ async function callLocalQwen(message, systemPrompt, baseUrl) {
   }
 
   const data = await response.json();
-  
+
   return {
     choices: [{
       message: {
@@ -193,7 +199,7 @@ async function callRunloopQwen(message, systemPrompt, baseUrl) {
   }
 
   const data = await response.json();
-  
+
   return {
     choices: [{
       message: {
@@ -230,7 +236,7 @@ SHARED CONTEXT: ${JSON.stringify(context, null, 2)}`;
     const errorData = await response.json().catch(() => ({}));
     throw new Error(`Claude failed: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
   }
-  
+
   const data = await response.json();
 
   return {

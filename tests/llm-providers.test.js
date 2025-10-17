@@ -373,8 +373,8 @@ describe('Epic 1: LLM Provider Integration', () => {
         global.fetch = mock.fn(() => Promise.resolve({
           ok: true,
           status: 200,
-          json: async () => ({ 
-            response: 'Here is a Python function to sort a list:\n\n```python\ndef sort_list(items):\n    return sorted(items)\n```' 
+          json: async () => ({
+            response: 'Here is a Python function to sort a list:\n\n```python\ndef sort_list(items):\n    return sorted(items)\n```'
           })
         }));
 
@@ -395,8 +395,8 @@ describe('Epic 1: LLM Provider Integration', () => {
         global.fetch = mock.fn(() => Promise.resolve({
           ok: true,
           status: 200,
-          json: async () => ({ 
-            response: 'Here is a REST API endpoint for your request: Create a REST API endpoint' 
+          json: async () => ({
+            response: 'Here is a REST API endpoint for your request: Create a REST API endpoint'
           })
         }));
 
@@ -428,7 +428,7 @@ describe('Epic 1: LLM Provider Integration', () => {
         global.fetch = mock.fn(() => Promise.resolve({
           ok: true,
           status: 200,
-          json: async () => ({ 
+          json: async () => ({
             message: { content: 'Local Qwen response' }
           })
         }));
@@ -470,10 +470,107 @@ describe('Epic 1: LLM Provider Integration', () => {
         global.fetch = mock.fn(() => Promise.reject(new Error('Service unavailable')));
 
         const devEnv = { ...mockEnv, NODE_ENV: 'development' };
-        
+
         await assert.rejects(
           async () => callQwen('Test message', [], devEnv, 'session1'),
           { message: 'Qwen failed: Service unavailable' }
+        );
+      });
+
+      it('should handle local Qwen HTTP error responses', async () => {
+        // Mock local Qwen returning HTTP error, then Runloop also failing
+        let callCount = 0;
+        global.fetch = mock.fn(() => {
+          callCount++;
+          if (callCount === 1) {
+            // Local Qwen returns HTTP error
+            return Promise.resolve({
+              ok: false,
+              status: 500,
+              statusText: 'Internal Server Error'
+            });
+          } else {
+            // Runloop fallback also fails
+            return Promise.reject(new Error('Runloop unavailable'));
+          }
+        });
+
+        const devEnv = { ...mockEnv, NODE_ENV: 'development' };
+
+        await assert.rejects(
+          async () => callQwen('Test message', [], devEnv, 'session1'),
+          { message: 'Qwen failed: Runloop unavailable' }
+        );
+      });
+
+      it('should handle local Qwen HTTP error without fallback', async () => {
+        // Test the local Qwen HTTP error path by disabling fallback
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: false,
+          status: 503,
+          statusText: 'Service Unavailable'
+        }));
+
+        const devEnv = { 
+          ...mockEnv, 
+          NODE_ENV: 'development',
+          DISABLE_QWEN_FALLBACK: 'true' // Disable fallback to test local error path
+        };
+
+        await assert.rejects(
+          async () => callQwen('Test message', [], devEnv, 'session1'),
+          { message: 'Qwen failed: Local Qwen failed: 503 - Service Unavailable' }
+        );
+      });
+
+      it('should handle local Qwen error with fallback enabled', async () => {
+        // Test the fallback path when DISABLE_QWEN_FALLBACK is not set
+        let callCount = 0;
+        global.fetch = mock.fn(() => {
+          callCount++;
+          if (callCount === 1) {
+            // Local Qwen fails
+            return Promise.resolve({
+              ok: false,
+              status: 500,
+              statusText: 'Internal Server Error'
+            });
+          } else {
+            // Runloop succeeds
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({ response: 'Runloop Qwen response' })
+            });
+          }
+        });
+
+        const devEnv = { 
+          ...mockEnv, 
+          NODE_ENV: 'development'
+          // DISABLE_QWEN_FALLBACK not set, so fallback should work
+        };
+
+        const result = await callQwen('Test message', [], devEnv, 'session1');
+
+        assert.ok(result.choices);
+        assert.equal(result.choices[0].message.content, 'Runloop Qwen response');
+        assert.equal(callCount, 2); // Local attempt + Runloop fallback
+      });
+
+      it('should handle Runloop Qwen HTTP error responses', async () => {
+        // Mock Runloop Qwen returning HTTP error
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found'
+        }));
+
+        const stagingEnv = { ...mockEnv, NODE_ENV: 'staging' };
+
+        await assert.rejects(
+          async () => callQwen('Test message', [], stagingEnv, 'session1'),
+          { message: 'Qwen failed: Runloop Qwen failed: 404 - Not Found' }
         );
       });
     });

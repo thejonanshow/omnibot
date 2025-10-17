@@ -235,6 +235,21 @@ describe('Function Calling', () => {
       assert.equal(result.error, 'Internal server error');
     });
 
+    it('should handle Runloop API failures without error field', async () => {
+      global.fetch = mock.fn(() => Promise.resolve({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: async () => ({ message: 'Forbidden' })
+      }));
+
+      const result = await handleFunctionCall('execute_command', { command: 'ls' }, mockEnv, 'session1');
+
+      // The function should return the error response with HTTP status
+      assert.ok(result.error);
+      assert.equal(result.error, 'HTTP 403: Forbidden');
+    });
+
     it('should handle network failures', async () => {
       global.fetch = mock.fn(() => Promise.reject(new Error('Network error')));
 

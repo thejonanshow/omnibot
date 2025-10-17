@@ -48,6 +48,11 @@ async function executeCommand(command, apiKey, devboxId) {
     body: JSON.stringify({ command })
   });
   
+  if (!response.ok) {
+    const errorData = await response.json();
+    return { error: errorData.error || `HTTP ${response.status}: ${response.statusText}` };
+  }
+  
   return response.json();
 }
 

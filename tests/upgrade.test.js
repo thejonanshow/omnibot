@@ -138,6 +138,19 @@ describe('Epic 4: Upgrade System', () => {
         // Should return empty object when network fails
         assert.deepEqual(result, {});
       });
+
+      it('should handle GitHub API error responses', async () => {
+        global.fetch = mock.fn(() => Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({ message: 'Not Found' })
+        }));
+
+        const result = await getCodebaseContext(mockEnv);
+
+        // Should return empty object when GitHub API returns error
+        assert.deepEqual(result, {});
+      });
     });
   });
 
