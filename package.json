@@ -6,7 +6,9 @@
   "scripts": {
     "test": "node --test tests/**/*.test.js",
     "test:watch": "node --test --watch tests/**/*.test.js",
-    "test:coverage": "node --test --experimental-test-coverage tests/**/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage tests/**/*.test.js && node scripts/check-coverage.js",
+    "test:coverage-only": "node --test --experimental-test-coverage tests/**/*.test.js",
+    "check:coverage": "node scripts/check-coverage.js",
     "deploy": "./deploy.sh",
     "setup": "./setup.sh",
     "log:worker:staging": "cd cloudflare-worker && npx wrangler tail --env staging",
