@@ -58,7 +58,7 @@ def main():
     """Main function"""
     print("🔍 QWEN DEPLOYMENT STATUS CHECK")
     print("=" * 50)
-    
+
     # Check deployment file
     print("1. Checking deployment file...")
     deployment_info = check_deployment_file()
@@ -67,7 +67,7 @@ def main():
         print(f"   Devbox ID: {deployment_info.get('devbox_id', 'N/A')}")
         print(f"   URL: {deployment_info.get('devbox_url', 'N/A')}")
         print(f"   Deployed: {deployment_info.get('deployed_at', 'N/A')}")
-        
+
         # Check if endpoint is accessible
         qwen_url = deployment_info.get('devbox_url')
         if qwen_url:
@@ -81,7 +81,7 @@ def main():
                 print(f"   Error: {endpoint_status.get('error', 'Unknown error')}")
     else:
         print("❌ No deployment file found")
-    
+
     # Check worker configuration
     print(f"\n3. Checking worker configuration...")
     config_status = check_worker_configuration()
@@ -91,7 +91,7 @@ def main():
     else:
         print(f"❌ Worker not configured")
         print(f"   Error: {config_status.get('error', 'Unknown error')}")
-    
+
     # Overall status
     print(f"\n" + "=" * 50)
     if deployment_info and config_status["configured"]:

@@ -116,7 +116,7 @@ class QwenMonitor:
     def test_qwen_routing(self) -> Dict[str, Any]:
         """Test Qwen routing with coding requests"""
         self.log("Testing Qwen routing...")
-        
+
         test_cases = [
             "Write a Python function to calculate fibonacci numbers",
             "Create a JavaScript class for handling API requests",
@@ -141,7 +141,7 @@ class QwenMonitor:
     def test_fallback_routing(self) -> Dict[str, Any]:
         """Test fallback routing with general requests"""
         self.log("Testing fallback routing...")
-        
+
         test_cases = [
             "What is the weather like today?",
             "Explain quantum computing in simple terms",
@@ -168,10 +168,10 @@ class QwenMonitor:
         total = len(results)
         successful = sum(1 for r in results if r.get("success", False))
         failed = total - successful
-        
+
         response_times = [r.get("response_time_ms", 0) for r in results if r.get("response_time_ms")]
         avg_response_time = sum(response_times) / len(response_times) if response_times else 0
-        
+
         provider_usage = {}
         for result in results:
             providers = result.get("used_providers", [])
@@ -190,7 +190,7 @@ class QwenMonitor:
     def check_worker_health(self) -> Dict[str, Any]:
         """Check worker health endpoints"""
         self.log("Checking worker health...")
-        
+
         health_checks = {
             "health": f"{self.worker_url}/health",
             "status": f"{self.worker_url}/status",
@@ -203,21 +203,21 @@ class QwenMonitor:
                 start_time = time.time()
                 response = requests.get(url, timeout=10)
                 response_time = (time.time() - start_time) * 1000
-                
+
                 results[name] = {
                     "status_code": response.status_code,
                     "response_time_ms": response_time,
                     "healthy": response.status_code == 200,
                     "timestamp": datetime.now().isoformat()
                 }
-                
+
                 if response.status_code == 200:
                     try:
                         data = response.json()
                         results[name]["data"] = data
                     except:
                         results[name]["data"] = response.text
-                        
+
             except Exception as e:
                 results[name] = {
                     "error": str(e),
@@ -235,21 +235,21 @@ class QwenMonitor:
         """Run comprehensive monitoring test"""
         self.log("🚀 Starting comprehensive Qwen monitoring test")
         self.log("=" * 60)
-        
+
         start_time = datetime.now()
-        
+
         # Health checks
         health_results = self.check_worker_health()
-        
+
         # Qwen routing tests
         qwen_results = self.test_qwen_routing()
-        
+
         # Fallback routing tests
         fallback_results = self.test_fallback_routing()
-        
+
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        
+
         # Compile comprehensive report
         report = {
             "test_run": {
@@ -268,7 +268,7 @@ class QwenMonitor:
                 "total_successful": qwen_results["summary"]["successful_requests"] + fallback_results["summary"]["successful_requests"]
             }
         }
-        
+
         return report
 
     def save_report(self, report: Dict[str, Any], filename: str = None):
@@ -276,7 +276,7 @@ class QwenMonitor:
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"qwen_monitoring_report_{timestamp}.json"
-        
+
         try:
             with open(filename, "w") as f:
                 json.dump(report, f, indent=2)
@@ -287,7 +287,7 @@ class QwenMonitor:
     def print_summary(self, report: Dict[str, Any]):
         """Print monitoring summary"""
         summary = report["overall_summary"]
-        
+
         self.log("📊 MONITORING SUMMARY")
         self.log("=" * 40)
         self.log(f"Worker Health: {'✅ Healthy' if summary['worker_healthy'] else '❌ Unhealthy'}")
@@ -295,12 +295,12 @@ class QwenMonitor:
         self.log(f"Fallback Routing: {'✅ Working' if summary['fallback_routing_working'] else '❌ Not Working'}")
         self.log(f"Total Tests: {summary['total_tests']}")
         self.log(f"Successful: {summary['total_successful']}")
-        
+
         # Qwen routing details
         qwen_summary = report["qwen_routing"]["summary"]
         self.log(f"Qwen Success Rate: {qwen_summary['success_rate']:.1f}%")
         self.log(f"Avg Response Time: {qwen_summary['average_response_time_ms']:.0f}ms")
-        
+
         # Provider usage
         if qwen_summary["provider_usage"]:
             self.log("Provider Usage:")
@@ -311,18 +311,18 @@ def main():
     """Main function"""
     print("🔍 QWEN MONITORING & OBSERVABILITY")
     print("=" * 50)
-    
+
     # Configuration
     worker_url = "https://omnibot-router.jonanscheffler.workers.dev"
     shared_secret = "aUfueJNRAGEzKPUKIZidpGvO1KrPvZuccmHYPbdGfLXDXsTyudEytXqs90cfScnC"
-    
+
     try:
         monitor = QwenMonitor(worker_url, shared_secret)
         report = monitor.run_comprehensive_test()
-        
+
         monitor.print_summary(report)
         monitor.save_report(report)
-        
+
         # Determine overall status
         if report["overall_summary"]["worker_healthy"] and report["overall_summary"]["qwen_routing_working"]:
             print("\n🎉 QWEN SYSTEM IS HEALTHY!")
@@ -330,7 +330,7 @@ def main():
         else:
             print("\n⚠️  QWEN SYSTEM HAS ISSUES")
             sys.exit(1)
-            
+
     except Exception as e:
         print(f"\n💥 MONITORING FAILED: {e}")
         sys.exit(1)

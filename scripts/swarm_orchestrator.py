@@ -1,591 +1,515 @@
 #!/usr/bin/env python3
 """
-Omni-Agent Swarm Orchestrator
-Coordinates multiple LLM agents for collaborative coding
+Swarm Orchestrator
+Manages multiple Qwen instances for parallel processing and response collation
 """
 
-import asyncio
-import json
+import os
+import sys
 import time
-import uuid
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+import json
+import asyncio
+import aiohttp
+from typing import List, Dict, Any, Optional, Tuple
+from dataclasses import dataclass
 from enum import Enum
-import requests
-import hmac
-import hashlib
+from datetime import datetime
 
-class AgentRole(Enum):
-    ARCHITECT = "architect"
-    DEVELOPER = "developer"
-    REVIEWER = "reviewer"
-    TESTER = "tester"
-    RESEARCHER = "researcher"
-    POLISHER = "polisher"
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-class TaskStatus(Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    REVIEWED = "reviewed"
+from utils.runloop_api import RunloopAPI
+from utils.devbox_lifecycle import DevboxLifecycleManager
+
+class SwarmStatus(Enum):
+    IDLE = "idle"
+    DEPLOYING = "deploying"
+    READY = "ready"
+    PROCESSING = "processing"
+    COLLATING = "collating"
+    COMPLETE = "complete"
+    ERROR = "error"
 
 @dataclass
-class Agent:
-    id: str
-    name: str
-    role: AgentRole
-    provider: str  # groq, gemini, qwen, claude
-    capabilities: List[str]
-    status: str = "idle"
-    current_task: Optional[str] = None
-    performance_score: float = 1.0
+class SwarmInstance:
+    devbox_id: str
+    devbox_url: str
+    status: str
+    health: bool
+    last_used: Optional[datetime] = None
+    response_count: int = 0
+    error_count: int = 0
 
 @dataclass
-class Task:
-    id: str
-    title: str
-    description: str
-    assigned_agent: Optional[str] = None
-    status: TaskStatus = TaskStatus.PENDING
-    priority: int = 1  # 1 = highest
-    dependencies: List[str] = None
-    result: Optional[Dict[str, Any]] = None
-    feedback: List[Dict[str, Any]] = None
-    created_at: float = None
-    completed_at: Optional[float] = None
-
-    def __post_init__(self):
-        if self.dependencies is None:
-            self.dependencies = []
-        if self.feedback is None:
-            self.feedback = []
-        if self.created_at is None:
-            self.created_at = time.time()
+class SwarmResponse:
+    instance_id: str
+    response: str
+    quality_score: float
+    response_time_ms: int
+    timestamp: datetime
+    metadata: Dict[str, Any]
 
 @dataclass
-class Project:
-    id: str
-    name: str
-    description: str
-    requirements: List[str]
-    tasks: List[Task]
-    agents: List[Agent]
-    status: str = "planning"
-    created_at: float = None
-    updated_at: float = None
-
-    def __post_init__(self):
-        if self.created_at is None:
-            self.created_at = time.time()
-        if self.updated_at is None:
-            self.updated_at = time.time()
+class SwarmResult:
+    task: str
+    responses: List[SwarmResponse]
+    consensus_response: str
+    quality_analysis: Dict[str, Any]
+    processing_time_ms: int
+    swarm_size: int
+    successful_instances: int
 
 class SwarmOrchestrator:
-    def __init__(self, cloudflare_worker_url: str, shared_secret: str):
-        self.worker_url = cloudflare_worker_url
-        self.shared_secret = shared_secret
-        self.projects: Dict[str, Project] = {}
-        self.agent_communication: Dict[str, List[Dict]] = {}
+    """Orchestrates multiple Qwen instances for parallel processing"""
 
-        # Initialize default agents
-        self.default_agents = [
-            Agent(
-                id="agent_architect",
-                name="Architect Agent",
-                role=AgentRole.ARCHITECT,
-                provider="groq",  # Use free model for planning
-                capabilities=["system_design", "architecture", "planning"]
-            ),
-            Agent(
-                id="agent_developer_1",
-                name="Developer Agent 1",
-                role=AgentRole.DEVELOPER,
-                provider="groq",  # Use free model for development
-                capabilities=["coding", "implementation", "debugging"]
-            ),
-            Agent(
-                id="agent_developer_2",
-                name="Developer Agent 2",
-                role=AgentRole.DEVELOPER,
-                provider="gemini",  # Use another free model
-                capabilities=["coding", "implementation", "optimization"]
-            ),
-            Agent(
-                id="agent_reviewer",
-                name="Reviewer Agent",
-                role=AgentRole.REVIEWER,
-                provider="qwen",  # Use local model for review
-                capabilities=["code_review", "quality_assurance", "best_practices"]
-            ),
-            Agent(
-                id="agent_tester",
-                name="Tester Agent",
-                role=AgentRole.TESTER,
-                provider="qwen",  # Use local model for testing
-                capabilities=["testing", "validation", "bug_detection"]
-            ),
-            Agent(
-                id="agent_researcher",
-                name="Researcher Agent",
-                role=AgentRole.RESEARCHER,
-                provider="groq",  # Use free model for research
-                capabilities=["research", "documentation", "learning"]
-            ),
-            Agent(
-                id="agent_polisher",
-                name="Polisher Agent",
-                role=AgentRole.POLISHER,
-                provider="claude",  # Use Claude only for final polish
-                capabilities=["polish", "refinement", "final_review"]
-            )
-        ]
+    def __init__(self, runloop_api_key: str):
+        self.api = RunloopAPI()
+        self.manager = DevboxLifecycleManager()
+        self.runloop_api_key = runloop_api_key
+        
+        # Swarm configuration
+        self.default_swarm_size = 3
+        self.max_swarm_size = 7
+        self.min_swarm_size = 2
+        self.response_timeout = 60  # seconds
+        
+        # Swarm state
+        self.instances: List[SwarmInstance] = []
+        self.status = SwarmStatus.IDLE
+        self.current_task: Optional[str] = None
+        
+        # Performance tracking
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
 
-    async def create_project(self, name: str, description: str, requirements: List[str]) -> str:
-        """Create a new project with agents and initial tasks"""
-        project_id = str(uuid.uuid4())
+    def log(self, message: str, level: str = "INFO"):
+        """Log with timestamp and level"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"[{timestamp}] {level}: {message}")
 
-        # Create initial tasks based on requirements
-        tasks = await self._generate_initial_tasks(requirements)
+    def log_error(self, message: str, error: Exception = None):
+        """Error logging with context"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        error_msg = f"[{timestamp}] ERROR: {message}"
+        if error:
+            error_msg += f" - {str(error)}"
+        print(error_msg)
 
-        project = Project(
-            id=project_id,
-            name=name,
-            description=description,
-            requirements=requirements,
-            tasks=tasks,
-            agents=self.default_agents.copy()
-        )
-
-        self.projects[project_id] = project
-        return project_id
-
-    async def _generate_initial_tasks(self, requirements: List[str]) -> List[Task]:
-        """Generate initial tasks based on project requirements"""
-        # Use the architect agent to break down requirements into tasks
-        architect_prompt = f"""
-        Break down these project requirements into specific, actionable tasks:
-
-        Requirements:
-        {json.dumps(requirements, indent=2)}
-
-        Create a list of tasks with:
-        - Clear titles and descriptions
-        - Priority levels (1=highest, 5=lowest)
-        - Dependencies between tasks
-        - Suggested agent roles for each task
-
-        Return as JSON array of task objects.
-        """
-
+    async def deploy_swarm(self, swarm_size: int = None) -> bool:
+        """Deploy swarm of Qwen instances"""
+        if swarm_size is None:
+            swarm_size = self.default_swarm_size
+        
+        swarm_size = max(self.min_swarm_size, min(swarm_size, self.max_swarm_size))
+        
+        self.log(f"🚀 Deploying swarm of {swarm_size} Qwen instances...")
+        self.status = SwarmStatus.DEPLOYING
+        
         try:
-            response = await self._call_agent("agent_architect", architect_prompt)
-            task_data = json.loads(response)
-
-            tasks = []
-            for i, task_info in enumerate(task_data):
-                task = Task(
-                    id=f"task_{i+1}",
-                    title=task_info.get("title", f"Task {i+1}"),
-                    description=task_info.get("description", ""),
-                    priority=task_info.get("priority", 3),
-                    dependencies=task_info.get("dependencies", [])
-                )
-                tasks.append(task)
-
-            return tasks
-        except Exception as e:
-            print(f"Error generating tasks: {e}")
-            # Fallback to basic tasks
-            return [
-                Task(
-                    id="task_1",
-                    title="Project Setup",
-                    description="Set up project structure and initial configuration",
-                    priority=1
-                ),
-                Task(
-                    id="task_2",
-                    title="Core Implementation",
-                    description="Implement core functionality based on requirements",
-                    priority=2
-                ),
-                Task(
-                    id="task_3",
-                    title="Testing and Validation",
-                    description="Test the implementation and validate requirements",
-                    priority=3
-                ),
-                Task(
-                    id="task_4",
-                    title="Documentation",
-                    description="Create documentation and user guides",
-                    priority=4
-                )
-            ]
-
-    async def execute_project(self, project_id: str) -> Dict[str, Any]:
-        """Execute a project with the swarm of agents"""
-        if project_id not in self.projects:
-            raise ValueError(f"Project {project_id} not found")
-
-        project = self.projects[project_id]
-        project.status = "executing"
-
-        print(f"🚀 Starting project execution: {project.name}")
-        print(f"📋 {len(project.tasks)} tasks to complete")
-        print(f"👥 {len(project.agents)} agents available")
-
-        # Execute tasks in priority order
-        completed_tasks = []
-        failed_tasks = []
-
-        while True:
-            # Find next available task
-            next_task = self._get_next_available_task(project)
-            if not next_task:
-                break
-
-            # Assign task to best available agent
-            agent = self._assign_task_to_agent(project, next_task)
-            if not agent:
-                print(f"⚠️  No available agent for task: {next_task.title}")
-                failed_tasks.append(next_task)
-                continue
-
-            print(f"📝 Assigning '{next_task.title}' to {agent.name} ({agent.provider})")
-
-            # Execute task
-            try:
-                result = await self._execute_task(project, next_task, agent)
-                if result["success"]:
-                    next_task.status = TaskStatus.COMPLETED
-                    next_task.result = result
-                    next_task.completed_at = time.time()
-                    completed_tasks.append(next_task)
-                    print(f"✅ Task completed: {next_task.title}")
+            # Find suitable blueprint
+            blueprint_id = await self._find_best_blueprint()
+            if not blueprint_id:
+                self.log_error("No suitable blueprint found")
+                return False
+            
+            # Deploy instances in parallel
+            deployment_tasks = []
+            for i in range(swarm_size):
+                task = self._deploy_instance(f"swarm-qwen-{i+1}", blueprint_id)
+                deployment_tasks.append(task)
+            
+            # Wait for all deployments
+            results = await asyncio.gather(*deployment_tasks, return_exceptions=True)
+            
+            # Process results
+            successful_deployments = 0
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    self.log_error(f"Instance {i+1} deployment failed", result)
+                elif result:
+                    successful_deployments += 1
+                    self.log(f"✅ Instance {i+1} deployed successfully")
                 else:
-                    next_task.status = TaskStatus.FAILED
-                    failed_tasks.append(next_task)
-                    print(f"❌ Task failed: {next_task.title}")
-            except Exception as e:
-                print(f"❌ Task error: {next_task.title} - {e}")
-                next_task.status = TaskStatus.FAILED
-                failed_tasks.append(next_task)
-
-            # Update project status
-            project.updated_at = time.time()
-
-        # Final polish with Claude
-        if completed_tasks:
-            print("🎨 Running final polish with Claude...")
-            polished_result = await self._final_polish(project, completed_tasks)
-            project.status = "completed"
-        else:
-            project.status = "failed"
-
-        return {
-            "project_id": project_id,
-            "status": project.status,
-            "completed_tasks": len(completed_tasks),
-            "failed_tasks": len(failed_tasks),
-            "total_tasks": len(project.tasks),
-            "final_result": polished_result if completed_tasks else None
-        }
-
-    def _get_next_available_task(self, project: Project) -> Optional[Task]:
-        """Get the next available task based on priority and dependencies"""
-        available_tasks = []
-
-        for task in project.tasks:
-            if task.status != TaskStatus.PENDING:
-                continue
-
-            # Check if dependencies are met
-            if task.dependencies:
-                completed_task_ids = {t.id for t in project.tasks if t.status == TaskStatus.COMPLETED}
-                if not all(dep in completed_task_ids for dep in task.dependencies):
-                    continue
-
-            available_tasks.append(task)
-
-        if not available_tasks:
-            return None
-
-        # Sort by priority (1 = highest)
-        available_tasks.sort(key=lambda t: t.priority)
-        return available_tasks[0]
-
-    def _assign_task_to_agent(self, project: Project, task: Task) -> Optional[Agent]:
-        """Assign task to the best available agent"""
-        available_agents = [a for a in project.agents if a.status == "idle"]
-
-        if not available_agents:
-            return None
-
-        # Simple assignment based on role and capabilities
-        # In a more sophisticated system, this would consider agent expertise, workload, etc.
-        for agent in available_agents:
-            if agent.role.value in task.title.lower() or agent.role == AgentRole.DEVELOPER:
-                agent.status = "busy"
-                agent.current_task = task.id
-                task.assigned_agent = agent.id
-                return agent
-
-        # Fallback to any available agent
-        agent = available_agents[0]
-        agent.status = "busy"
-        agent.current_task = task.id
-        task.assigned_agent = agent.id
-        return agent
-
-    async def _execute_task(self, project: Project, task: Task, agent: Agent) -> Dict[str, Any]:
-        """Execute a task with the assigned agent"""
-        task.status = TaskStatus.IN_PROGRESS
-
-        # Create task-specific prompt
-        if agent.role in [AgentRole.DEVELOPER, AgentRole.ARCHITECT]:
-            # For code implementation tasks, route to Qwen
-            prompt = f"""
-            You are {agent.name}, a {agent.role.value} agent in a coding swarm.
-
-            Project: {project.name}
-            Description: {project.description}
-
-            Your task: {task.title}
-            Description: {task.description}
-
-            Requirements:
-            {json.dumps(project.requirements, indent=2)}
-
-            IMPORTANT: Since this involves code implementation, you should use the call_qwen_for_code function to have Qwen (our specialized coding AI) handle the actual code writing. Qwen is optimized for code generation and will provide better results.
-
-            Please:
-            1. Analyze the task and determine what code needs to be written
-            2. Use call_qwen_for_code to have Qwen implement the solution
-            3. Review and integrate Qwen's response
-            4. Provide your final assessment and any additional considerations
-
-            Return your response as JSON with fields: approach, qwen_code_result, final_implementation, notes, success
-            """
-        else:
-            # For non-code tasks, handle normally
-            prompt = f"""
-            You are {agent.name}, a {agent.role.value} agent in a coding swarm.
-
-            Project: {project.name}
-            Description: {project.description}
-
-            Your task: {task.title}
-            Description: {task.description}
-
-            Requirements:
-            {json.dumps(project.requirements, indent=2)}
-
-            Please complete this task. Provide:
-            1. A clear explanation of your approach
-            2. The implementation/solution
-            3. Any notes or considerations
-
-            Return your response as JSON with fields: approach, implementation, notes, success
-            """
-
-        try:
-            response = await self._call_agent(agent.id, prompt)
-            result = json.loads(response)
-            result["agent_id"] = agent.id
-            result["agent_provider"] = agent.provider
-            result["execution_time"] = time.time() - task.created_at
-
-            # Get feedback from other agents
-            feedback = await self._get_task_feedback(project, task, result)
-            result["feedback"] = feedback
-
-            return result
+                    self.log_error(f"Instance {i+1} deployment failed")
+            
+            if successful_deployments >= self.min_swarm_size:
+                self.log(f"🎉 Swarm deployed successfully: {successful_deployments}/{swarm_size} instances")
+                self.status = SwarmStatus.READY
+                return True
+            else:
+                self.log_error(f"Swarm deployment failed: only {successful_deployments} instances ready")
+                self.status = SwarmStatus.ERROR
+                return False
+                
         except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "agent_id": agent.id,
-                "agent_provider": agent.provider
-            }
-        finally:
-            # Free up the agent
-            agent.status = "idle"
-            agent.current_task = None
+            self.log_error("Swarm deployment failed", e)
+            self.status = SwarmStatus.ERROR
+            return False
 
-    async def _get_task_feedback(self, project: Project, task: Task, result: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get feedback from other agents on the task result"""
-        feedback = []
+    async def _find_best_blueprint(self) -> Optional[str]:
+        """Find the best blueprint for Qwen deployment"""
+        try:
+            blueprints = self.api.list_blueprints()
+            
+            if not blueprints:
+                return None
+            
+            # Look for AI/LLM related blueprints
+            ai_blueprints = []
+            for bp in blueprints:
+                name = bp.get('name', '').lower()
+                description = bp.get('description', '').lower()
+                
+                if any(keyword in name or keyword in description for keyword in 
+                       ['ai', 'llm', 'qwen', 'ollama', 'python', 'jupyter', 'ml']):
+                    ai_blueprints.append(bp)
+            
+            # Prefer ready blueprints
+            ready_blueprints = [bp for bp in ai_blueprints if bp.get('status') == 'build_complete']
+            if ready_blueprints:
+                return ready_blueprints[0].get('id')
+            
+            # Use first AI blueprint
+            if ai_blueprints:
+                return ai_blueprints[0].get('id')
+            
+            # Fallback to first blueprint
+            return blueprints[0].get('id')
+            
+        except Exception as e:
+            self.log_error("Failed to find blueprint", e)
+            return None
 
-        # Get feedback from reviewer agent
-        reviewer = next((a for a in project.agents if a.role == AgentRole.REVIEWER), None)
-        if reviewer and reviewer.status == "idle":
-            review_prompt = f"""
-            Review this task result:
+    async def _deploy_instance(self, name: str, blueprint_id: str) -> bool:
+        """Deploy a single Qwen instance"""
+        try:
+            # Create devbox
+            devbox_id = self.api.create_devbox(name, blueprint_id)
+            if not devbox_id:
+                return False
+            
+            # Wait for ready
+            if not await self._wait_for_instance_ready(devbox_id):
+                return False
+            
+            # Test endpoint
+            devbox_url = f"https://{devbox_id}.runloop.dev:8000"
+            if not await self._test_instance_endpoint(devbox_url):
+                return False
+            
+            # Add to swarm
+            instance = SwarmInstance(
+                devbox_id=devbox_id,
+                devbox_url=devbox_url,
+                status="running",
+                health=True
+            )
+            self.instances.append(instance)
+            
+            return True
+            
+        except Exception as e:
+            self.log_error(f"Failed to deploy instance {name}", e)
+            return False
 
-            Task: {task.title}
-            Result: {json.dumps(result, indent=2)}
-
-            Provide constructive feedback on:
-            1. Code quality and best practices
-            2. Potential improvements
-            3. Any issues or concerns
-
-            Return as JSON with fields: quality_score, improvements, concerns, overall_feedback
-            """
-
+    async def _wait_for_instance_ready(self, devbox_id: str, timeout: int = 300) -> bool:
+        """Wait for instance to be ready"""
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
             try:
-                review_response = await self._call_agent(reviewer.id, review_prompt)
-                review_data = json.loads(review_response)
-                feedback.append({
-                    "agent_id": reviewer.id,
-                    "agent_role": reviewer.role.value,
-                    "feedback": review_data
-                })
+                devbox_data = self.api.get_devbox(devbox_id)
+                if devbox_data:
+                    status = devbox_data.get('status', '')
+                    if status == 'running':
+                        return True
+                    elif status == 'failed':
+                        return False
+                
+                await asyncio.sleep(10)
+                
             except Exception as e:
-                print(f"Review feedback failed: {e}")
+                self.log_error("Error checking instance status", e)
+                await asyncio.sleep(10)
+        
+        return False
 
-        return feedback
-
-    async def _final_polish(self, project: Project, completed_tasks: List[Task]) -> Dict[str, Any]:
-        """Use Claude for final polish and integration"""
-        polisher = next((a for a in project.agents if a.role == AgentRole.POLISHER), None)
-        if not polisher:
-            return {"error": "No polisher agent available"}
-
-        # Compile all task results
-        all_results = []
-        for task in completed_tasks:
-            all_results.append({
-                "task": task.title,
-                "description": task.description,
-                "result": task.result
-            })
-
-        polish_prompt = f"""
-        You are the final polisher in a coding swarm. Your job is to:
-
-        1. Review all completed work
-        2. Integrate and polish the final solution
-        3. Ensure consistency and quality
-        4. Provide the final, production-ready result
-
-        Project: {project.name}
-        Requirements: {json.dumps(project.requirements, indent=2)}
-
-        Completed Tasks and Results:
-        {json.dumps(all_results, indent=2)}
-
-        Please provide:
-        1. Final integrated solution
-        2. Quality assessment
-        3. Deployment instructions
-        4. Any final recommendations
-
-        Return as JSON with fields: final_solution, quality_assessment, deployment_instructions, recommendations
-        """
-
+    async def _test_instance_endpoint(self, devbox_url: str) -> bool:
+        """Test if instance endpoint is accessible"""
         try:
-            response = await self._call_agent(polisher.id, polish_prompt)
-            return json.loads(response)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{devbox_url}/health", timeout=10) as response:
+                    return response.status == 200
         except Exception as e:
-            return {"error": f"Final polish failed: {e}"}
+            self.log_error(f"Instance endpoint test failed: {devbox_url}", e)
+            return False
 
-    async def _call_agent(self, agent_id: str, prompt: str) -> str:
-        """Call an agent through the Cloudflare Worker"""
-        # Get challenge
-        challenge_response = requests.get(f"{self.worker_url}/challenge")
-        challenge_data = challenge_response.json()
-        challenge = challenge_data["challenge"]
-        timestamp = challenge_data["timestamp"]
+    async def process_task(self, task: str, swarm_size: int = None) -> SwarmResult:
+        """Process a task using the swarm"""
+        if self.status != SwarmStatus.READY:
+            raise Exception("Swarm not ready for processing")
+        
+        if swarm_size is None:
+            swarm_size = min(len(self.instances), self.default_swarm_size)
+        
+        self.log(f"🔄 Processing task with swarm of {swarm_size} instances...")
+        self.status = SwarmStatus.PROCESSING
+        self.current_task = task
+        
+        start_time = time.time()
+        
+        try:
+            # Select instances for processing
+            selected_instances = self.instances[:swarm_size]
+            
+            # Process task in parallel
+            processing_tasks = []
+            for instance in selected_instances:
+                task_coro = self._process_with_instance(instance, task)
+                processing_tasks.append(task_coro)
+            
+            # Wait for all responses
+            responses = await asyncio.gather(*processing_tasks, return_exceptions=True)
+            
+            # Process responses
+            valid_responses = []
+            for i, response in enumerate(responses):
+                if isinstance(response, Exception):
+                    self.log_error(f"Instance {i+1} processing failed", response)
+                elif response:
+                    valid_responses.append(response)
+            
+            # Collate responses
+            self.status = SwarmStatus.COLLATING
+            result = await self._collate_responses(task, valid_responses)
+            
+            processing_time = (time.time() - start_time) * 1000
+            result.processing_time_ms = int(processing_time)
+            result.swarm_size = swarm_size
+            result.successful_instances = len(valid_responses)
+            
+            self.log(f"✅ Task processed successfully: {len(valid_responses)}/{swarm_size} instances")
+            self.status = SwarmStatus.COMPLETE
+            
+            return result
+            
+        except Exception as e:
+            self.log_error("Task processing failed", e)
+            self.status = SwarmStatus.ERROR
+            raise
 
-        # Generate signature
-        signature = hmac.new(
-            self.shared_secret.encode(),
-            f"{timestamp}{challenge}".encode(),
-            hashlib.sha256
-        ).hexdigest()
-
-        # Make request
-        response = requests.post(
-            f"{self.worker_url}/chat",
-            headers={
-                'Content-Type': 'application/json',
-                'X-Timestamp': str(timestamp),
-                'X-Challenge': challenge,
-                'X-Signature': signature
-            },
-            json={
-                "message": prompt,
-                "sessionId": f"swarm_{agent_id}",
-                "agent_id": agent_id
+    async def _process_with_instance(self, instance: SwarmInstance, task: str) -> Optional[SwarmResponse]:
+        """Process task with a single instance"""
+        try:
+            start_time = time.time()
+            
+            # Prepare request
+            payload = {
+                "message": task,
+                "conversation": [],
+                "sessionId": f"swarm-{instance.devbox_id}"
             }
+            
+            # Send request
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{instance.devbox_url}/qwen/chat",
+                    json=payload,
+                    timeout=self.response_timeout
+                ) as response:
+                    
+                    if response.status == 200:
+                        data = await response.json()
+                        response_text = data.get('response', '')
+                        
+                        response_time = (time.time() - start_time) * 1000
+                        
+                        # Calculate quality score
+                        quality_score = self._calculate_quality_score(response_text)
+                        
+                        # Update instance stats
+                        instance.response_count += 1
+                        instance.last_used = datetime.now()
+                        
+                        return SwarmResponse(
+                            instance_id=instance.devbox_id,
+                            response=response_text,
+                            quality_score=quality_score,
+                            response_time_ms=int(response_time),
+                            timestamp=datetime.now(),
+                            metadata={"status_code": response.status}
+                        )
+                    else:
+                        instance.error_count += 1
+                        self.log_error(f"Instance {instance.devbox_id} returned status {response.status}")
+                        return None
+                        
+        except Exception as e:
+            instance.error_count += 1
+            self.log_error(f"Instance {instance.devbox_id} processing failed", e)
+            return None
+
+    def _calculate_quality_score(self, response: str) -> float:
+        """Calculate quality score for a response"""
+        score = 0.0
+        
+        # Check for code presence
+        if '```' in response or 'def ' in response or 'function ' in response:
+            score += 0.3
+        
+        # Check for explanation
+        if len(response) > 200:
+            score += 0.2
+        
+        # Check for structure
+        if any(keyword in response.lower() for keyword in ['implementation', 'example', 'usage', 'test']):
+            score += 0.2
+        
+        # Check for completeness
+        if len(response) > 500:
+            score += 0.2
+        
+        # Check for formatting
+        if response.count('\n') > 5:
+            score += 0.1
+        
+        return min(score, 1.0)
+
+    async def _collate_responses(self, task: str, responses: List[SwarmResponse]) -> SwarmResult:
+        """Collate and analyze responses from multiple instances"""
+        if not responses:
+            raise Exception("No valid responses to collate")
+        
+        # Sort by quality score
+        responses.sort(key=lambda x: x.quality_score, reverse=True)
+        
+        # Select consensus response (highest quality)
+        consensus_response = responses[0].response
+        
+        # Analyze quality
+        quality_analysis = {
+            "average_quality": sum(r.quality_score for r in responses) / len(responses),
+            "best_quality": responses[0].quality_score,
+            "quality_range": responses[0].quality_score - responses[-1].quality_score,
+            "response_count": len(responses),
+            "consensus_confidence": self._calculate_consensus_confidence(responses)
+        }
+        
+        return SwarmResult(
+            task=task,
+            responses=responses,
+            consensus_response=consensus_response,
+            quality_analysis=quality_analysis,
+            processing_time_ms=0,  # Will be set by caller
+            swarm_size=0,  # Will be set by caller
+            successful_instances=0  # Will be set by caller
         )
 
-        if response.status_code == 200:
-            data = response.json()
-            return data["response"]
-        else:
-            raise Exception(f"Agent call failed: {response.status_code} - {response.text}")
+    def _calculate_consensus_confidence(self, responses: List[SwarmResponse]) -> float:
+        """Calculate confidence in consensus response"""
+        if len(responses) < 2:
+            return 1.0
+        
+        # Calculate similarity between top responses
+        top_responses = responses[:2]
+        similarity = self._calculate_similarity(
+            top_responses[0].response,
+            top_responses[1].response
+        )
+        
+        return similarity
 
-    def get_project_status(self, project_id: str) -> Dict[str, Any]:
-        """Get current project status"""
-        if project_id not in self.projects:
-            return {"error": "Project not found"}
+    def _calculate_similarity(self, text1: str, text2: str) -> float:
+        """Calculate similarity between two texts"""
+        # Simple similarity based on common words
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
 
-        project = self.projects[project_id]
+    async def cleanup_swarm(self):
+        """Clean up swarm instances"""
+        self.log("🧹 Cleaning up swarm instances...")
+        
+        for instance in self.instances:
+            try:
+                # Suspend or delete devbox
+                self.api.suspend_devbox(instance.devbox_id)
+                self.log(f"✅ Instance {instance.devbox_id} cleaned up")
+            except Exception as e:
+                self.log_error(f"Failed to cleanup instance {instance.devbox_id}", e)
+        
+        self.instances.clear()
+        self.status = SwarmStatus.IDLE
+        self.log("🎉 Swarm cleanup complete")
 
+    def get_swarm_status(self) -> Dict[str, Any]:
+        """Get current swarm status"""
         return {
-            "project_id": project_id,
-            "name": project.name,
-            "status": project.status,
-            "tasks": {
-                "total": len(project.tasks),
-                "completed": len([t for t in project.tasks if t.status == TaskStatus.COMPLETED]),
-                "in_progress": len([t for t in project.tasks if t.status == TaskStatus.IN_PROGRESS]),
-                "pending": len([t for t in project.tasks if t.status == TaskStatus.PENDING]),
-                "failed": len([t for t in project.tasks if t.status == TaskStatus.FAILED])
-            },
-            "agents": {
-                "total": len(project.agents),
-                "idle": len([a for a in project.agents if a.status == "idle"]),
-                "busy": len([a for a in project.agents if a.status == "busy"])
-            },
-            "created_at": project.created_at,
-            "updated_at": project.updated_at
+            "status": self.status.value,
+            "instance_count": len(self.instances),
+            "healthy_instances": sum(1 for i in self.instances if i.health),
+            "current_task": self.current_task,
+            "total_requests": self.total_requests,
+            "successful_requests": self.successful_requests,
+            "failed_requests": self.failed_requests,
+            "instances": [
+                {
+                    "devbox_id": i.devbox_id,
+                    "status": i.status,
+                    "health": i.health,
+                    "response_count": i.response_count,
+                    "error_count": i.error_count,
+                    "last_used": i.last_used.isoformat() if i.last_used else None
+                }
+                for i in self.instances
+            ]
         }
 
 async def main():
-    """Example usage of the swarm orchestrator"""
-    # Initialize orchestrator
-    orchestrator = SwarmOrchestrator(
-        cloudflare_worker_url="https://omni-agent-router.jonanscheffler.workers.dev",
-        shared_secret=os.getenv("SHARED_SECRET", "test-secret-for-development-only")
-    )
+    """Main function for testing"""
+    print("🚀 SWARM ORCHESTRATOR TEST")
+    print("=" * 40)
+    
+    # Get API key
+    runloop_api_key = input("Enter your Runloop API key: ").strip()
+    if not runloop_api_key:
+        print("❌ No API key provided")
+        return
+    
+    try:
+        orchestrator = SwarmOrchestrator(runloop_api_key)
+        
+        # Deploy swarm
+        success = await orchestrator.deploy_swarm(3)
+        if not success:
+            print("❌ Swarm deployment failed")
+            return
+        
+        # Test task
+        test_task = "Write a Python function to calculate the factorial of a number"
+        result = await orchestrator.process_task(test_task)
+        
+        print(f"\n🎉 SWARM TEST COMPLETE!")
+        print(f"Task: {result.task}")
+        print(f"Swarm size: {result.swarm_size}")
+        print(f"Successful instances: {result.successful_instances}")
+        print(f"Processing time: {result.processing_time_ms}ms")
+        print(f"Average quality: {result.quality_analysis['average_quality']:.2f}")
+        print(f"Consensus confidence: {result.quality_analysis['consensus_confidence']:.2f}")
+        
+        # Cleanup
+        await orchestrator.cleanup_swarm()
+        
+    except Exception as e:
+        print(f"💥 SWARM TEST FAILED: {e}")
 
-    # Create a sample project
-    project_id = await orchestrator.create_project(
-        name="Sample Web App",
-        description="A simple web application with user authentication",
-        requirements=[
-            "Create a web application with user registration and login",
-            "Implement secure password handling",
-            "Add a dashboard for authenticated users",
-            "Include basic CRUD operations for user data",
-            "Add responsive design for mobile devices"
-        ]
-    )
-
-    print(f"Created project: {project_id}")
-
-    # Execute the project
-    result = await orchestrator.execute_project(project_id)
-    print(f"Project execution result: {json.dumps(result, indent=2)}")
-
-    # Get final status
-    status = orchestrator.get_project_status(project_id)
-    print(f"Final project status: {json.dumps(status, indent=2)}")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())
