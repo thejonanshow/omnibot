@@ -18,9 +18,6 @@ jobs:
         with:
           node-version: '20'
       
-      - name: Install npx
-        run: npm install -g npx
-      
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
