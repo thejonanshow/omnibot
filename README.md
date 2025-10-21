@@ -88,7 +88,7 @@ GITHUB_REPO=
 3. Click microphone and speak
 4. Say "upgrade mode" then describe changes to modify the system
 
-## Cost
+## Costs
 
 ~$2/month (mostly free tiers)
 
