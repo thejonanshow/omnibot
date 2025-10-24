@@ -1437,6 +1437,37 @@
     </div>
 
     <script>
+    // ==================== ERROR LOGGING SYSTEM ====================
+(function() {
+    function logToChat(title, data, type = 'error') {
+        const container = document.getElementById('chat-container');
+        if (!container) return;
+        const logDiv = document.createElement('div');
+        const colors = { error: { bg: '#2a0000', border: '#ff0000', text: '#ff5555' }, info: { bg: '#001a2a', border: '#0088ff', text: '#55aaff' } };
+        const color = colors[type] || colors.error;
+        logDiv.style.cssText = `background:${color.bg};border:2px solid ${color.border};color:${color.text};padding:12px;margin:8px auto;max-width:700px;font-family:monospace;font-size:11px;white-space:pre-wrap;border-radius:8px;max-height:300px;overflow-y:auto;`;
+        logDiv.textContent = `${title}\n${'='.repeat(40)}\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`;
+        container.appendChild(logDiv);
+        container.scrollTop = container.scrollHeight;
+    }
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const [url, options = {}] = args;
+        logToChat('📤 REQUEST', { url, method: options.method || 'GET', headers: options.headers }, 'info');
+        try {
+            const response = await originalFetch(...args);
+            const clone = response.clone();
+            logToChat('📥 RESPONSE', { status: response.status, ok: response.ok, url: response.url }, response.ok ? 'info' : 'error');
+            if (!response.ok) { try { const text = await clone.text(); logToChat('❌ ERROR BODY', text.substring(0, 800), 'error'); } catch(e) {} }
+            return response;
+        } catch (error) {
+            logToChat('💥 NETWORK ERROR', { message: error.message, url }, 'error');
+            throw error;
+        }
+    };
+    console.log('✅ Debug logging active');
+})();
+// ==================== END ERROR LOGGING ====================
         // Configuration
         let config = {
             routerUrl: localStorage.getItem('routerUrl') || '',
