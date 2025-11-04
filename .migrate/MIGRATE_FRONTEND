@@ -1,33 +1,17 @@
 # Frontend Migration Trigger
 
-This file triggers the automatic frontend migration when committed to a branch.
+This marker file triggers automatic frontend migration when committed.
 
-## What happens when you commit this file:
+## What happens:
 
-1. GitHub Actions detects this marker file
-1. Runs the migration script automatically
-1. Commits the refactored code to your branch
-1. Comments on the PR with status
+1. GitHub Actions detects this file
+2. Runs migration script automatically
+3. Commits refactored code to your branch
+4. Posts status comment on PR
 
-## Migration changes:
-
-- Splits monolithic `index.html` into modular structure
-- Creates `frontend/styles/` with base, themes, and components CSS
-- Creates `frontend/js/` with 6 modular JavaScript files
-- Adds test template in `frontend/tests/`
-- Backs up original file as `index.backup.html`
-
-## To trigger migration:
+## To trigger:
 
 ```bash
-# From mobile or desktop
 git add .migrate/
 git commit -m "Trigger frontend migration"
 git push origin your-branch-name
-```
-
-That’s it! GitHub Actions handles the rest.
-
------
-
-**Note**: This marker file will be automatically removed when the PR is merged to main.
