@@ -1,65 +1,62 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting Frontend Migration..."
-echo "================================="
-
-# Validate we're in the right directory
-if [ ! -d "frontend" ]; then
-    echo "❌ Error: frontend/ directory not found"
-    echo "Please run this script from the repository root"
-    exit 1
-fi
+echo “🚀 Starting Frontend Migration…”
+echo “=================================”
 
 # Create directory structure
-echo "📁 Creating directory structure..."
+
+echo “📁 Creating directory structure…”
 mkdir -p frontend/styles
 mkdir -p frontend/js
 mkdir -p frontend/tests
 
 # Backup original file
-echo "💾 Creating backup..."
-if [ -f "frontend/index.html" ]; then
-    cp frontend/index.html frontend/index.backup.html
-    echo "✅ Backup created: frontend/index.backup.html"
+
+echo “💾 Creating backup…”
+if [ -f “frontend/index.html” ]; then
+cp frontend/index.html frontend/index.backup.html
+echo “✅ Backup created: frontend/index.backup.html”
 fi
 
 # Extract and create CSS files
-echo "🎨 Extracting CSS..."
+
+echo “🎨 Extracting CSS…”
 
 # Create base.css
-cat > frontend/styles/base.css << 'EOF'
+
+cat > frontend/styles/base.css << ‘EOFCSS’
 /* Base Styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+
+- {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
-    transition: background-color 0.25s ease, color 0.25s ease;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+font-family: ‘Courier New’, monospace;
+background: var(–bg);
+color: var(–text);
+overflow: hidden;
+transition: background-color 0.3s, color 0.3s;
 }
 
-/* CSS Variables */
-:root {
-    --spacing-xs: 4px;
-    --spacing-sm: 8px;
-    --spacing-md: 16px;
-    --spacing-lg: 24px;
-    --spacing-xl: 32px;
-    --border-radius-sm: 8px;
-    --border-radius-md: 12px;
-    --border-radius-lg: 16px;
-    --transition-fast: 150ms ease;
-    --transition-normal: 250ms ease;
-    --transition-slow: 350ms ease;
+.container {
+display: flex;
+flex-direction: column;
+height: 100vh;
+max-width: 1200px;
+margin: 0 auto;
+padding: 10px;
+}
+
+/* Typography */
+h1 {
+font-size: 1.5em;
+margin-bottom: 10px;
+text-align: center;
+color: var(–primary);
 }
 
 /* Layout */
@@ -68,646 +65,391 @@ body {
 .flex-col { flex-direction: column; }
 .gap-2 { gap: 0.5rem; }
 .gap-4 { gap: 1rem; }
-EOF
+EOFCSS
 
-echo "✅ base.css created"
+# Create themes.css with data-driven system
 
-# Create themes.css
-cat > frontend/styles/themes.css << 'EOF'
-/* Theme System */
-
-/* Matrix Theme */
-body.theme-matrix {
-    --bg-primary: #000000;
-    --bg-secondary: #001a00;
-    --bg-tertiary: #002200;
-    --text-primary: #00ff00;
-    --text-secondary: #00cc00;
-    --text-muted: #008800;
-    --accent-primary: #00ff00;
-    --accent-secondary: #00ff00;
-    --border-color: #003300;
-    --message-user-bg: #002200;
-    --message-ai-bg: #001100;
-    --message-system-bg: #1a1a00;
-    --input-bg: #001100;
-    --button-bg: #002200;
-    --button-hover-bg: #00ff00;
-    --button-hover-text: #000000;
-    --shadow-sm: 0 0 10px rgba(0, 255, 0, 0.1);
-    --shadow-md: 0 0 20px rgba(0, 255, 0, 0.2);
-    --shadow-lg: 0 0 30px rgba(0, 255, 0, 0.3);
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-family: 'Courier New', 'Consolas', monospace;
+cat > frontend/styles/themes.css << ‘EOFCSS’
+/* Theme System - Data Driven */
+:root {
+/* Default: Matrix theme */
+–bg: #0d0208;
+–text: #00ff41;
+–primary: #39ff14;
+–secondary: #008f11;
+–accent: #00ff41;
+–border: #003b00;
+–input-bg: #001a00;
+–hover: #004d00;
 }
 
-/* Cyberpunk Theme */
-body.theme-cyberpunk {
-    --bg-primary: #0a0a1a;
-    --bg-secondary: #1a0a2a;
-    --bg-tertiary: #2a0a3a;
-    --text-primary: #ff00ff;
-    --text-secondary: #cc00cc;
-    --text-muted: #aa00aa;
-    --accent-primary: #00ffff;
-    --accent-secondary: #ff00ff;
-    --border-color: #3a0a4a;
-    --message-user-bg: linear-gradient(135deg, #1a0a2a 0%, #2a0a3a 100%);
-    --message-ai-bg: linear-gradient(135deg, #15051f 0%, #1a0a2a 100%);
-    --message-system-bg: #2a1a00;
-    --input-bg: #0a0a1a;
-    --button-bg: #1a0a2a;
-    --button-hover-bg: #ff00ff;
-    --button-hover-text: #000000;
-    --shadow-sm: 0 4px 12px rgba(255, 0, 255, 0.15);
-    --shadow-md: 0 8px 24px rgba(255, 0, 255, 0.25);
-    --shadow-lg: 0 12px 36px rgba(255, 0, 255, 0.35);
-    background: var(--bg-primary);
-    color: var(--text-primary);
+/* Theme Definitions */
+[data-theme=“matrix”] {
+–bg: #0d0208;
+–text: #00ff41;
+–primary: #39ff14;
+–secondary: #008f11;
+–accent: #00ff41;
+–border: #003b00;
+–input-bg: #001a00;
+–hover: #004d00;
 }
 
-/* Modern Dark Theme */
-body.theme-modern {
-    --bg-primary: #0f0f0f;
-    --bg-secondary: #1a1a1a;
-    --bg-tertiary: #252525;
-    --text-primary: #e8e8e8;
-    --text-secondary: #b8b8b8;
-    --text-muted: #888888;
-    --accent-primary: #4a9eff;
-    --accent-secondary: #357abd;
-    --border-color: #2a2a2a;
-    --message-user-bg: linear-gradient(135deg, #2d4a6e 0%, #1e3a5f 100%);
-    --message-ai-bg: #1a1a1a;
-    --message-system-bg: #3d3d1a;
-    --input-bg: #1a1a1a;
-    --button-bg: #2a2a2a;
-    --button-hover-bg: #3a3a3a;
-    --button-hover-text: #ffffff;
-    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
-    background: var(--bg-primary);
-    color: var(--text-primary);
+[data-theme=“hal9000”] {
+–bg: #000000;
+–text: #ff0000;
+–primary: #ff0000;
+–secondary: #8b0000;
+–accent: #ff0000;
+–border: #4a0000;
+–input-bg: #1a0000;
+–hover: #330000;
 }
-EOF
 
-echo "✅ themes.css created"
+[data-theme=“cyberpunk”] {
+–bg: #0a0e27;
+–text: #00ffff;
+–primary: #ff00ff;
+–secondary: #ff1493;
+–accent: #00ffff;
+–border: #1a1f3a;
+–input-bg: #0f1429;
+–hover: #1e2747;
+}
+
+[data-theme=“terminal”] {
+–bg: #000000;
+–text: #ffffff;
+–primary: #00ff00;
+–secondary: #00aa00;
+–accent: #ffff00;
+–border: #333333;
+–input-bg: #111111;
+–hover: #222222;
+}
+
+[data-theme=“neon”] {
+–bg: #0a0a1e;
+–text: #e0e0e0;
+–primary: #ff006e;
+–secondary: #8338ec;
+–accent: #3a86ff;
+–border: #1a1a3e;
+–input-bg: #0f0f1e;
+–hover: #1e1e3e;
+}
+
+[data-theme=“vapor”] {
+–bg: #1a0033;
+–text: #ff71ce;
+–primary: #01cdfe;
+–secondary: #05ffa1;
+–accent: #b967ff;
+–border: #2d0052;
+–input-bg: #220040;
+–hover: #3a0066;
+}
+
+[data-theme=“synthwave”] {
+–bg: #2b213a;
+–text: #f9f9f9;
+–primary: #ff6c11;
+–secondary: #ff3864;
+–accent: #9d72ff;
+–border: #3d2e4f;
+–input-bg: #342947;
+–hover: #4a3960;
+}
+
+[data-theme=“hacker”] {
+–bg: #000000;
+–text: #00ff00;
+–primary: #00ff00;
+–secondary: #00cc00;
+–accent: #00ff00;
+–border: #003300;
+–input-bg: #001100;
+–hover: #002200;
+}
+
+[data-theme=“military”] {
+–bg: #1a1a0f;
+–text: #88aa55;
+–primary: #aacc77;
+–secondary: #556633;
+–accent: #ccee99;
+–border: #333322;
+–input-bg: #111108;
+–hover: #222214;
+}
+
+[data-theme=“retro”] {
+–bg: #f4e8c1;
+–text: #3e2723;
+–primary: #d84315;
+–secondary: #bf360c;
+–accent: #ff6f00;
+–border: #d7c9a8;
+–input-bg: #fff9e6;
+–hover: #e8dbb8;
+}
+
+[data-theme=“minimal”] {
+–bg: #ffffff;
+–text: #212121;
+–primary: #2196f3;
+–secondary: #1976d2;
+–accent: #03a9f4;
+–border: #e0e0e0;
+–input-bg: #fafafa;
+–hover: #f5f5f5;
+}
+
+[data-theme=“ocean”] {
+–bg: #001f3f;
+–text: #7fdbff;
+–primary: #39cccc;
+–secondary: #0074d9;
+–accent: #7fdbff;
+–border: #003366;
+–input-bg: #001a33;
+–hover: #002952;
+}
+
+[data-theme=“forest”] {
+–bg: #1a2f1a;
+–text: #90ee90;
+–primary: #32cd32;
+–secondary: #228b22;
+–accent: #98fb98;
+–border: #2d4a2d;
+–input-bg: #152015;
+–hover: #243a24;
+}
+
+[data-theme=“sunset”] {
+–bg: #2d1b2e;
+–text: #ffd89b;
+–primary: #ff7e5f;
+–secondary: #feb47b;
+–accent: #ffc371;
+–border: #4a2f4b;
+–input-bg: #251a26;
+–hover: #3a2a3b;
+}
+EOFCSS
 
 # Create components.css
-cat > frontend/styles/components.css << 'EOF'
+
+cat > frontend/styles/components.css << ‘EOFCSS’
 /* Components */
 
 /* Header */
-.header {
-    padding: var(--spacing-md) var(--spacing-lg);
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--spacing-md);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    backdrop-filter: blur(10px);
-}
-
-.header-left {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-}
-
-h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+header {
+display: flex;
+align-items: center;
+gap: 1rem;
+padding: 1rem;
+border-bottom: 2px solid var(–border);
 }
 
 /* Messages */
-.chat-container {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: var(--spacing-lg);
-    scroll-behavior: smooth;
+#messages {
+flex: 1;
+overflow-y: auto;
+padding: 1rem;
+background: var(–input-bg);
+border: 1px solid var(–border);
+border-radius: 4px;
+margin-bottom: 1rem;
+scroll-behavior: smooth;
 }
 
 .message {
-    max-width: 700px;
-    margin: 0 auto var(--spacing-lg);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--border-radius-md);
-    line-height: 1.6;
-    animation: messageSlideIn 0.3s ease-out;
-}
-
-@keyframes messageSlideIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+margin-bottom: 1rem;
+padding: 0.75rem;
+border-left: 3px solid var(–primary);
+background: var(–bg);
+border-radius: 4px;
 }
 
 .message.user {
-    background: var(--message-user-bg);
-    margin-left: auto;
-    margin-right: 0;
-    border-bottom-right-radius: 4px;
-    box-shadow: var(--shadow-sm);
+border-left-color: var(–accent);
 }
 
 .message.assistant {
-    background: var(--message-ai-bg);
-    margin-left: 0;
-    margin-right: auto;
-    border-bottom-left-radius: 4px;
-    border: 1px solid var(--border-color);
+border-left-color: var(–secondary);
 }
 
-.message.system,
-.message.error {
-    background: var(--message-system-bg);
-    text-align: center;
-    font-size: 0.875rem;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--border-radius-sm);
-    max-width: 600px;
+.message strong {
+color: var(–primary);
+display: block;
+margin-bottom: 0.25rem;
 }
 
 /* Buttons */
 button {
-    padding: 10px 18px;
-    background: var(--button-bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-sm);
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-    font-family: inherit;
-    transition: all var(--transition-fast);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    white-space: nowrap;
+padding: 0.75rem 1.5rem;
+background: var(–primary);
+color: var(–bg);
+border: none;
+border-radius: 4px;
+cursor: pointer;
+font-family: inherit;
+font-weight: bold;
+transition: all 0.3s;
 }
 
 button:hover:not(:disabled) {
-    background: var(--button-hover-bg);
-    color: var(--button-hover-text);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+background: var(–secondary);
+transform: translateY(-2px);
 }
 
 button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+opacity: 0.5;
+cursor: not-allowed;
+}
+
+button.secondary {
+background: var(–secondary);
+}
+
+button.accent {
+background: var(–accent);
 }
 
 /* Inputs */
-.input-container {
-    padding: var(--spacing-lg);
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+input, textarea, select {
+padding: 0.75rem;
+background: var(–input-bg);
+color: var(–text);
+border: 1px solid var(–border);
+border-radius: 4px;
+font-family: inherit;
+font-size: 1rem;
+}
+
+input:focus, textarea:focus, select:focus {
+outline: none;
+border-color: var(–primary);
+box-shadow: 0 0 0 2px rgba(var(–primary-rgb), 0.1);
 }
 
 textarea {
-    flex: 1;
-    padding: 14px 18px;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    border: 2px solid var(--border-color);
-    border-radius: var(--border-radius-md);
-    font-size: 1rem;
-    font-family: inherit;
-    resize: none;
-    min-height: 52px;
-    max-height: 200px;
-    transition: border-color var(--transition-fast);
-    line-height: 1.5;
+width: 100%;
+min-height: 100px;
+resize: vertical;
 }
 
-textarea:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(var(--accent-primary), 0.1);
+/* Controls */
+.controls {
+display: flex;
+gap: 0.5rem;
+margin-top: 0.5rem;
+}
+
+/* Settings Panel */
+#settings {
+padding: 1rem;
+background: var(–input-bg);
+border: 1px solid var(–border);
+border-radius: 4px;
+margin-bottom: 1rem;
+}
+
+#settings .setting-group {
+margin-bottom: 1rem;
+}
+
+#settings label {
+display: block;
+margin-bottom: 0.25rem;
+color: var(–primary);
+font-weight: bold;
+}
+
+/* Status */
+#status {
+padding: 0.5rem;
+text-align: center;
+font-size: 0.875rem;
+color: var(–secondary);
+border-top: 1px solid var(–border);
+}
+
+/* Recording Indicator */
+.recording {
+animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+0%, 100% { opacity: 1; }
+50% { opacity: 0.5; }
+}
+
+/* Scroll to bottom button */
+#scrollButton {
+position: fixed;
+bottom: 120px;
+right: 20px;
+width: 50px;
+height: 50px;
+border-radius: 50%;
+background: var(–primary);
+color: var(–bg);
+border: none;
+cursor: pointer;
+display: none;
+align-items: center;
+justify-content: center;
+font-size: 1.5rem;
+box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+transition: all 0.3s;
+z-index: 1000;
+}
+
+#scrollButton:hover {
+transform: scale(1.1);
 }
 
 /* Responsive */
-@media (max-width: 767px) {
-    .header {
-        padding: var(--spacing-md);
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .chat-container {
-        padding: var(--spacing-md);
-    }
-    
-    .message {
-        max-width: 100%;
-        padding: var(--spacing-sm) var(--spacing-md);
-    }
-}
-EOF
-
-echo "✅ components.css created"
-
-# Create JavaScript modules
-echo "📝 Creating JavaScript modules..."
-
-# Create state.js
-cat > frontend/js/state.js << 'EOF'
-// Centralized application state
-export const state = {
-    config: {
-        routerUrl: localStorage.getItem('routerUrl') || '',
-        secret: localStorage.getItem('secret') || '',
-        theme: localStorage.getItem('theme') || 'matrix'
-    },
-    conversation: [],
-    flags: {
-        isRecording: false,
-        isUpgradeMode: false,
-        isSending: false,
-        isVoiceInput: false
-    }
-};
-
-export function saveConfig() {
-    localStorage.setItem('routerUrl', state.config.routerUrl);
-    localStorage.setItem('secret', state.config.secret);
-    localStorage.setItem('theme', state.config.theme);
-}
-EOF
-
-echo "✅ state.js created"
-
-# Create api.js
-cat > frontend/js/api.js << 'EOF'
-// API communication
-import { state } from './state.js';
-
-export async function getChallenge() {
-    const response = await fetch(`${state.config.routerUrl}/challenge`);
-    if (!response.ok) throw new Error('Failed to get challenge');
-    return await response.json();
+@media (max-width: 768px) {
+.container {
+padding: 5px;
 }
 
-export async function sendMessage(message, challenge) {
-    const timestamp = Date.now();
-    const signature = await computeSignature(challenge.challenge, timestamp, message);
-    
-    const response = await fetch(`${state.config.routerUrl}/chat`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Challenge': challenge.challenge,
-            'X-Timestamp': timestamp.toString(),
-            'X-Signature': signature
-        },
-        body: JSON.stringify({ message, conversation: state.conversation })
-    });
-    
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Request failed');
-    }
-    return await response.json();
+```
+h1 {
+    font-size: 1.2em;
 }
 
-export async function sendUpgrade(instruction, challenge) {
-    const timestamp = Date.now();
-    const signature = await computeSignature(challenge.challenge, timestamp, instruction);
-    
-    const response = await fetch(`${state.config.routerUrl}/upgrade`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Challenge': challenge.challenge,
-            'X-Timestamp': timestamp.toString(),
-            'X-Signature': signature
-        },
-        body: JSON.stringify({ instruction })
-    });
-    
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upgrade failed');
-    }
-    return await response.json();
+button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
 }
 
-async function computeSignature(challenge, timestamp, message) {
-    const data = `${challenge}|${timestamp}|unknown|${navigator.userAgent}|${JSON.stringify({ message, conversation: state.conversation })}`;
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-        'raw',
-        encoder.encode(state.config.secret),
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-    );
-    const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
-    return Array.from(new Uint8Array(signature))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
+.controls {
+    flex-wrap: wrap;
 }
-EOF
+```
 
-echo "✅ api.js created"
-
-# Create themes.js
-cat > frontend/js/themes.js << 'EOF'
-// Theme management
-import { state, saveConfig } from './state.js';
-
-export const themes = [
-    'matrix', 'cyberpunk', 'modern'
-];
-
-export function applyTheme(theme) {
-    document.body.className = `theme-${theme}`;
-    state.config.theme = theme;
-    saveConfig();
 }
+EOFCSS
 
-export function initTheme() {
-    applyTheme(state.config.theme);
-}
-EOF
+echo “✅ CSS files created”
 
-echo "✅ themes.js created"
-
-# Create ui.js
-cat > frontend/js/ui.js << 'EOF'
-// UI updates and interactions
-import { state } from './state.js';
-
-export function addMessage(role, content) {
-    const container = document.getElementById('chat-container');
-    const msg = document.createElement('div');
-    msg.className = `message ${role}`;
-    
-    if (role !== 'system' && role !== 'error') {
-        const roleLabel = document.createElement('div');
-        roleLabel.className = 'message-role';
-        roleLabel.textContent = role === 'user' ? 'You' : 'Omnibot';
-        msg.appendChild(roleLabel);
-    }
-    
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-    contentDiv.textContent = content;
-    msg.appendChild(contentDiv);
-    
-    container.appendChild(msg);
-    container.scrollTop = container.scrollHeight;
-    
-    // Add to conversation history
-    if (role === 'user' || role === 'assistant') {
-        state.conversation.push({ role, content });
-    }
-}
-
-export function showTypingIndicator() {
-    const container = document.getElementById('chat-container');
-    const indicator = document.createElement('div');
-    indicator.className = 'typing-indicator';
-    indicator.id = 'typing-indicator';
-    indicator.innerHTML = '<span></span><span></span><span></span>';
-    container.appendChild(indicator);
-    container.scrollTop = container.scrollHeight;
-}
-
-export function hideTypingIndicator() {
-    const indicator = document.getElementById('typing-indicator');
-    if (indicator) {
-        indicator.remove();
-    }
-}
-
-export function setButtonState(buttonId, disabled) {
-    const button = document.getElementById(buttonId);
-    if (button) button.disabled = disabled;
-}
-EOF
-
-echo "✅ ui.js created"
-
-# Create app.js (main orchestrator)
-cat > frontend/js/app.js << 'EOF'
-// Main application orchestrator
-import { state, saveConfig } from './state.js';
-import { themes, applyTheme, initTheme } from './themes.js';
-import { getChallenge, sendMessage, sendUpgrade } from './api.js';
-import { addMessage, showTypingIndicator, hideTypingIndicator, setButtonState } from './ui.js';
-
-// Initialize on load
-document.addEventListener('DOMContentLoaded', () => {
-    initTheme();
-    loadSettings();
-    initEventListeners();
-    addMessage('system', '🚀 System Initialized');
-});
-
-function initEventListeners() {
-    const input = document.getElementById('message-input');
-    const sendBtn = document.getElementById('send-btn');
-    const voiceBtn = document.getElementById('voice-btn');
-    const themeSelect = document.getElementById('theme-select');
-    
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    });
-    
-    sendBtn.addEventListener('click', handleSendMessage);
-    voiceBtn.addEventListener('click', handleVoiceInput);
-    themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
-    
-    document.getElementById('settings-btn').addEventListener('click', openSettings);
-    document.getElementById('save-settings').addEventListener('click', saveSettings);
-}
-
-async function handleSendMessage() {
-    const input = document.getElementById('message-input');
-    const text = input.value.trim();
-    
-    if (!text || state.flags.isSending) return;
-    
-    if (!state.config.routerUrl || !state.config.secret) {
-        addMessage('system', '⚙️ Please configure settings first');
-        openSettings();
-        return;
-    }
-    
-    input.value = '';
-    addMessage('user', text);
-    
-    state.flags.isSending = true;
-    setButtonState('send-btn', true);
-    showTypingIndicator();
-    
-    try {
-        const challenge = await getChallenge();
-        const response = await sendMessage(text, challenge);
-        addMessage('assistant', response.response);
-    } catch (error) {
-        addMessage('error', `❌ ${error.message}`);
-    } finally {
-        hideTypingIndicator();
-        state.flags.isSending = false;
-        setButtonState('send-btn', false);
-    }
-}
-
-function handleVoiceInput() {
-    addMessage('system', '🎤 Voice input not yet implemented in modular version');
-}
-
-function loadSettings() {
-    document.getElementById('router-url').value = state.config.routerUrl;
-    document.getElementById('secret').value = state.config.secret;
-    document.getElementById('theme-select').value = state.config.theme;
-}
-
-function saveSettings() {
-    state.config.routerUrl = document.getElementById('router-url').value.trim();
-    state.config.secret = document.getElementById('secret').value.trim();
-    saveConfig();
-    addMessage('system', '✅ Settings saved');
-    closeSettings();
-}
-
-function openSettings() {
-    document.getElementById('settings-panel').classList.add('active');
-}
-
-function closeSettings() {
-    document.getElementById('settings-panel').classList.remove('active');
-}
-EOF
-
-echo "✅ app.js created"
-
-# Create new minimal index.html
-echo "🏗️  Creating new modular index.html..."
-cat > frontend/index.html << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Omnibot - AI Assistant</title>
-    <link rel="stylesheet" href="styles/base.css">
-    <link rel="stylesheet" href="styles/themes.css">
-    <link rel="stylesheet" href="styles/components.css">
-</head>
-<body class="theme-matrix">
-    <!-- Header -->
-    <div class="header">
-        <div class="header-left">
-            <h1>🤖 Omnibot</h1>
-        </div>
-        <div class="controls">
-            <button id="settings-btn">⚙️ Settings</button>
-        </div>
-    </div>
-
-    <!-- Chat Container -->
-    <div class="chat-container" id="chat-container"></div>
-
-    <!-- Input Area -->
-    <div class="input-container">
-        <div style="max-width: 900px; margin: 0 auto; display: flex; gap: 1rem; align-items: flex-end;">
-            <textarea 
-                id="message-input" 
-                placeholder="Type your message..."
-                rows="1"
-            ></textarea>
-            <button id="voice-btn" title="Voice input">🎤</button>
-            <button id="send-btn" title="Send message">➤</button>
-        </div>
-    </div>
-
-    <!-- Settings Panel -->
-    <div class="settings-panel" id="settings-panel" style="display: none;">
-        <h2>⚙️ Settings</h2>
-        
-        <div class="setting-group">
-            <label for="router-url">Router URL</label>
-            <input type="text" id="router-url" placeholder="https://your-worker.workers.dev">
-        </div>
-        
-        <div class="setting-group">
-            <label for="secret">Shared Secret</label>
-            <input type="password" id="secret" placeholder="Your secret">
-        </div>
-        
-        <div class="setting-group">
-            <label for="theme-select">Theme</label>
-            <select id="theme-select">
-                <option value="matrix">Matrix</option>
-                <option value="cyberpunk">Cyberpunk</option>
-                <option value="modern">Modern</option>
-            </select>
-        </div>
-        
-        <button id="save-settings">💾 Save</button>
-    </div>
-
-    <script type="module" src="js/app.js"></script>
-</body>
-</html>
-EOF
-
-echo "✅ New index.html created"
-
-# Create test file
-echo "🧪 Creating test file..."
-cat > frontend/tests/frontend.test.js << 'EOF'
-// Basic smoke tests
-import { test } from 'node:test';
-import assert from 'node:assert';
-
-test('placeholder test', async () => {
-    assert.ok(true, 'Placeholder - implement with proper test runner');
-});
-EOF
-
-echo "✅ Test file created"
-
-echo ""
-echo "================================="
-echo "✅ Migration Complete!"
-echo "================================="
-echo ""
-echo "Changes made:"
-echo "  📁 Created frontend/styles/ with 3 CSS files"
-echo "  📁 Created frontend/js/ with 5 JS modules"
-echo "  📁 Created frontend/tests/ with test template"
-echo "  📄 Replaced frontend/index.html (backup saved)"
-echo ""
-echo "File count:"
-echo "  - CSS files: $(find frontend/styles -name '*.css' 2>/dev/null | wc -l)"
-echo "  - JS files: $(find frontend/js -name '*.js' 2>/dev/null | wc -l)"
-echo "  - New index.html: $(wc -l < frontend/index.html) lines"
-echo ""
+echo “”
+echo “=================================”
+echo “✅ Migration Complete!”
+echo “=================================”
+echo “”
+echo “Changes made:”
+echo “  📁 Created frontend/styles/ with 3 CSS files”
+echo “  📄 CSS syntax corrected (proper – variables)”
+echo “  💾 Created backup: frontend/index.backup.html”
+echo “”
+echo “Next steps:”
+echo “  1. Review the changes”
+echo “  2. Test locally if possible”
+echo “  3. Commit and push to trigger CI/CD”
+echo “”
