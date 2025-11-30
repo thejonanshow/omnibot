@@ -1,0 +1,353 @@
+name: Deploy with Full Observability
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Enable debug mode'
+        required: false
+        default: 'false'
+
+env:
+  SERVICE_NAME: omnibot
+  RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+      deploy_url: ${{ steps.deploy.outputs.url }}
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff
+
+      - name: Gather Pre-Deploy Info
+        id: info
+        run: |
+          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "commit_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
+          git log -1 --pretty=%B >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          
+          # Files changed
+          echo "files_changed<<EOF" >> $GITHUB_OUTPUT
+          git diff --name-status HEAD~1 HEAD 2>/dev/null || echo "First commit" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Full diff (truncated)
+          echo "diff<<EOF" >> $GITHUB_OUTPUT
+          git diff HEAD~1 HEAD 2>/dev/null | head -500 || echo "No diff available" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        id: install
+        run: |
+          npm ci 2>&1 | tee install.log
+          echo "install_log<<EOF" >> $GITHUB_OUTPUT
+          cat install.log >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Linter
+        id: lint
+        continue-on-error: true
+        run: |
+          npm run lint 2>&1 | tee lint.log || true
+          echo "lint_log<<EOF" >> $GITHUB_OUTPUT
+          cat lint.log >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "lint_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Run Tests
+        id: test
+        continue-on-error: true
+        run: |
+          npm test 2>&1 | tee test.log || true
+          echo "test_log<<EOF" >> $GITHUB_OUTPUT
+          cat test.log >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "test_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Build
+        id: build
+        run: |
+          npm run build 2>&1 | tee build.log || true
+          echo "build_log<<EOF" >> $GITHUB_OUTPUT
+          cat build.log >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "build_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Render
+        id: deploy
+        run: |
+          echo "Triggering Render deploy..."
+          
+          RESPONSE=$(curl -s -X POST \
+            "https://api.render.com/v1/services/${{ env.RENDER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}')
+          
+          echo "Render API Response: $RESPONSE"
+          
+          DEPLOY_ID=$(echo $RESPONSE | jq -r '.id // empty')
+          
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "deploy_log=Failed to trigger deploy. Response: $RESPONSE" >> $GITHUB_OUTPUT
+            echo "deploy_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "Deploy ID: $DEPLOY_ID"
+          echo "deploy_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+          
+          # Poll for deploy status
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            STATUS_RESPONSE=$(curl -s \
+              "https://api.render.com/v1/services/${{ env.RENDER_SERVICE_ID }}/deploys/$DEPLOY_ID" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
+            
+            STATUS=$(echo $STATUS_RESPONSE | jq -r '.status // empty')
+            echo "Attempt $ATTEMPT: Status = $STATUS"
+            
+            if [ "$STATUS" = "live" ]; then
+              echo "deploy_status=success" >> $GITHUB_OUTPUT
+              echo "url=https://${{ secrets.RENDER_SERVICE_URL }}" >> $GITHUB_OUTPUT
+              break
+            elif [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "update_failed" ] || [ "$STATUS" = "canceled" ]; then
+              echo "deploy_status=failed" >> $GITHUB_OUTPUT
+              echo "deploy_log=Deploy failed with status: $STATUS" >> $GITHUB_OUTPUT
+              
+              # Fetch deploy logs
+              LOGS=$(curl -s \
+                "https://api.render.com/v1/services/${{ env.RENDER_SERVICE_ID }}/deploys/$DEPLOY_ID/logs" \
+                -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.[].message' | tail -100)
+              
+              echo "render_logs<<EOF" >> $GITHUB_OUTPUT
+              echo "$LOGS" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+              
+              exit 1
+            fi
+            
+            sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "deploy_status=timeout" >> $GITHUB_OUTPUT
+            echo "deploy_log=Deploy timed out after 10 minutes" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Fetch final logs
+          LOGS=$(curl -s \
+            "https://api.render.com/v1/services/${{ env.RENDER_SERVICE_ID }}/deploys/$DEPLOY_ID/logs" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" | jq -r '.[].message' 2>/dev/null | tail -100)
+          
+          echo "render_logs<<EOF" >> $GITHUB_OUTPUT
+          echo "$LOGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Health Check
+        id: health
+        if: steps.deploy.outputs.deploy_status == 'success'
+        run: |
+          sleep 30  # Wait for service to stabilize
+          
+          URL="https://${{ secrets.RENDER_SERVICE_URL }}"
+          
+          HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" "$URL/health" 2>&1 || echo -e "\n000")
+          HEALTH_BODY=$(echo "$HEALTH_RESPONSE" | head -n -1)
+          HEALTH_CODE=$(echo "$HEALTH_RESPONSE" | tail -n 1)
+          
+          echo "health_status=$HEALTH_CODE" >> $GITHUB_OUTPUT
+          echo "health_body=$HEALTH_BODY" >> $GITHUB_OUTPUT
+          
+          # Test main endpoint
+          MAIN_RESPONSE=$(curl -s -w "\n%{http_code}" "$URL" 2>&1 || echo -e "\n000")
+          MAIN_CODE=$(echo "$MAIN_RESPONSE" | tail -n 1)
+          
+          echo "main_status=$MAIN_CODE" >> $GITHUB_OUTPUT
+
+      - name: Capture Current Codebase Snapshot
+        id: snapshot
+        run: |
+          # Package.json for dependencies
+          echo "package_json<<EOF" >> $GITHUB_OUTPUT
+          cat package.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # List all source files
+          echo "source_tree<<EOF" >> $GITHUB_OUTPUT
+          find . -type f \( -name "*.js" -o -name "*.ts" -o -name "*.json" -o -name "*.html" -o -name "*.css" \) \
+            -not -path "./node_modules/*" \
+            -not -path "./.git/*" | head -100 >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Main entry point content
+          if [ -f "index.js" ]; then
+            echo "main_file<<EOF" >> $GITHUB_OUTPUT
+            head -200 index.js >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          elif [ -f "src/index.js" ]; then
+            echo "main_file<<EOF" >> $GITHUB_OUTPUT
+            head -200 src/index.js >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate Full Report
+        id: report
+        if: always()
+        run: |
+          cat << 'REPORT' > deploy_report.md
+          # Deploy Report: ${{ env.SERVICE_NAME }}
+          
+          ## Summary
+          - **Status**: ${{ job.status }}
+          - **Timestamp**: ${{ steps.info.outputs.timestamp }}
+          - **Commit**: ${{ steps.info.outputs.commit_short }} (${{ steps.info.outputs.commit_sha }})
+          - **Branch**: ${{ steps.info.outputs.branch }}
+          - **Author**: ${{ steps.info.outputs.author }}
+          - **Deploy URL**: ${{ steps.deploy.outputs.url || 'N/A' }}
+          
+          ## Commit Message
+          ```
+          ${{ steps.info.outputs.commit_msg }}
+          ```
+          
+          ## Files Changed
+          ```
+          ${{ steps.info.outputs.files_changed }}
+          ```
+          
+          ## Health Check
+          - **Health Endpoint**: ${{ steps.health.outputs.health_status || 'N/A' }}
+          - **Main Endpoint**: ${{ steps.health.outputs.main_status || 'N/A' }}
+          - **Health Response**: ${{ steps.health.outputs.health_body || 'N/A' }}
+          
+          ## Lint Output
+          ```
+          ${{ steps.lint.outputs.lint_log }}
+          ```
+          
+          ## Test Output
+          ```
+          ${{ steps.test.outputs.test_log }}
+          ```
+          
+          ## Build Output
+          ```
+          ${{ steps.build.outputs.build_log }}
+          ```
+          
+          ## Render Deploy Logs
+          ```
+          ${{ steps.deploy.outputs.render_logs }}
+          ```
+          
+          ## Code Diff (truncated)
+          ```diff
+          ${{ steps.info.outputs.diff }}
+          ```
+          
+          ## Source Tree
+          ```
+          ${{ steps.snapshot.outputs.source_tree }}
+          ```
+          
+          ## package.json
+          ```json
+          ${{ steps.snapshot.outputs.package_json }}
+          ```
+          
+          ## Main Entry Point (first 200 lines)
+          ```javascript
+          ${{ steps.snapshot.outputs.main_file }}
+          ```
+          
+          ---
+          [View Workflow Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          REPORT
+
+      - name: Send Email Report
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.GMAIL_USER }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: "[${{ env.SERVICE_NAME }}] Deploy ${{ job.status }} - ${{ steps.info.outputs.commit_short }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: ${{ secrets.GMAIL_USER }}
+          content_type: text/plain
+          body: |
+            DEPLOY REPORT: ${{ env.SERVICE_NAME }}
+            =====================================
+            
+            STATUS: ${{ job.status }}
+            TIMESTAMP: ${{ steps.info.outputs.timestamp }}
+            COMMIT: ${{ steps.info.outputs.commit_sha }}
+            BRANCH: ${{ steps.info.outputs.branch }}
+            AUTHOR: ${{ steps.info.outputs.author }}
+            DEPLOY_URL: ${{ steps.deploy.outputs.url || 'N/A' }}
+            
+            COMMIT MESSAGE:
+            ${{ steps.info.outputs.commit_msg }}
+            
+            FILES CHANGED:
+            ${{ steps.info.outputs.files_changed }}
+            
+            HEALTH CHECK:
+            - Health Endpoint: ${{ steps.health.outputs.health_status || 'N/A' }}
+            - Main Endpoint: ${{ steps.health.outputs.main_status || 'N/A' }}
+            - Response: ${{ steps.health.outputs.health_body || 'N/A' }}
+            
+            LINT OUTPUT:
+            ${{ steps.lint.outputs.lint_log }}
+            
+            TEST OUTPUT:
+            ${{ steps.test.outputs.test_log }}
+            
+            BUILD OUTPUT:
+            ${{ steps.build.outputs.build_log }}
+            
+            RENDER LOGS:
+            ${{ steps.deploy.outputs.render_logs }}
+            
+            DIFF (truncated):
+            ${{ steps.info.outputs.diff }}
+            
+            SOURCE TREE:
+            ${{ steps.snapshot.outputs.source_tree }}
+            
+            PACKAGE.JSON:
+            ${{ steps.snapshot.outputs.package_json }}
+            
+            MAIN FILE (first 200 lines):
+            ${{ steps.snapshot.outputs.main_file }}
+            
+            ---
+            Workflow: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
