@@ -16,7 +16,6 @@ if (request.method !== ‘POST’) {
 return new Response(‘Method not allowed’, { status: 405 });
 }
 
-```
 try {
   const body = await request.json();
   const { subject, text } = body;
@@ -78,7 +77,7 @@ try {
     headers: { 'Content-Type': 'application/json' }
   });
 }
-```
+
 
 }
 };
