@@ -1,250 +1,196 @@
 /**
- * LLM Provider API calls
- */
 
-import { getSharedContext } from './lib/context.js';
+- LLM Provider implementations
+- 
+- This module provides functions to call various LLM providers
+- with consistent interfaces and error handling.
+  */
 
-const API_ENDPOINTS = {
-  GROQ: 'https://api.groq.com/openai/v1/chat/completions',
-  GEMINI: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-  CLAUDE: 'https://api.anthropic.com/v1/messages',
+// Qwen/Alibaba Cloud API endpoint
+const QWEN_API_ENDPOINT = ‘https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation’;
+
+/**
+
+- Call Qwen (Alibaba Cloud) for code-specialized tasks
+- 
+- Qwen is particularly strong at code generation and technical tasks.
+- We use it as the primary provider for coding requests.
+- 
+- @param {string} message - User message
+- @param {Array} conversation - Conversation history
+- @param {Object} env - Environment bindings
+- @param {string} sessionId - Session identifier
+- @returns {Promise<Object>} Response in OpenAI-compatible format
+  */
+  export async function callQwen(message, conversation, env, sessionId) {
+  // Check if Qwen API key is configured
+  if (!env.QWEN_API_KEY && !env.DASHSCOPE_API_KEY) {
+  console.log(’[Qwen] No API key configured, skipping’);
+  throw new Error(‘Qwen API key not configured’);
+  }
+
+const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
+
+// Build messages array
+const messages = [
+{
+role: ‘system’,
+content: `You are Qwen, a highly capable AI assistant specialized in code generation and technical tasks.
+You excel at:
+
+- Writing clean, efficient, well-documented code
+- Explaining technical concepts clearly
+- Debugging and problem-solving
+- Providing complete, working implementations
+
+When writing code:
+
+- Include helpful comments
+- Handle edge cases
+- Follow best practices for the language
+- Provide usage examples when helpful
+
+Current session: ${sessionId}`
+},
+…conversation.map(m => ({
+role: m.role,
+content: m.content
+})),
+{
+role: ‘user’,
+content: message
+}
+];
+
+console.log(`[Qwen] Calling API with ${messages.length} messages`);
+
+try {
+const response = await fetch(QWEN_API_ENDPOINT, {
+method: ‘POST’,
+headers: {
+‘Authorization’: `Bearer ${apiKey}`,
+‘Content-Type’: ‘application/json’
+},
+body: JSON.stringify({
+model: ‘qwen-max’, // or ‘qwen-plus’, ‘qwen-turbo’
+input: {
+messages: messages
+},
+parameters: {
+result_format: ‘message’,
+max_tokens: 4096,
+temperature: 0.7,
+top_p: 0.8
+}
+})
+});
+
+```
+if (!response.ok) {
+  const errorText = await response.text();
+  console.error(`[Qwen] API error: ${response.status} - ${errorText}`);
+  throw new Error(`Qwen API error: ${response.status}`);
+}
+
+const data = await response.json();
+
+// Check for API-level errors
+if (data.code && data.code !== '200' && data.code !== 'Success') {
+  console.error(`[Qwen] Response error: ${data.code} - ${data.message}`);
+  throw new Error(`Qwen error: ${data.message || data.code}`);
+}
+
+// Extract the response content
+const content = data.output?.choices?.[0]?.message?.content 
+             || data.output?.text 
+             || 'No response generated';
+
+console.log(`[Qwen] Success - ${content.length} chars`);
+
+// Return in OpenAI-compatible format for consistency
+return {
+  choices: [{
+    message: {
+      role: 'assistant',
+      content: content
+    },
+    finish_reason: 'stop'
+  }],
+  usage: data.usage || {},
+  provider: 'qwen'
 };
+```
 
-export async function callGroq(message, conversation, env, sessionId) {
-  const context = await getSharedContext(env.CONTEXT, sessionId);
-
-  const systemPrompt = `You are Omnibot, an AI assistant with access to powerful tools.
-
-SHARED CONTEXT (from previous sessions):
-${JSON.stringify(context, null, 2)}
-
-You can use tools to help users with coding, web research, file management, and more.`;
-
-  const response = await fetch(API_ENDPOINTS.GROQ, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.GROQ_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...conversation,
-        { role: 'user', content: message }
-      ],
-      max_tokens: 2000
-    })
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Groq failed: ${response.status} - ${error}`);
-  }
-
-  return response.json();
+} catch (error) {
+console.error(`[Qwen] Call failed: ${error.message}`);
+throw error;
+}
 }
 
-export async function callGemini(message, conversation, env, sessionId) {
-  const context = await getSharedContext(env.CONTEXT, sessionId);
+/**
 
-  const systemPrompt = `You are Omnibot, an AI assistant.
+- Alternative Qwen implementation using OpenAI-compatible endpoint
+- Some Qwen deployments support the OpenAI API format
+- 
+- @param {string} message - User message
+- @param {Array} conversation - Conversation history
+- @param {Object} env - Environment bindings
+- @param {string} sessionId - Session identifier
+- @returns {Promise<Object>} Response in OpenAI-compatible format
+  */
+  export async function callQwenOpenAI(message, conversation, env, sessionId) {
+  const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
 
-SHARED CONTEXT: ${JSON.stringify(context, null, 2)}`;
-
-  const response = await fetch(`${API_ENDPOINTS.GEMINI}?key=${env.GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        { role: 'user', parts: [{ text: systemPrompt }] },
-        ...conversation.map(m => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }]
-        })),
-        { role: 'user', parts: [{ text: message }] }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(`Gemini failed: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-  }
-
-  const data = await response.json();
-
-  return {
-    choices: [{
-      message: {
-        content: data.candidates[0].content.parts[0].text,
-        role: 'assistant'
-      }
-    }]
-  };
+if (!apiKey) {
+throw new Error(‘Qwen API key not configured’);
 }
 
-export async function callQwen(message, conversation, env, sessionId) {
-  const context = await getSharedContext(env.CONTEXT, sessionId);
+// OpenAI-compatible endpoint (if available)
+const endpoint = env.QWEN_OPENAI_ENDPOINT || ‘https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions’;
 
-  // Determine Qwen endpoint based on environment
-  const isLocal = env.NODE_ENV === 'development';
-  const qwenUrl = isLocal
-    ? 'http://localhost:11434'
-    : env.QWEN_RUNLOOP_URL || 'https://dbx_test.runloop.dev:8000';
+const messages = [
+{
+role: ‘system’,
+content: ‘You are a helpful AI assistant specialized in code generation and technical tasks.’
+},
+…conversation,
+{ role: ‘user’, content: message }
+];
 
-  // Log which Qwen instance is being used
-  console.log(`Using Qwen instance: ${qwenUrl} (${isLocal ? 'local' : 'remote'})`);
+const response = await fetch(endpoint, {
+method: ‘POST’,
+headers: {
+‘Authorization’: `Bearer ${apiKey}`,
+‘Content-Type’: ‘application/json’
+},
+body: JSON.stringify({
+model: ‘qwen-max’,
+messages: messages,
+max_tokens: 4096,
+temperature: 0.7
+})
+});
 
-  // Build conversation context
-  const conversationText = conversation
-    .map(m => `${m.role}: ${m.content}`)
-    .join('\n');
+if (!response.ok) {
+throw new Error(`Qwen OpenAI-compat error: ${response.status}`);
+}
 
-  const systemPrompt = `You are Qwen, a specialized coding AI assistant.
+return response.json();
+}
 
-SHARED CONTEXT (from previous sessions):
-${JSON.stringify(context, null, 2)}
+/**
 
-CONVERSATION HISTORY:
-${conversationText}
-
-You specialize in:
-- Code generation and implementation
-- Debugging and optimization
-- Best practices and patterns
-- Technical explanations
-
-Provide helpful, production-ready code with clear explanations.`;
-
+- Test if Qwen API is available and working
+- 
+- @param {Object} env - Environment bindings
+- @returns {Promise<boolean>} True if Qwen is available
+  */
+  export async function testQwenConnection(env) {
   try {
-    // Try local Qwen first if in development
-    if (isLocal) {
-      try {
-        return await callLocalQwen(message, systemPrompt, qwenUrl);
-      } catch (localError) {
-        console.log(`Local Qwen unavailable: ${localError.message}`);
-
-        // Skip fallback if explicitly disabled (for testing)
-        if (env.DISABLE_QWEN_FALLBACK === 'true') {
-          throw localError;
-        }
-
-        console.log('Falling back to Runloop Qwen...');
-
-        // Fallback to Runloop Qwen
-        const runloopUrl = env.QWEN_RUNLOOP_URL || 'https://dbx_test.runloop.dev:8000';
-        return await callRunloopQwen(message, systemPrompt, runloopUrl);
-      }
-    } else {
-      // Use Runloop Qwen directly in staging/production
-      return await callRunloopQwen(message, systemPrompt, qwenUrl);
-    }
+  const result = await callQwen(‘Say “OK” if you can hear me.’, [], env, ‘test’);
+  return result.choices?.[0]?.message?.content?.includes(‘OK’) ?? false;
   } catch (error) {
-    console.error(`Qwen call failed: ${error.message}`);
-    throw new Error(`Qwen failed: ${error.message}`);
+  console.error(’[Qwen] Connection test failed:’, error.message);
+  return false;
   }
-}
-
-async function callLocalQwen(message, systemPrompt, baseUrl) {
-  // Call local Ollama Qwen
-  const response = await fetch(`${baseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'qwen3-coder:30b',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message }
-      ],
-      stream: false,
-      options: {
-        temperature: 0.7,
-        top_p: 0.9,
-        max_tokens: 2048
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Local Qwen failed: ${response.status} - ${response.statusText}`);
   }
-
-  const data = await response.json();
-
-  return {
-    choices: [{
-      message: {
-        content: data.message?.content || 'No response generated',
-        role: 'assistant'
-      }
-    }]
-  };
-}
-
-async function callRunloopQwen(message, systemPrompt, baseUrl) {
-  // Call Runloop Qwen server
-  const response = await fetch(`${baseUrl}/qwen/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      conversation: [{ role: 'system', content: systemPrompt }],
-      sessionId: 'default'
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Runloop Qwen failed: ${response.status} - ${response.statusText}`);
-  }
-
-  const data = await response.json();
-
-  return {
-    choices: [{
-      message: {
-        content: data.response || 'No response generated',
-        role: 'assistant'
-      }
-    }]
-  };
-}
-
-export async function callClaude(message, conversation, env, sessionId) {
-  const context = await getSharedContext(env.CONTEXT, sessionId);
-
-  const systemPrompt = `You are Omnibot, an AI assistant.
-
-SHARED CONTEXT: ${JSON.stringify(context, null, 2)}`;
-
-  const response = await fetch(API_ENDPOINTS.CLAUDE, {
-    method: 'POST',
-    headers: {
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [...conversation, { role: 'user', content: message }]
-    })
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(`Claude failed: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
-  }
-
-  const data = await response.json();
-
-  return {
-    choices: [{
-      message: {
-        content: data.content[0].text,
-        role: 'assistant'
-      }
-    }]
-  };
-}
