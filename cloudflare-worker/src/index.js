@@ -1,399 +1,448 @@
+/**
+
+- Email-to-GitHub Commit Worker with Gist Logging
+- 
+- Receives emails from Pipedream, commits to GitHub, and logs results to a gist.
+- 
+- Required Environment Variables:
+- - GITHUB_TOKEN: GitHub Personal Access Token with ‘repo’ and ‘gist’ scopes
+- 
+- Gist URL: https://gist.github.com/thejonanshow/625dc743af3e24b82467339bf19589f2
+  */
+
 export default {
-  async fetch(request, env) {
-    const logs = [];
-    const log = (msg) => {
-      const entry = `[${new Date().toISOString()}] ${msg}`;
-      logs.push(entry);
-      console.log(entry);
-    };
+async fetch(request, env) {
+if (request.method !== ‘POST’) {
+return new Response(‘Method not allowed’, { status: 405 });
+}
 
-    // GET = health check (later: serve chat UI)
-    if (request.method === 'GET') {
-      return new Response('Omnibot OK - POST to commit via email', { status: 200 });
-    }
+```
+try {
+  const body = await request.json();
+  const { subject, text } = body;
 
-    if (request.method !== 'POST') {
-      return Response.json({
-        success: false,
-        error: `Method ${request.method} not allowed. Use POST.`,
-        logs
-      }, { status: 405 });
-    }
-
-    let emailData, subject, body;
-
-    try {
-      // Parse incoming request
-      log('Parsing incoming POST request');
-      const contentType = request.headers.get('content-type') || '';
-      log(`Content-Type: ${contentType}`);
-
-      if (contentType.includes('application/json')) {
-        emailData = await request.json();
-      } else if (contentType.includes('multipart/form-data')) {
-        const formData = await request.formData();
-        emailData = Object.fromEntries(formData.entries());
-        log(`Form fields: ${Object.keys(emailData).join(', ')}`);
-      } else {
-        // Try JSON anyway
-        const text = await request.text();
-        log(`Raw body length: ${text.length}`);
-        try {
-          emailData = JSON.parse(text);
-        } catch (e) {
-          emailData = { text };
-        }
-      }
-
-      log(`Email data keys: ${Object.keys(emailData).join(', ')}`);
-
-      // Extract subject and body from various possible formats
-      subject = emailData.subject 
-        || emailData.headers?.subject 
-        || emailData.Subject
-        || '';
-      
-      body = emailData.text 
-        || emailData.plain 
-        || emailData.body
-        || emailData.html 
-        || emailData.Body
-        || emailData.content
-        || '';
-
-      log(`Subject: "${subject}"`);
-      log(`Body length: ${body.length} chars`);
-      log(`Body preview: "${body.substring(0, 200)}${body.length > 200 ? '...' : ''}"`);
-
-    } catch (error) {
-      log(`ERROR parsing request: ${error.message}`);
-      return Response.json({
-        success: false,
-        error: `Failed to parse request: ${error.message}`,
-        logs
-      }, { status: 400 });
-    }
-
-    // Parse commit request from email
-    let commitRequest;
-    try {
-      log('Parsing commit request from email');
-      commitRequest = parseCommitEmail(subject, body, env, log);
-
-      if (!commitRequest) {
-        return Response.json({
-          success: false,
-          error: 'Could not parse subject line',
-          expected: '[COMMIT] repo - message  OR  [COMMIT] owner/repo - message  OR  [COMMIT] owner/repo/branch - message',
-          received: { subject, bodyLength: body.length, bodyPreview: body.substring(0, 500) },
-          logs
-        }, { status: 400 });
-      }
-
-      if (!commitRequest.files?.length) {
-        return Response.json({
-          success: false,
-          error: 'No files found in email body',
-          parsed: {
-            owner: commitRequest.owner,
-            repo: commitRequest.repo,
-            branch: commitRequest.branch,
-            message: commitRequest.message
-          },
-          hints: [
-            'JSON format: {"files":[{"path":"src/index.js","content":"..."}]}',
-            'Simple format: FILE: src/index.js\\n<content>\\n\\nFILE: another.js\\n<content>'
-          ],
-          bodyReceived: body.substring(0, 1000),
-          logs
-        }, { status: 400 });
-      }
-
-      log(`Parsed: ${commitRequest.owner}/${commitRequest.repo}@${commitRequest.branch}`);
-      log(`Message: "${commitRequest.message}"`);
-      log(`Files: ${commitRequest.files.map(f => f.path).join(', ')}`);
-
-    } catch (error) {
-      log(`ERROR parsing commit: ${error.message}`);
-      return Response.json({
-        success: false,
-        error: `Failed to parse commit request: ${error.message}`,
-        logs
-      }, { status: 400 });
-    }
-
-    // Check for GitHub token
-    if (!env.GITHUB_TOKEN) {
-      log('ERROR: GITHUB_TOKEN secret not configured');
-      return Response.json({
-        success: false,
-        error: 'GITHUB_TOKEN secret not configured in Cloudflare worker settings',
-        fix: 'Go to Workers & Pages → omnibot → Settings → Variables → Add secret GITHUB_TOKEN',
-        logs
-      }, { status: 500 });
-    }
-    log('GITHUB_TOKEN is configured');
-
-    // Execute GitHub commit
-    try {
-      log('Starting GitHub commit process');
-      const result = await commitToGitHub(commitRequest, env.GITHUB_TOKEN, log);
-
-      log(`SUCCESS: Committed ${result.sha}`);
-
-      return Response.json({
-        success: true,
-        sha: result.sha,
-        url: result.url,
-        compareUrl: result.compareUrl,
-        committed: {
-          owner: commitRequest.owner,
-          repo: commitRequest.repo,
-          branch: commitRequest.branch,
-          message: commitRequest.message,
-          files: commitRequest.files.map(f => ({ path: f.path, size: f.content.length }))
-        },
-        diff: result.diff,
-        logs
-      });
-
-    } catch (error) {
-      log(`ERROR committing: ${error.message}`);
-      return Response.json({
-        success: false,
-        error: error.message,
-        errorType: error.name,
-        parsed: {
-          owner: commitRequest.owner,
-          repo: commitRequest.repo,
-          branch: commitRequest.branch,
-          message: commitRequest.message,
-          files: commitRequest.files.map(f => f.path)
-        },
-        logs
-      }, { status: 500 });
-    }
+  // Parse commit request from email
+  const commitRequest = parseEmailCommit(subject, text);
+  
+  if (!commitRequest) {
+    await logToGist(env.GITHUB_TOKEN, {
+      timestamp: new Date().toISOString(),
+      status: 'error',
+      error: 'Invalid email format - could not parse commit request',
+      subject,
+      text_preview: text?.substring(0, 100)
+    });
+    
+    return new Response('Invalid email format', { status: 400 });
   }
+
+  console.log('Parsed commit request:', commitRequest);
+
+  // Commit to GitHub
+  const result = await commitToGitHub(commitRequest, env.GITHUB_TOKEN);
+
+  // Log success to gist
+  await logToGist(env.GITHUB_TOKEN, {
+    timestamp: new Date().toISOString(),
+    status: 'success',
+    repository: commitRequest.repo,
+    branch: commitRequest.branch,
+    files: commitRequest.files.map(f => f.path),
+    commit_message: commitRequest.message,
+    commit_sha: result.commit.sha,
+    commit_url: result.commit.html_url
+  });
+
+  return new Response(JSON.stringify({ 
+    success: true,
+    commit: result.commit
+  }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+} catch (error) {
+  console.error('Error processing commit:', error);
+  
+  // Log error to gist
+  await logToGist(env.GITHUB_TOKEN, {
+    timestamp: new Date().toISOString(),
+    status: 'error',
+    error: error.message,
+    stack: error.stack
+  });
+
+  return new Response(JSON.stringify({ 
+    error: error.message 
+  }), {
+    status: 500,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+```
+
+}
 };
 
-function parseCommitEmail(subject, body, env, log) {
-  // Subject: [COMMIT] repo - message
-  // Subject: [COMMIT] owner/repo - message
-  // Subject: [COMMIT] owner/repo/branch - message
+/**
 
-  const match = subject.match(/\[COMMIT\]\s*(.+?)\s*-\s*(.+)/i);
-  if (!match) {
-    log(`Subject does not match pattern: "${subject}"`);
-    return null;
+- Parse commit request from email subject and body
+- 
+- Subject format: [COMMIT] owner/repo/branch - Commit message
+- or: [COMMIT] repo - Commit message (uses default owner)
+- 
+- Body format (COMMIT_REQUEST style):
+- COMMIT_REQUEST
+- Repository: owner/repo
+- Branch: main
+- File: path/to/file
+- Action: update
+- 
+- — FILE CONTENT START —
+- content here
+- — FILE CONTENT END —
+- 
+- Commit Message: message
+  */
+  function parseEmailCommit(subject, text) {
+  // Check for [COMMIT] or [OMNIBOT-COMMIT] in subject
+  if (!subject || (!subject.includes(’[COMMIT]’) && !subject.includes(’[OMNIBOT-COMMIT]’))) {
+  return null;
   }
 
-  const pathPart = match[1].trim();
-  const message = match[2].trim();
-  const parts = pathPart.split('/');
+// Try COMMIT_REQUEST format first
+if (text && text.includes(‘COMMIT_REQUEST’)) {
+return parseCommitRequestFormat(text);
+}
 
-  let owner, repo, branch;
-  if (parts.length >= 3) {
-    owner = parts[0];
-    repo = parts[1];
-    branch = parts.slice(2).join('/');
-  } else if (parts.length === 2) {
-    owner = parts[0];
-    repo = parts[1];
-    branch = 'main';
+// Fall back to subject-based parsing
+return parseSubjectFormat(subject, text);
+}
+
+/**
+
+- Parse COMMIT_REQUEST format from email body
+  */
+  function parseCommitRequestFormat(body) {
+  const lines = body.split(’\n’);
+
+const data = {
+owner: ‘thejonanshow’,
+repo: null,
+branch: ‘main’,
+files: [],
+message: null
+};
+
+let inContent = false;
+let currentFile = null;
+let contentLines = [];
+
+for (let i = 0; i < lines.length; i++) {
+const line = lines[i].trim();
+
+```
+if (line.includes('--- FILE CONTENT START ---')) {
+  inContent = true;
+  contentLines = [];
+  continue;
+}
+
+if (line.includes('--- FILE CONTENT END ---')) {
+  inContent = false;
+  if (currentFile) {
+    data.files.push({
+      path: currentFile,
+      content: contentLines.join('\n')
+    });
+    currentFile = null;
+  }
+  continue;
+}
+
+if (inContent) {
+  contentLines.push(lines[i]); // Keep original line with indentation
+  continue;
+}
+
+if (line.startsWith('Repository:')) {
+  const repo = line.split('Repository:')[1].trim();
+  if (repo.includes('/')) {
+    const parts = repo.split('/');
+    data.owner = parts[0];
+    data.repo = parts[1];
   } else {
-    owner = env.DEFAULT_OWNER || 'thejonanshow';
-    repo = parts[0];
-    branch = 'main';
+    data.repo = repo;
   }
+} else if (line.startsWith('Branch:')) {
+  data.branch = line.split('Branch:')[1].trim();
+} else if (line.startsWith('File:')) {
+  currentFile = line.split('File:')[1].trim();
+} else if (line.startsWith('Commit Message:')) {
+  data.message = line.split('Commit Message:')[1].trim();
+}
+```
 
-  log(`Parsed path: owner=${owner}, repo=${repo}, branch=${branch}`);
-
-  const files = parseFiles(body, log);
-  return { owner, repo, branch, message, files };
 }
 
-function parseFiles(body, log) {
-  // Try JSON format first: { "files": [{ "path": "...", "content": "..." }] }
-  try {
-    const jsonMatch = body.match(/\{[\s\S]*"files"[\s\S]*\}/);
-    if (jsonMatch) {
-      log('Found JSON files block');
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed.files) && parsed.files.length > 0) {
-        log(`Parsed ${parsed.files.length} files from JSON`);
-        return parsed.files;
-      }
-    }
-  } catch (e) {
-    log(`JSON parse failed: ${e.message}`);
-  }
+if (!data.repo || data.files.length === 0 || !data.message) {
+return null;
+}
 
-  // Try simple format: FILE: path\ncontent\n\nFILE: path2\ncontent2
+return data;
+}
+
+/**
+
+- Parse commit info from subject line
+- Format: [COMMIT] owner/repo/branch - Commit message
+  */
+  function parseSubjectFormat(subject, body) {
+  const match = subject.match(/[(?:OMNIBOT-)?COMMIT]\s*(.+?)\s*-\s*(.+)/i);
+  if (!match) return null;
+
+const pathPart = match[1].trim();
+const message = match[2].trim();
+
+const parts = pathPart.split(’/’);
+let owner, repo, branch;
+
+if (parts.length >= 3) {
+owner = parts[0];
+repo = parts[1];
+branch = parts.slice(2).join(’/’);
+} else if (parts.length === 2) {
+owner = parts[0];
+repo = parts[1];
+branch = ‘main’;
+} else {
+owner = ‘thejonanshow’;
+repo = parts[0];
+branch = ‘main’;
+}
+
+// Parse files from body
+const files = parseFilesFromBody(body);
+if (files.length === 0) {
+return null;
+}
+
+return { owner, repo, branch, message, files };
+}
+
+/**
+
+- Parse files from email body
+- Supports multiple formats
+  */
+  function parseFilesFromBody(body) {
   const files = [];
-  const blocks = body.split(/^FILE:\s*/m).slice(1);
-  log(`Found ${blocks.length} FILE: blocks`);
-  
-  for (const block of blocks) {
-    const lines = block.split('\n');
-    const path = lines[0].trim();
-    const content = lines.slice(1).join('\n').trim();
-    if (path && content) {
-      files.push({ path, content });
-      log(`Parsed file: ${path} (${content.length} chars)`);
-    }
-  }
 
-  if (files.length === 0) {
-    log('No files parsed from body');
-  }
-
-  return files;
+// Try JSON format
+try {
+const jsonMatch = body.match(/{[\s\S]*“files”[\s\S]*}/);
+if (jsonMatch) {
+const parsed = JSON.parse(jsonMatch[0]);
+if (Array.isArray(parsed.files)) {
+return parsed.files;
+}
+}
+} catch (e) {
+// Not JSON, continue to other formats
 }
 
-async function commitToGitHub(request, token, log) {
+// Try: FILE: path\ncontent\n\nFILE: path2\ncontent2
+const blocks = body.split(/^FILE:\s*/m).slice(1);
+for (const block of blocks) {
+const blockLines = block.split(’\n’);
+const path = blockLines[0].trim();
+const content = blockLines.slice(1).join(’\n’).trim();
+if (path && content) {
+files.push({ path, content });
+}
+}
+
+return files;
+}
+
+/**
+
+- Commit files to GitHub using the GitHub API
+  */
+  async function commitToGitHub(request, token) {
   const { owner, repo, branch, message, files } = request;
   const baseUrl = `https://api.github.com/repos/${owner}/${repo}`;
   const headers = {
-    'Authorization': `token ${token}`,
-    'Accept': 'application/vnd.github.v3+json',
-    'User-Agent': 'Omnibot-Email-Commit'
+  ‘Authorization’: `Bearer ${token}`,
+  ‘Accept’: ‘application/vnd.github.v3+json’,
+  ‘User-Agent’: ‘Email-Commit-Worker’
   };
 
-  // Get branch ref
-  log(`Fetching ref for ${branch}`);
-  const refRes = await fetch(`${baseUrl}/git/ref/heads/${branch}`, { headers });
-  if (!refRes.ok) {
-    const error = await refRes.text();
-    throw new Error(`Branch '${branch}' not found: ${error}`);
+// Get current branch reference
+const refRes = await fetch(`${baseUrl}/git/ref/heads/${branch}`, { headers });
+if (!refRes.ok) {
+throw new Error(`Branch not found: ${branch}`);
+}
+const refData = await refRes.json();
+const baseSha = refData.object.sha;
+
+// Get base commit
+const commitRes = await fetch(`${baseUrl}/git/commits/${baseSha}`, { headers });
+if (!commitRes.ok) {
+throw new Error(`Failed to get commit: ${baseSha}`);
+}
+const commitData = await commitRes.json();
+const baseTreeSha = commitData.tree.sha;
+
+// Create blobs for each file
+const treeItems = [];
+for (const file of files) {
+const blobRes = await fetch(`${baseUrl}/git/blobs`, {
+method: ‘POST’,
+headers: { …headers, ‘Content-Type’: ‘application/json’ },
+body: JSON.stringify({
+content: file.content,
+encoding: ‘utf-8’
+})
+});
+
+```
+if (!blobRes.ok) {
+  const error = await blobRes.text();
+  throw new Error(`Failed to create blob for ${file.path}: ${error}`);
+}
+
+const blob = await blobRes.json();
+treeItems.push({ 
+  path: file.path, 
+  mode: '100644', 
+  type: 'blob', 
+  sha: blob.sha 
+});
+```
+
+}
+
+// Create new tree
+const treeRes = await fetch(`${baseUrl}/git/trees`, {
+method: ‘POST’,
+headers: { …headers, ‘Content-Type’: ‘application/json’ },
+body: JSON.stringify({
+base_tree: baseTreeSha,
+tree: treeItems
+})
+});
+
+if (!treeRes.ok) {
+const error = await treeRes.text();
+throw new Error(`Failed to create tree: ${error}`);
+}
+
+const tree = await treeRes.json();
+
+// Create new commit
+const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
+method: ‘POST’,
+headers: { …headers, ‘Content-Type’: ‘application/json’ },
+body: JSON.stringify({
+message,
+tree: tree.sha,
+parents: [baseSha]
+})
+});
+
+if (!newCommitRes.ok) {
+const error = await newCommitRes.text();
+throw new Error(`Failed to create commit: ${error}`);
+}
+
+const newCommit = await newCommitRes.json();
+
+// Update branch reference
+const updateRefRes = await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
+method: ‘PATCH’,
+headers: { …headers, ‘Content-Type’: ‘application/json’ },
+body: JSON.stringify({
+sha: newCommit.sha
+})
+});
+
+if (!updateRefRes.ok) {
+const error = await updateRefRes.text();
+throw new Error(`Failed to update ref: ${error}`);
+}
+
+return {
+commit: {
+sha: newCommit.sha,
+html_url: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`
+}
+};
+}
+
+/**
+
+- Append log entry to the commit log gist
+- Gist ID: 625dc743af3e24b82467339bf19589f2
+  */
+  async function logToGist(token, logEntry) {
+  const gistId = ‘625dc743af3e24b82467339bf19589f2’;
+  const filename = ‘omnibot-commit-log.json’;
+
+const headers = {
+‘Authorization’: `Bearer ${token}`,
+‘Accept’: ‘application/vnd.github.v3+json’,
+‘User-Agent’: ‘Email-Commit-Worker’
+};
+
+try {
+// Get current gist content
+const getRes = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
+if (!getRes.ok) {
+console.error(‘Failed to fetch gist:’, await getRes.text());
+return;
+}
+
+```
+const gist = await getRes.json();
+let logs = [];
+
+// Parse existing logs
+if (gist.files[filename]) {
+  try {
+    logs = JSON.parse(gist.files[filename].content);
+  } catch (e) {
+    console.error('Failed to parse existing logs:', e);
+    logs = [];
   }
-  const refData = await refRes.json();
-  const baseSha = refData.object.sha;
-  log(`Base commit: ${baseSha}`);
+}
 
-  // Get current commit tree
-  log('Fetching current commit tree');
-  const commitRes = await fetch(`${baseUrl}/git/commits/${baseSha}`, { headers });
-  if (!commitRes.ok) throw new Error('Failed to get current commit');
-  const commitData = await commitRes.json();
-  const baseTreeSha = commitData.tree.sha;
-  log(`Base tree: ${baseTreeSha}`);
+// Append new log entry
+logs.push(logEntry);
 
-  // Get old file contents for diff
-  const oldContents = {};
-  for (const file of files) {
-    try {
-      log(`Fetching old content: ${file.path}`);
-      const oldFileRes = await fetch(`${baseUrl}/contents/${file.path}?ref=${branch}`, { headers });
-      if (oldFileRes.ok) {
-        const oldFileData = await oldFileRes.json();
-        oldContents[file.path] = atob(oldFileData.content.replace(/\n/g, ''));
-        log(`Old file ${file.path}: ${oldContents[file.path].length} chars`);
-      } else {
-        oldContents[file.path] = null; // New file
-        log(`File ${file.path} is new`);
+// Keep only last 100 entries
+if (logs.length > 100) {
+  logs = logs.slice(-100);
+}
+
+// Update gist
+const updateRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+  method: 'PATCH',
+  headers: { ...headers, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    files: {
+      [filename]: {
+        content: JSON.stringify(logs, null, 2)
       }
-    } catch (e) {
-      oldContents[file.path] = null;
-      log(`Could not fetch old ${file.path}: ${e.message}`);
     }
-  }
+  })
+});
 
-  // Create blobs for each file
-  const treeItems = [];
-  for (const file of files) {
-    log(`Creating blob: ${file.path}`);
-    const blobRes = await fetch(`${baseUrl}/git/blobs`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: file.content, encoding: 'utf-8' })
-    });
-    if (!blobRes.ok) {
-      const error = await blobRes.text();
-      throw new Error(`Failed to create blob for ${file.path}: ${error}`);
-    }
-    const blob = await blobRes.json();
-    treeItems.push({ path: file.path, mode: '100644', type: 'blob', sha: blob.sha });
-    log(`Blob created: ${blob.sha}`);
-  }
+if (!updateRes.ok) {
+  console.error('Failed to update gist:', await updateRes.text());
+}
+```
 
-  // Create new tree
-  log('Creating new tree');
-  const treeRes = await fetch(`${baseUrl}/git/trees`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base_tree: baseTreeSha, tree: treeItems })
-  });
-  if (!treeRes.ok) {
-    const error = await treeRes.text();
-    throw new Error(`Failed to create tree: ${error}`);
-  }
-  const tree = await treeRes.json();
-  log(`New tree: ${tree.sha}`);
-
-  // Create commit
-  log('Creating commit');
-  const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, tree: tree.sha, parents: [baseSha] })
-  });
-  if (!newCommitRes.ok) {
-    const error = await newCommitRes.text();
-    throw new Error(`Failed to create commit: ${error}`);
-  }
-  const newCommit = await newCommitRes.json();
-  log(`New commit: ${newCommit.sha}`);
-
-  // Update branch ref
-  log('Updating branch ref');
-  const updateRes = await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
-    method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sha: newCommit.sha })
-  });
-  if (!updateRes.ok) {
-    const error = await updateRes.text();
-    throw new Error(`Failed to update ref: ${error}`);
-  }
-  log('Branch ref updated');
-
-  // Generate diff summary
-  const diff = files.map(file => {
-    const oldContent = oldContents[file.path];
-    const newContent = file.content;
-    
-    if (oldContent === null) {
-      return {
-        path: file.path,
-        status: 'added',
-        additions: newContent.split('\n').length,
-        deletions: 0,
-        preview: newContent.substring(0, 500) + (newContent.length > 500 ? '...' : '')
-      };
-    }
-
-    const oldLines = oldContent.split('\n');
-    const newLines = newContent.split('\n');
-    
-    // Simple line-based diff
-    const added = newLines.filter(l => !oldLines.includes(l)).length;
-    const removed = oldLines.filter(l => !newLines.includes(l)).length;
-
-    return {
-      path: file.path,
-      status: 'modified',
-      additions: added,
-      deletions: removed,
-      oldSize: oldContent.length,
-      newSize: newContent.length,
-      sizeDelta: newContent.length - oldContent.length
-    };
-  });
-
-  return {
-    sha: newCommit.sha,
-    url: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`,
-    compareUrl: `https://github.com/${owner}/${repo}/compare/${baseSha.substring(0, 7)}...${newCommit.sha.substring(0, 7)}`,
-    diff
-  };
+} catch (error) {
+console.error(‘Error logging to gist:’, error);
+}
 }
