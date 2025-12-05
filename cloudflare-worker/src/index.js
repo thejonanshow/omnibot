@@ -139,7 +139,7 @@ let contentLines = [];
 for (let i = 0; i < lines.length; i++) {
 const line = lines[i].trim();
 
-```
+
 if (line.includes('--- FILE CONTENT START ---')) {
   inContent = true;
   contentLines = [];
@@ -179,7 +179,6 @@ if (line.startsWith('Repository:')) {
 } else if (line.startsWith('Commit Message:')) {
   data.message = line.split('Commit Message:')[1].trim();
 }
-```
 
 }
 
@@ -304,7 +303,7 @@ encoding: ‘utf-8’
 })
 });
 
-```
+
 if (!blobRes.ok) {
   const error = await blobRes.text();
   throw new Error(`Failed to create blob for ${file.path}: ${error}`);
@@ -317,7 +316,7 @@ treeItems.push({
   type: 'blob', 
   sha: blob.sha 
 });
-```
+
 
 }
 
@@ -401,7 +400,7 @@ console.error(‘Failed to fetch gist:’, await getRes.text());
 return;
 }
 
-```
+
 const gist = await getRes.json();
 let logs = [];
 
@@ -439,7 +438,6 @@ const updateRes = await fetch(`https://api.github.com/gists/${gistId}`, {
 if (!updateRes.ok) {
   console.error('Failed to update gist:', await updateRes.text());
 }
-```
 
 } catch (error) {
 console.error(‘Error logging to gist:’, error);
