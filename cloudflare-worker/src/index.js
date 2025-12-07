@@ -1,15 +1,7 @@
 /**
- * OmniBot v3 - Smarter Self-Edit
- * Uses targeted editing instead of full file replacement
+ * OmniBot v4 - Claude-powered self-edit
+ * Uses Claude for code edits (most reliable), Llama for chat
  */
-
-const PROVIDERS = {
-  gemini: { url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', format: 'gemini' },
-  groq_llama: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', format: 'openai' },
-  groq_qwen: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'qwen/qwen3-32b', format: 'openai' },
-  openai: { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', format: 'openai' },
-  claude: { url: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-4-20250514', format: 'anthropic' }
-};
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
 
@@ -30,186 +22,116 @@ async function githubPut(path, content, message, env) {
   return res.json();
 }
 
-class SharedContext {
-  constructor(kv, sessionId) { this.kv = kv; this.sessionId = sessionId; this.data = { history: [], edits: [] }; }
-  async load() { const s = await this.kv.get(`session:${this.sessionId}`, 'json'); if (s) this.data = s; return this.data; }
-  async save() { await this.kv.put(`session:${this.sessionId}`, JSON.stringify(this.data), { expirationTtl: 86400 }); }
-  async addEdit(info) { this.data.edits.push({ ...info, ts: Date.now() }); await this.save(); }
+async function callGroq(messages, env, model = 'llama-3.3-70b-versatile') {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages, max_tokens: 4096, temperature: 0.3 })
+  });
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || data.error?.message || 'Error';
 }
 
-async function callProvider(provider, messages, env, systemPrompt = null) {
-  const config = PROVIDERS[provider];
-  const fullMessages = systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages;
-  
-  try {
-    if (config.format === 'gemini') {
-      const res = await fetch(`${config.url}?key=${env.GEMINI_API_KEY}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: fullMessages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) })
-      });
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data.error);
-    }
-    
-    if (config.format === 'openai') {
-      const key = provider.startsWith('groq') ? env.GROQ_API_KEY : env.OPENAI_API_KEY;
-      const res = await fetch(config.url, {
-        method: 'POST', headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, messages: fullMessages, max_tokens: 8192, temperature: 0.1 })
-      });
-      const data = await res.json();
-      let content = data.choices?.[0]?.message?.content || JSON.stringify(data.error);
-      return content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-    }
-    
-    if (config.format === 'anthropic') {
-      const res = await fetch(config.url, {
-        method: 'POST',
-        headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: config.model, max_tokens: 8192, system: systemPrompt || '', messages })
-      });
-      const data = await res.json();
-      return data.content?.[0]?.text || JSON.stringify(data.error);
-    }
-  } catch (e) { return `Error: ${e.message}`; }
+async function callClaude(messages, env, system = '') {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 
+      'x-api-key': env.ANTHROPIC_API_KEY, 
+      'Content-Type': 'application/json', 
+      'anthropic-version': '2023-06-01' 
+    },
+    body: JSON.stringify({ 
+      model: 'claude-sonnet-4-20250514', 
+      max_tokens: 16000,
+      system,
+      messages 
+    })
+  });
+  const data = await res.json();
+  return data.content?.[0]?.text || data.error?.message || 'Error';
 }
 
-async function smartSelfEdit(instruction, env, ctx) {
+async function selfEdit(instruction, env) {
   // Get current code
-  const currentFile = await githubGet('cloudflare-worker/src/index.js', env);
-  if (!currentFile.content) return { success: false, error: 'Could not read code', details: currentFile };
+  const file = await githubGet('cloudflare-worker/src/index.js', env);
+  if (!file.content) return { success: false, error: 'Could not read code' };
   
-  const currentCode = decodeURIComponent(escape(atob(currentFile.content)));
+  const currentCode = decodeURIComponent(escape(atob(file.content)));
   
-  // Step 1: Ask AI to identify what needs to change and generate the new code
-  const editPrompt = `You are a code modification assistant. You MUST make the requested change.
+  // Use Claude for editing - it follows instructions precisely
+  const system = `You are a code editor. Your ONLY job is to modify JavaScript code according to instructions.
 
-CURRENT CODE:
-\`\`\`javascript
+RULES:
+1. Output ONLY the complete modified JavaScript file
+2. NO markdown code fences (\`\`\`)
+3. NO explanations or commentary before or after the code
+4. NO placeholder comments like "// TODO" or "// Add code here"
+5. Actually implement the requested functionality with real, working code
+6. Start your response with the very first character of the code
+7. Preserve all existing functionality unless told to remove it`;
+
+  const userMsg = `Here is the current code:
+
 ${currentCode}
-\`\`\`
 
-REQUESTED CHANGE:
-${instruction}
+INSTRUCTION: ${instruction}
 
-YOUR TASK:
-1. Identify where in the code the change needs to be made
-2. Generate the COMPLETE new version of the file with the change implemented
-3. You MUST actually implement new functionality, not just add comments
+Output the complete modified code with the change implemented. Start directly with the code, no preamble.`;
 
-CRITICAL RULES:
-- Output ONLY the complete modified JavaScript code
-- NO markdown fences, NO explanations before or after
-- The change MUST be functional, not just comments or whitespace
-- If adding a button, add actual HTML and JavaScript for it
-- If adding an endpoint, add the actual route handler
-- Start directly with the first line of code
-
-OUTPUT THE COMPLETE MODIFIED CODE NOW:`;
-
-  const newCode = await callProvider('groq_llama', [{ role: 'user', content: editPrompt }], env);
+  const newCode = await callClaude([{ role: 'user', content: userMsg }], env, system);
   
-  // Clean the response
+  // Clean response
   let cleanCode = newCode.trim();
   if (cleanCode.startsWith('```')) {
     cleanCode = cleanCode.replace(/^```(?:javascript|js)?\n?/i, '').replace(/\n?```$/i, '').trim();
   }
-  // Remove any preamble text before the actual code
-  const codeStart = cleanCode.search(/^(\/\*\*|\/\/|const |let |var |import |export |async |function )/m);
-  if (codeStart > 0) {
-    cleanCode = cleanCode.slice(codeStart);
+  
+  // Validate
+  if (!cleanCode.includes('export default')) {
+    return { success: false, error: 'Invalid code - missing export', preview: cleanCode.slice(0, 300) };
   }
   
-  // Validate it's actual code
-  if (!cleanCode.includes('export default') && !cleanCode.includes('addEventListener')) {
-    return { success: false, error: 'Response is not valid worker code', preview: cleanCode.slice(0, 500) };
+  if (cleanCode.length < 1000) {
+    return { success: false, error: 'Code too short - likely truncated', length: cleanCode.length };
   }
   
-  // Check if meaningful change was made (more than just whitespace)
-  const normalizedOld = currentCode.replace(/\s+/g, ' ').trim();
-  const normalizedNew = cleanCode.replace(/\s+/g, ' ').trim();
+  // Check for actual changes
+  const oldNorm = currentCode.replace(/\s+/g, '');
+  const newNorm = cleanCode.replace(/\s+/g, '');
   
-  if (normalizedOld === normalizedNew) {
-    // AI didn't make any real changes - retry with Claude which is better at this
-    const retryPrompt = `The previous attempt to modify the code failed - no meaningful changes were made.
-
-CURRENT CODE (${currentCode.length} chars):
-\`\`\`javascript
-${currentCode}
-\`\`\`
-
-INSTRUCTION: ${instruction}
-
-You MUST implement this change. This is not optional. Add actual functional code.
-If the instruction asks for a button, add <button> HTML and onclick handler.
-If the instruction asks for an endpoint, add an if statement in the fetch handler.
-
-Output ONLY the complete modified JavaScript code. No explanations.`;
-
-    const retryCode = await callProvider('claude', [{ role: 'user', content: retryPrompt }], env,
-      'You are a code editor. You must make the requested change. Output only code.');
-    
-    cleanCode = retryCode.trim().replace(/^```(?:javascript|js)?\n?/i, '').replace(/\n?```$/i, '').trim();
-    
-    const retryNormalized = cleanCode.replace(/\s+/g, ' ').trim();
-    if (normalizedOld === retryNormalized) {
-      return { success: false, error: 'Both Llama and Claude failed to make changes', instruction };
-    }
+  if (oldNorm === newNorm) {
+    return { success: false, error: 'No changes detected - Claude returned identical code' };
   }
   
-  // Find what actually changed
-  const diff = findDiff(currentCode, cleanCode);
+  // Compute diff summary
+  const oldLines = new Set(currentCode.split('\n').map(l => l.trim()).filter(l => l.length > 3));
+  const newLines = new Set(cleanCode.split('\n').map(l => l.trim()).filter(l => l.length > 3));
+  const added = [...newLines].filter(l => !oldLines.has(l));
+  const removed = [...oldLines].filter(l => !newLines.has(l));
   
   // Commit
-  const commitMsg = `[OmniBot] ${instruction.slice(0, 60)}`;
-  const result = await githubPut('cloudflare-worker/src/index.js', cleanCode, commitMsg, env);
+  const result = await githubPut('cloudflare-worker/src/index.js', cleanCode, `[OmniBot] ${instruction.slice(0, 50)}`, env);
   
   if (result.commit) {
-    await ctx.addEdit({ instruction, diff, commit: result.commit.sha });
-    
     return {
       success: true,
       commit: result.commit.sha,
-      commitUrl: result.commit.html_url,
-      changes: diff,
-      beforeSize: currentCode.length,
-      afterSize: cleanCode.length,
-      message: `Implemented: ${instruction.slice(0, 100)}`
+      url: result.commit.html_url,
+      before: currentCode.length,
+      after: cleanCode.length,
+      linesAdded: added.length,
+      linesRemoved: removed.length,
+      sampleChanges: added.slice(0, 5).map(l => l.slice(0, 80))
     };
   }
   
-  return { success: false, error: result.message || 'GitHub API error', details: result };
+  return { success: false, error: result.message || 'GitHub error' };
 }
 
-function findDiff(oldCode, newCode) {
-  const oldLines = oldCode.split('\n');
-  const newLines = newCode.split('\n');
-  
-  const added = [];
-  const removed = [];
-  
-  // Simple diff - find lines that are different
-  const oldSet = new Set(oldLines.map(l => l.trim()).filter(l => l));
-  const newSet = new Set(newLines.map(l => l.trim()).filter(l => l));
-  
-  for (const line of newSet) {
-    if (!oldSet.has(line) && line.length > 5) {
-      added.push(line.slice(0, 100));
-    }
-  }
-  
-  for (const line of oldSet) {
-    if (!newSet.has(line) && line.length > 5) {
-      removed.push(line.slice(0, 100));
-    }
-  }
-  
-  return {
-    linesAdded: added.length,
-    linesRemoved: removed.length,
-    sampleAdded: added.slice(0, 5),
-    sampleRemoved: removed.slice(0, 3)
-  };
+class Context {
+  constructor(kv, id) { this.kv = kv; this.id = id; this.data = { history: [] }; }
+  async load() { const d = await this.kv.get(`s:${this.id}`, 'json'); if (d) this.data = d; }
+  async save() { await this.kv.put(`s:${this.id}`, JSON.stringify(this.data), { expirationTtl: 86400 }); }
 }
 
 export default {
@@ -219,8 +141,8 @@ export default {
     
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     
-    const sessionId = url.searchParams.get('session') || crypto.randomUUID();
-    const ctx = new SharedContext(env.CONTEXT, sessionId);
+    const sid = url.searchParams.get('s') || crypto.randomUUID();
+    const ctx = new Context(env.CONTEXT, sid);
     await ctx.load();
     
     if (url.pathname === '/' || url.pathname === '/chat') {
@@ -228,71 +150,41 @@ export default {
     }
     
     if (url.pathname === '/api/health') {
-      return new Response(JSON.stringify({ status: 'ok', version: '3.0', timestamp: Date.now() }), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
-      });
-    }
-    
-    if (url.pathname === '/api/context') {
-      return new Response(JSON.stringify({ session: sessionId, context: ctx.data }), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+      return new Response(JSON.stringify({ ok: true, v: '4.0' }), { headers: { ...cors, 'Content-Type': 'application/json' } });
     }
     
     if (url.pathname === '/api/chat' && request.method === 'POST') {
-      try {
-        const { messages, provider = 'groq_llama' } = await request.json();
-        const response = await callProvider(provider, messages, env, 'You are OmniBot, a helpful AI.');
-        return new Response(JSON.stringify({ content: response, session: sessionId }), {
-          headers: { ...cors, 'Content-Type': 'application/json' }
-        });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
-      }
+      const { messages } = await request.json();
+      const reply = await callGroq(messages, env);
+      return new Response(JSON.stringify({ content: reply }), { headers: { ...cors, 'Content-Type': 'application/json' } });
     }
     
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
       try {
         const { instruction } = await request.json();
-        if (!instruction || instruction.length < 10) {
-          return new Response(JSON.stringify({ success: false, error: 'Instruction too short' }), {
-            headers: { ...cors, 'Content-Type': 'application/json' }
-          });
-        }
+        if (!instruction) return new Response(JSON.stringify({ success: false, error: 'No instruction' }), { headers: { ...cors, 'Content-Type': 'application/json' } });
         
-        const result = await smartSelfEdit(instruction, env, ctx);
-        return new Response(JSON.stringify(result), {
-          headers: { ...cors, 'Content-Type': 'application/json' }
-        });
+        const result = await selfEdit(instruction, env);
+        return new Response(JSON.stringify(result), { headers: { ...cors, 'Content-Type': 'application/json' } });
       } catch (e) {
-        return new Response(JSON.stringify({ error: e.message, stack: e.stack }), {
-          status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-        });
+        return new Response(JSON.stringify({ success: false, error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
     }
     
     if (url.pathname === '/api/read' && request.method === 'POST') {
       const { path } = await request.json();
-      const file = await githubGet(path, env);
-      if (file.content) {
-        return new Response(JSON.stringify({ success: true, content: decodeURIComponent(escape(atob(file.content))) }), {
-          headers: { ...cors, 'Content-Type': 'application/json' }
-        });
-      }
-      return new Response(JSON.stringify({ success: false, error: file.message }), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+      const f = await githubGet(path, env);
+      if (f.content) return new Response(JSON.stringify({ ok: true, content: decodeURIComponent(escape(atob(f.content))) }), { headers: { ...cors, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ ok: false, error: f.message }), { headers: { ...cors, 'Content-Type': 'application/json' } });
     }
     
     if (url.pathname === '/api/write' && request.method === 'POST') {
       const { path, content, message } = await request.json();
-      const result = await githubPut(path, content, message || '[OmniBot] Update', env);
-      return new Response(JSON.stringify(result.commit ? { success: true, commit: result.commit.sha } : { success: false, error: result.message }), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
-      });
+      const r = await githubPut(path, content, message || 'Update', env);
+      return new Response(JSON.stringify(r.commit ? { ok: true, sha: r.commit.sha } : { ok: false, error: r.message }), { headers: { ...cors, 'Content-Type': 'application/json' } });
     }
     
-    return new Response('OmniBot v3 API\n\n/api/chat\n/api/self-edit\n/api/read\n/api/write\n/api/health\n/api/context', { headers: cors });
+    return new Response('OmniBot v4\n\n/api/chat POST\n/api/self-edit POST\n/api/read POST\n/api/write POST\n/api/health GET', { headers: cors });
   }
 };
 
@@ -301,120 +193,103 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>OmniBot v3</title>
+<title>OmniBot</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column}
-.header{padding:10px 14px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.header h1{font-size:15px;font-weight:600}
-.mode-toggle{display:flex;gap:3px;margin-left:auto}
-.mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
-.mode-btn.active{background:#238636;border-color:#238636;color:#fff}
-.status{font-size:9px;padding:3px 6px;border-radius:8px;background:#238636;color:#fff;margin-left:8px}
-.status.loading{background:#9e6a03}
-.messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
-.msg{max-width:92%;padding:10px 14px;border-radius:14px;line-height:1.5;white-space:pre-wrap;font-size:13px;word-break:break-word}
-.msg-user{align-self:flex-end;background:#238636;border-radius:14px 14px 4px 14px}
-.msg-bot{align-self:flex-start;background:#21262d;border:1px solid #30363d;border-radius:14px 14px 14px 4px}
-.msg a{color:#58a6ff}
-.diff{background:#161b22;padding:8px;border-radius:6px;margin-top:8px;font-family:monospace;font-size:11px}
-.diff-add{color:#3fb950}
-.diff-rem{color:#f85149}
-.input-area{padding:10px;background:#161b22;border-top:1px solid #30363d;display:flex;gap:8px}
-.input-area textarea{flex:1;padding:10px 14px;border-radius:10px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:14px;outline:none;resize:none;min-height:44px;max-height:150px;font-family:inherit}
-.input-area button{padding:10px 18px;border-radius:10px;border:none;background:#238636;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
-.input-area button:disabled{background:#21262d;color:#484f58}
-.warn{background:#9e6a03;color:#fff;padding:8px 14px;font-size:11px;text-align:center;display:none}
-.warn.show{display:block}
+.hdr{padding:10px 14px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:8px}
+.hdr h1{font-size:15px}
+.tabs{display:flex;gap:3px;margin-left:auto}
+.tab{padding:4px 10px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:11px;cursor:pointer}
+.tab.on{background:#238636;border-color:#238636;color:#fff}
+.st{font-size:9px;padding:3px 8px;border-radius:8px;background:#238636;color:#fff;margin-left:8px}
+.st.ld{background:#9e6a03}
+.warn{background:#9e6a03;color:#fff;padding:6px;font-size:11px;text-align:center;display:none}
+.warn.on{display:block}
+.msgs{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:90%;padding:10px 14px;border-radius:14px;line-height:1.5;white-space:pre-wrap;font-size:13px;word-break:break-word}
+.m.u{align-self:flex-end;background:#238636;border-radius:14px 14px 4px 14px}
+.m.b{align-self:flex-start;background:#21262d;border:1px solid #30363d;border-radius:14px 14px 14px 4px}
+.m a{color:#58a6ff}
+.inp{padding:10px;background:#161b22;border-top:1px solid #30363d;display:flex;gap:8px}
+.inp textarea{flex:1;padding:10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:14px;resize:none;min-height:42px;max-height:120px;font-family:inherit;outline:none}
+.inp button{padding:10px 16px;border-radius:8px;border:none;background:#238636;color:#fff;font-weight:600;cursor:pointer}
+.inp button:disabled{background:#21262d;color:#484f58}
 </style>
 </head>
 <body>
-<div class="header">
+<div class="hdr">
 <span style="font-size:18px">🤖</span>
-<h1>OmniBot v3</h1>
-<div class="mode-toggle">
-<button class="mode-btn active" data-mode="chat">Chat</button>
-<button class="mode-btn" data-mode="edit">Self-Edit</button>
+<h1>OmniBot</h1>
+<div class="tabs">
+<button class="tab on" data-m="chat">Chat</button>
+<button class="tab" data-m="edit">Edit</button>
 </div>
-<div class="status" id="status">Ready</div>
+<div class="st" id="st">Ready</div>
 </div>
-<div class="warn" id="warn">⚠️ Self-Edit: AI will modify its source code</div>
-<div class="messages" id="messages"></div>
-<div class="input-area">
-<textarea id="input" placeholder="Message..." rows="1"></textarea>
-<button id="send">Send</button>
+<div class="warn" id="warn">⚠️ Self-Edit Mode: Claude will modify the source code</div>
+<div class="msgs" id="msgs"></div>
+<div class="inp">
+<textarea id="inp" placeholder="Message..."></textarea>
+<button id="btn">Send</button>
 </div>
 <script>
 (function(){
-var mode='chat',msgs=[],loading=false;
-var $m=document.getElementById('messages'),$i=document.getElementById('input'),$b=document.getElementById('send');
-var $s=document.getElementById('status'),$w=document.getElementById('warn');
+var mode='chat',M=[],ld=false;
+var $m=document.getElementById('msgs'),$i=document.getElementById('inp'),$b=document.getElementById('btn'),$s=document.getElementById('st'),$w=document.getElementById('warn');
 
-document.querySelectorAll('.mode-btn').forEach(function(b){
-  b.onclick=function(){
-    mode=b.dataset.mode;
-    document.querySelectorAll('.mode-btn').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    $w.classList.toggle('show',mode==='edit');
-    $i.placeholder=mode==='edit'?'Describe the change...':'Message...';
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=()=>{
+    mode=t.dataset.m;
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on');
+    $w.classList.toggle('on',mode==='edit');
+    $i.placeholder=mode==='edit'?'Describe what to change...':'Message...';
   };
 });
 
 function render(){
-  if(!msgs.length){$m.innerHTML='<div style="margin:auto;text-align:center;color:#484f58"><div style="font-size:40px;margin-bottom:10px">🤖</div>OmniBot v3<div style="font-size:11px;margin-top:6px">Smarter self-editing</div></div>';return;}
-  $m.innerHTML=msgs.map(function(m){
-    var c=m.role==='user'?'msg-user':'msg-bot';
-    var t=m.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    t=t.replace(/(https:\\/\\/[^\\s<]+)/g,'<a href="$1" target="_blank">$1</a>');
-    return '<div class="msg '+c+'">'+t+'</div>';
-  }).join('')+(loading?'<div class="msg msg-bot" style="color:#8b949e">🤖 Working...</div>':'');
+  if(!M.length){$m.innerHTML='<div style="margin:auto;text-align:center;color:#6e7681"><div style="font-size:36px;margin-bottom:8px">🤖</div>OmniBot v4<br><small>Claude-powered editing</small></div>';return;}
+  $m.innerHTML=M.map(x=>'<div class="m '+(x.r==='user'?'u':'b')+'">'+x.c.replace(/</g,'&lt;').replace(/(https:\\/\\/\\S+)/g,'<a href="$1" target="_blank">$1</a>')+'</div>').join('')+(ld?'<div class="m b" style="color:#8b949e">Working...</div>':'');
   $m.scrollTop=$m.scrollHeight;
 }
 
 async function send(){
-  var txt=$i.value.trim();if(!txt||loading)return;
-  msgs.push({role:'user',content:txt});
-  $i.value='';$i.style.height='44px';
-  loading=true;$b.disabled=true;
-  $s.textContent=mode==='edit'?'Editing...':'Thinking...';
-  $s.className='status loading';render();
-  
+  var t=$i.value.trim();if(!t||ld)return;
+  M.push({r:'user',c:t});$i.value='';
+  ld=true;$b.disabled=true;$s.textContent=mode==='edit'?'Editing...':'Thinking...';$s.className='st ld';render();
   try{
     var ep=mode==='edit'?'/api/self-edit':'/api/chat';
-    var body=mode==='edit'?{instruction:txt}:{messages:msgs.map(m=>({role:m.role,content:m.content}))};
-    var res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    var d=await res.json();
-    
+    var body=mode==='edit'?{instruction:t}:{messages:M.map(x=>({role:x.r,content:x.c}))};
+    var r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var d=await r.json();
     var reply='';
     if(mode==='edit'){
       if(d.success){
-        reply='✅ Code updated!\\n\\n'+d.message+'\\n\\n';
-        if(d.changes){
-          reply+='📊 Changes: +'+d.changes.linesAdded+' / -'+d.changes.linesRemoved+' lines\\n';
-          if(d.changes.sampleAdded&&d.changes.sampleAdded.length){
-            reply+='\\nAdded:\\n'+d.changes.sampleAdded.map(l=>'+ '+l).join('\\n')+'\\n';
-          }
+        reply='✅ Code updated!\\n\\n';
+        reply+='Changes: +'+d.linesAdded+' / -'+d.linesRemoved+' lines\\n';
+        reply+='Size: '+d.before+' → '+d.after+' bytes\\n\\n';
+        if(d.sampleChanges&&d.sampleChanges.length){
+          reply+='New code:\\n'+d.sampleChanges.map(l=>'  '+l).join('\\n')+'\\n\\n';
         }
-        reply+='\\n📦 '+d.beforeSize+' → '+d.afterSize+' bytes';
-        reply+='\\n🚀 Deploying via GitHub Actions...';
-        if(d.commitUrl)reply+='\\n\\n'+d.commitUrl;
+        reply+='🚀 Deploying...\\n'+d.url;
       }else{
-        reply='❌ Failed: '+(d.error||'Unknown');
-        if(d.preview)reply+='\\n\\nPreview:\\n'+d.preview.slice(0,300);
+        reply='❌ '+d.error;
+        if(d.preview)reply+='\\n\\n'+d.preview;
       }
     }else{
       reply=d.content||d.error||'Error';
     }
-    msgs.push({role:'assistant',content:reply});
-    $s.textContent='Ready';$s.className='status';
-  }catch(e){msgs.push({role:'assistant',content:'Error: '+e.message});$s.textContent='Error';$s.className='status';}
-  loading=false;$b.disabled=false;render();
+    M.push({r:'assistant',c:reply});
+    $s.textContent='Ready';$s.className='st';
+  }catch(e){M.push({r:'assistant',c:'Error: '+e.message});$s.textContent='Error';$s.className='st';}
+  ld=false;$b.disabled=false;render();
 }
 
 $b.onclick=send;
-$i.onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}};
-$i.oninput=function(){this.style.height='44px';this.style.height=Math.min(this.scrollHeight,150)+'px';};
+$i.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}};
+$i.oninput=function(){this.style.height='42px';this.style.height=Math.min(this.scrollHeight,120)+'px';};
 render();
 })();
 </script>
