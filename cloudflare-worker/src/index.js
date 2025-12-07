@@ -1,322 +1,188 @@
 /**
- * OmniBot Multi-AI Orchestrator with Shared Context
+ * OmniBot Self-Editing Multi-AI Orchestrator
  * 
- * All AIs share:
- * - Project context (goals, architecture, decisions)
- * - Conversation history
- * - Code artifacts produced
- * - Feedback from each step
- * 
- * Pipeline:
- * 1. Gemini - Architecture & design
- * 2. 5x Qwen in parallel - Implementation  
- * 3. Llama - Combine & integrate
- * 4. GPT - Review & improve
- * 5. Claude - Polish & finalize
+ * Features:
+ * - All AIs share context via KV
+ * - Can edit its own code on GitHub
+ * - Auto-deploys via GitHub Actions on push to main
+ * - Self-improvement loop
  */
 
 const PROVIDERS = {
-  gemini: {
-    url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-    format: 'gemini'
-  },
-  groq_llama: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.3-70b-versatile',
-    format: 'openai'
-  },
-  groq_qwen: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'qwen/qwen3-32b',
-    format: 'openai'
-  },
-  openai: {
-    url: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-4o-mini',
-    format: 'openai'
-  },
-  claude: {
-    url: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-sonnet-4-20250514',
-    format: 'anthropic'
-  }
+  gemini: { url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', format: 'gemini' },
+  groq_llama: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', format: 'openai' },
+  groq_qwen: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'qwen/qwen3-32b', format: 'openai' },
+  openai: { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', format: 'openai' },
+  claude: { url: 'https://api.anthropic.com/v1/messages', model: 'claude-sonnet-4-20250514', format: 'anthropic' }
 };
 
-// Shared context that all AIs can read/write
+const GITHUB_REPO = 'thejonanshow/omnibot';
+const GITHUB_BRANCH = 'main';
+
+// GitHub API helpers
+async function githubGet(path, env) {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`, {
+    headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'OmniBot' }
+  });
+  return res.json();
+}
+
+async function githubPut(path, content, message, env) {
+  // Get current SHA
+  const current = await githubGet(path, env);
+  const sha = current.sha;
+  
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'OmniBot' },
+    body: JSON.stringify({
+      message: message,
+      content: btoa(unescape(encodeURIComponent(content))),
+      branch: GITHUB_BRANCH,
+      sha: sha
+    })
+  });
+  return res.json();
+}
+
+async function githubListFiles(path, env) {
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`, {
+    headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'OmniBot' }
+  });
+  return res.json();
+}
+
+// Shared Context
 class SharedContext {
   constructor(kv, sessionId) {
     this.kv = kv;
     this.sessionId = sessionId;
-    this.data = {
-      task: '',
-      architecture: '',
-      decisions: [],
-      implementations: {},
-      combined: '',
-      reviewed: '',
-      final: '',
-      feedback: [],
-      history: []
-    };
+    this.data = { task: '', architecture: '', decisions: [], implementations: {}, combined: '', reviewed: '', final: '', feedback: [], history: [], selfEdits: [] };
   }
-
-  async load() {
-    const stored = await this.kv.get(`session:${this.sessionId}`, 'json');
-    if (stored) this.data = stored;
-    return this.data;
-  }
-
-  async save() {
-    await this.kv.put(`session:${this.sessionId}`, JSON.stringify(this.data), { expirationTtl: 86400 });
-  }
-
-  async update(key, value) {
-    this.data[key] = value;
-    await this.save();
-  }
-
-  async addFeedback(from, message) {
-    this.data.feedback.push({ from, message, timestamp: Date.now() });
-    await this.save();
-  }
-
-  async addHistory(role, content, provider = null) {
-    this.data.history.push({ role, content, provider, timestamp: Date.now() });
-    await this.save();
-  }
-
+  async load() { const s = await this.kv.get(`session:${this.sessionId}`, 'json'); if (s) this.data = s; return this.data; }
+  async save() { await this.kv.put(`session:${this.sessionId}`, JSON.stringify(this.data), { expirationTtl: 86400 }); }
+  async update(k, v) { this.data[k] = v; await this.save(); }
+  async addFeedback(from, msg) { this.data.feedback.push({ from, message: msg, ts: Date.now() }); await this.save(); }
+  async logSelfEdit(file, reason) { this.data.selfEdits.push({ file, reason, ts: Date.now() }); await this.save(); }
   getContextPrompt() {
-    return `
-## SHARED PROJECT CONTEXT
-
-### Original Task
-${this.data.task || 'Not set'}
-
-### Architecture (by Gemini)
-${this.data.architecture || 'Not yet designed'}
-
-### Key Decisions Made
-${this.data.decisions.map((d, i) => `${i+1}. ${d}`).join('\n') || 'None yet'}
-
-### Implementation Status
-${Object.entries(this.data.implementations).map(([k, v]) => `- ${k}: ${v ? 'Done' : 'Pending'}`).join('\n') || 'Not started'}
-
-### Combined Code (by Llama)
-${this.data.combined ? 'Available - ' + this.data.combined.length + ' chars' : 'Not yet combined'}
-
-### Review Notes (by GPT)
-${this.data.reviewed ? 'Available' : 'Not yet reviewed'}
-
-### Team Feedback
-${this.data.feedback.slice(-5).map(f => `[${f.from}]: ${f.message}`).join('\n') || 'None'}
-
----
-Use this context to inform your work. Add to it as you make progress.
-`;
+    return `## SHARED CONTEXT\nTask: ${this.data.task || 'Not set'}\nArchitecture: ${this.data.architecture ? 'Set' : 'Pending'}\nFeedback: ${this.data.feedback.slice(-3).map(f => f.from + ': ' + f.message).join('; ')}\nSelf-edits: ${this.data.selfEdits.length} total`;
   }
 }
 
 async function callProvider(provider, messages, env, systemPrompt = null) {
   const config = PROVIDERS[provider];
-  const fullMessages = systemPrompt 
-    ? [{ role: 'system', content: systemPrompt }, ...messages]
-    : messages;
-
+  const fullMessages = systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages;
   try {
     if (config.format === 'gemini') {
       const res = await fetch(`${config.url}?key=${env.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: fullMessages.map(m => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-          }))
-        })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: fullMessages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) })
       });
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(data.error) || 'Gemini error';
     }
-
     if (config.format === 'openai') {
       const key = provider.startsWith('groq') ? env.GROQ_API_KEY : env.OPENAI_API_KEY;
       const res = await fetch(config.url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: config.model, messages: fullMessages, max_tokens: 4096 })
       });
       const data = await res.json();
       return data.choices?.[0]?.message?.content || JSON.stringify(data.error) || 'API error';
     }
-
     if (config.format === 'anthropic') {
-      const sysMsg = systemPrompt || 'You are a helpful assistant.';
       const res = await fetch(config.url, {
         method: 'POST',
-        headers: {
-          'x-api-key': env.ANTHROPIC_API_KEY,
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: config.model,
-          max_tokens: 4096,
-          system: sysMsg,
-          messages: messages
-        })
+        headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: config.model, max_tokens: 4096, system: systemPrompt || 'You are helpful.', messages })
       });
       const data = await res.json();
       return data.content?.[0]?.text || JSON.stringify(data.error) || 'Claude error';
     }
-  } catch (e) {
-    return `Error calling ${provider}: ${e.message}`;
+  } catch (e) { return `Error: ${e.message}`; }
+}
+
+// Self-edit: Let AI modify its own code
+async function selfEdit(instruction, env, ctx) {
+  // Get current code
+  const currentCode = await githubGet('cloudflare-worker/src/index.js', env);
+  const code = decodeURIComponent(escape(atob(currentCode.content)));
+  
+  // Ask Groq to generate the edit
+  const editPrompt = `You are OmniBot's self-improvement system. You can edit your own source code.
+
+CURRENT SOURCE CODE:
+\`\`\`javascript
+${code}
+\`\`\`
+
+USER'S INSTRUCTION FOR IMPROVEMENT:
+${instruction}
+
+Generate the COMPLETE updated source code. Maintain all existing functionality while implementing the requested improvement.
+Output ONLY the code, no explanations. The code must be complete and valid JavaScript.`;
+
+  const newCode = await callProvider('groq_llama', [{ role: 'user', content: editPrompt }], env,
+    'You are a code editor. Output only valid JavaScript code. No markdown, no explanations.');
+  
+  // Clean up response (remove markdown if present)
+  let cleanCode = newCode;
+  if (cleanCode.includes('```')) {
+    cleanCode = cleanCode.replace(/```javascript\n?/g, '').replace(/```\n?/g, '').trim();
+  }
+  
+  // Validate it looks like code
+  if (!cleanCode.includes('export default') || cleanCode.length < 1000) {
+    return { success: false, error: 'Generated code appears invalid', preview: cleanCode.slice(0, 500) };
+  }
+  
+  // Commit to GitHub
+  const result = await githubPut(
+    'cloudflare-worker/src/index.js',
+    cleanCode,
+    `[OmniBot Self-Edit] ${instruction.slice(0, 50)}`,
+    env
+  );
+  
+  if (result.commit) {
+    await ctx.logSelfEdit('index.js', instruction);
+    return { 
+      success: true, 
+      commit: result.commit.sha,
+      message: `Code updated! Commit: ${result.commit.sha.slice(0, 7)}. Auto-deploying via GitHub Actions...`,
+      deployUrl: `https://github.com/${GITHUB_REPO}/actions`
+    };
+  } else {
+    return { success: false, error: result.message || 'GitHub API error', details: result };
   }
 }
 
-async function runPipeline(ctx, env) {
-  const results = { steps: [], final: null };
-  
-  // Step 1: Gemini - Architecture
-  const archPrompt = `You are Gemini, the architect.
+// Read any file from the repo
+async function readFile(path, env) {
+  const file = await githubGet(path, env);
+  if (file.content) {
+    return { success: true, content: decodeURIComponent(escape(atob(file.content))), path };
+  }
+  return { success: false, error: file.message || 'File not found' };
+}
 
-${ctx.getContextPrompt()}
-
-Design a clear technical architecture for this task. Include:
-- Component breakdown
-- File structure  
-- Data flow
-- Key interfaces
-- Technology choices
-
-Be specific and actionable. Other AIs will implement your design.`;
-
-  const architecture = await callProvider('gemini', 
-    [{ role: 'user', content: ctx.data.task }], env, archPrompt);
-  
-  await ctx.update('architecture', architecture);
-  await ctx.addFeedback('Gemini', 'Architecture complete');
-  results.steps.push({ provider: 'Gemini', role: 'Architect', output: architecture });
-
-  // Step 2: 5 parallel Qwen instances
-  const qwenRoles = [
-    { name: 'Core', focus: 'core business logic and main functions' },
-    { name: 'Safety', focus: 'error handling, validation, and edge cases' },
-    { name: 'Interface', focus: 'UI components and user interaction' },
-    { name: 'Security', focus: 'authentication, authorization, and data protection' },
-    { name: 'Quality', focus: 'tests, documentation, and code quality' }
-  ];
-
-  const qwenPromises = qwenRoles.map((role, i) => {
-    const prompt = `You are Qwen #${i+1} (${role.name} Specialist).
-
-${ctx.getContextPrompt()}
-
-YOUR SPECIFIC FOCUS: ${role.focus}
-
-Based on the architecture above, implement your part. Write complete, production-ready code.
-Coordinate with other Qwen instances through the shared context.
-Note any dependencies on other components.`;
-
-    return callProvider('groq_qwen', 
-      [{ role: 'user', content: `Implement: ${role.focus}` }], env, prompt)
-      .then(async result => {
-        await ctx.update('implementations', { ...ctx.data.implementations, [role.name]: result });
-        await ctx.addFeedback(`Qwen-${role.name}`, `Completed ${role.focus}`);
-        return { role: role.name, output: result };
-      });
-  });
-
-  const qwenResults = await Promise.all(qwenPromises);
-  results.steps.push({ provider: 'Qwen x5', role: 'Implementers', outputs: qwenResults });
-
-  // Step 3: Llama - Combine
-  const combinePrompt = `You are Llama, the integrator.
-
-${ctx.getContextPrompt()}
-
-You have 5 implementations from the Qwen team:
-
-${qwenResults.map(r => `### ${r.role} Implementation:\n${r.output}\n`).join('\n')}
-
-YOUR TASK:
-1. Combine all implementations into ONE coherent codebase
-2. Resolve any conflicts or duplications
-3. Ensure all components work together
-4. Maintain consistent style and patterns
-
-Output the complete, integrated code:`;
-
-  const combined = await callProvider('groq_llama',
-    [{ role: 'user', content: 'Combine all implementations' }], env, combinePrompt);
-  
-  await ctx.update('combined', combined);
-  await ctx.addFeedback('Llama', 'Integration complete');
-  results.steps.push({ provider: 'Llama', role: 'Integrator', output: combined });
-
-  // Step 4: GPT - Review
-  const reviewPrompt = `You are GPT, the code reviewer.
-
-${ctx.getContextPrompt()}
-
-CURRENT CODE TO REVIEW:
-${combined}
-
-YOUR TASK:
-1. Find bugs and issues
-2. Suggest improvements
-3. Check for security vulnerabilities
-4. Ensure best practices
-5. Output an IMPROVED version of the code
-
-Be thorough but constructive.`;
-
-  const reviewed = await callProvider('openai',
-    [{ role: 'user', content: 'Review and improve this code' }], env, reviewPrompt);
-  
-  await ctx.update('reviewed', reviewed);
-  await ctx.addFeedback('GPT', 'Code review complete');
-  results.steps.push({ provider: 'GPT', role: 'Reviewer', output: reviewed });
-
-  // Step 5: Claude - Polish
-  const polishPrompt = `You are Claude, the finisher.
-
-${ctx.getContextPrompt()}
-
-REVIEWED CODE:
-${reviewed}
-
-YOUR TASK:
-1. Final polish and cleanup
-2. Ensure consistent formatting
-3. Add helpful comments where needed
-4. Make it production-ready
-5. Verify it matches the original task requirements
-
-Output the FINAL, polished code:`;
-
-  const final = await callProvider('claude',
-    [{ role: 'user', content: 'Polish and finalize' }], env, polishPrompt);
-  
-  await ctx.update('final', final);
-  await ctx.addFeedback('Claude', 'Final polish complete');
-  results.steps.push({ provider: 'Claude', role: 'Finisher', output: final });
-
-  results.final = final;
-  return results;
+// Write any file to the repo
+async function writeFile(path, content, message, env, ctx) {
+  const result = await githubPut(path, content, message, env);
+  if (result.commit) {
+    await ctx.logSelfEdit(path, message);
+    return { success: true, commit: result.commit.sha, path };
+  }
+  return { success: false, error: result.message };
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const cors = { 
-      'Access-Control-Allow-Origin': '*', 
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
-      'Access-Control-Allow-Headers': 'Content-Type' 
-    };
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
     
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     
-    // Get or create session
     const sessionId = url.searchParams.get('session') || crypto.randomUUID();
     const ctx = new SharedContext(env.CONTEXT, sessionId);
     await ctx.load();
@@ -325,39 +191,32 @@ export default {
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
     }
     
-    // Get current context
+    // Get context
     if (url.pathname === '/api/context') {
       return new Response(JSON.stringify({ session: sessionId, context: ctx.data }), {
         headers: { ...cors, 'Content-Type': 'application/json' }
       });
     }
     
-    // Chat with context
+    // Chat endpoint
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       try {
         const { messages, provider = 'groq_llama' } = await request.json();
-        const contextPrompt = `${ctx.getContextPrompt()}\n\nYou are part of the OmniBot team. Use the shared context above to inform your responses.`;
-        const response = await callProvider(provider, messages, env, contextPrompt);
-        await ctx.addHistory('assistant', response, provider);
+        const response = await callProvider(provider, messages, env, ctx.getContextPrompt());
         return new Response(JSON.stringify({ content: response, session: sessionId }), {
           headers: { ...cors, 'Content-Type': 'application/json' }
         });
       } catch (e) {
-        return new Response(JSON.stringify({ error: e.message }), {
-          status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
-        });
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
     }
     
-    // Run full pipeline with context
-    if (url.pathname === '/api/build' && request.method === 'POST') {
+    // Self-edit endpoint
+    if (url.pathname === '/api/self-edit' && request.method === 'POST') {
       try {
-        const { task } = await request.json();
-        await ctx.update('task', task);
-        await ctx.addHistory('user', task);
-        
-        const results = await runPipeline(ctx, env);
-        return new Response(JSON.stringify({ ...results, session: sessionId }), {
+        const { instruction } = await request.json();
+        const result = await selfEdit(instruction, env, ctx);
+        return new Response(JSON.stringify(result), {
           headers: { ...cors, 'Content-Type': 'application/json' }
         });
       } catch (e) {
@@ -367,16 +226,57 @@ export default {
       }
     }
     
-    return new Response(`OmniBot Orchestrator API
-
-Session: ${sessionId}
+    // Read file endpoint
+    if (url.pathname === '/api/read' && request.method === 'POST') {
+      try {
+        const { path } = await request.json();
+        const result = await readFile(path, env);
+        return new Response(JSON.stringify(result), {
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
+      }
+    }
+    
+    // Write file endpoint
+    if (url.pathname === '/api/write' && request.method === 'POST') {
+      try {
+        const { path, content, message } = await request.json();
+        const result = await writeFile(path, content, message || 'OmniBot file update', env, ctx);
+        return new Response(JSON.stringify(result), {
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
+      }
+    }
+    
+    // List files endpoint
+    if (url.pathname === '/api/files' && request.method === 'GET') {
+      try {
+        const path = url.searchParams.get('path') || 'cloudflare-worker/src';
+        const files = await githubListFiles(path, env);
+        return new Response(JSON.stringify(files), {
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
+      }
+    }
+    
+    return new Response(`OmniBot Self-Editing Orchestrator
 
 Endpoints:
-- GET /api/context?session=X - Get shared context
-- POST /api/chat - Chat with context (body: {messages, provider?})
-- POST /api/build - Run full pipeline (body: {task})
+- POST /api/chat - Chat with AI
+- POST /api/self-edit - Let AI edit its own code
+- POST /api/read - Read file from repo  
+- POST /api/write - Write file to repo
+- GET /api/files?path=X - List files
+- GET /api/context - Get shared context
 
-All AIs share context through KV storage.`, { headers: cors });
+GitHub: ${GITHUB_REPO}
+Auto-deploy: On push to main`, { headers: cors });
   }
 };
 
@@ -385,134 +285,110 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>OmniBot Orchestrator</title>
+<title>OmniBot</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column}
-.header{padding:12px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.header h1{font-size:16px;font-weight:600}
-.session{font-size:10px;color:#6e7681;font-family:monospace}
-.mode-toggle{display:flex;gap:4px;margin-left:auto}
-.mode-btn{padding:5px 10px;border-radius:6px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:11px;cursor:pointer}
+.header{padding:10px 14px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.header h1{font-size:15px;font-weight:600}
+.mode-toggle{display:flex;gap:3px;margin-left:auto}
+.mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
 .mode-btn.active{background:#238636;border-color:#238636;color:#fff}
-.status{font-size:10px;padding:4px 8px;border-radius:10px;background:#238636;color:#fff}
+.mode-btn.danger{background:#da3633;border-color:#da3633}
+.status{font-size:9px;padding:3px 6px;border-radius:8px;background:#238636;color:#fff}
 .status.loading{background:#9e6a03}
-.pipeline{display:none;padding:6px 16px;background:#161b22;border-bottom:1px solid #30363d;font-size:11px;color:#8b949e}
-.pipeline.show{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.step{padding:3px 6px;border-radius:4px;background:#21262d;border:1px solid #30363d;font-size:10px}
-.step.active{background:#9e6a03;border-color:#9e6a03;color:#fff}
-.step.done{background:#238636;border-color:#238636;color:#fff}
-.messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:90%;padding:10px 14px;border-radius:16px;line-height:1.4;white-space:pre-wrap;font-size:13px}
-.msg-user{align-self:flex-end;background:#238636;border-radius:16px 16px 4px 16px}
-.msg-bot{align-self:flex-start;background:#21262d;border:1px solid #30363d;border-radius:16px 16px 16px 4px}
-.msg pre{background:#161b22;padding:6px;border-radius:4px;overflow-x:auto;margin:6px 0;font-size:11px}
-.input-area{padding:10px;background:#161b22;border-top:1px solid #30363d;display:flex;gap:8px}
-.input-area textarea{flex:1;padding:10px 14px;border-radius:10px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:14px;outline:none;resize:none;min-height:44px;max-height:100px;font-family:inherit}
-.input-area button{padding:10px 16px;border-radius:10px;border:none;background:#238636;color:#fff;font-weight:600;font-size:13px;cursor:pointer}
+.messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:90%;padding:8px 12px;border-radius:14px;line-height:1.4;white-space:pre-wrap;font-size:12px}
+.msg-user{align-self:flex-end;background:#238636;border-radius:14px 14px 4px 14px}
+.msg-bot{align-self:flex-start;background:#21262d;border:1px solid #30363d;border-radius:14px 14px 14px 4px}
+.msg pre{background:#161b22;padding:4px;border-radius:3px;overflow-x:auto;font-size:10px;margin:4px 0}
+.msg code{font-family:monospace}
+.input-area{padding:8px;background:#161b22;border-top:1px solid #30363d;display:flex;gap:6px}
+.input-area textarea{flex:1;padding:8px 12px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:13px;outline:none;resize:none;min-height:40px;max-height:80px;font-family:inherit}
+.input-area button{padding:8px 14px;border-radius:8px;border:none;background:#238636;color:#fff;font-weight:600;font-size:12px;cursor:pointer}
 .input-area button:disabled{background:#21262d;color:#484f58}
-.context-panel{display:none;position:fixed;top:0;right:0;width:300px;height:100%;background:#161b22;border-left:1px solid #30363d;padding:12px;overflow-y:auto;font-size:11px}
-.context-panel.show{display:block}
-.context-panel h3{margin-bottom:8px;color:#8b949e}
-.context-panel pre{background:#0d1117;padding:8px;border-radius:4px;white-space:pre-wrap;font-size:10px}
+.edit-warning{background:#9e6a03;color:#fff;padding:6px 10px;font-size:10px;text-align:center;display:none}
+.edit-warning.show{display:block}
 </style>
 </head>
 <body>
 <div class="header">
-<span style="font-size:20px">🤖</span>
+<span style="font-size:18px">🤖</span>
 <h1>OmniBot</h1>
-<div class="session" id="sessionId"></div>
 <div class="mode-toggle">
 <button class="mode-btn active" data-mode="chat">Chat</button>
-<button class="mode-btn" data-mode="build">Build</button>
-<button class="mode-btn" data-mode="context">Context</button>
+<button class="mode-btn" data-mode="edit">Self-Edit</button>
 </div>
 <div class="status" id="status">Ready</div>
 </div>
-<div class="pipeline" id="pipeline">
-<span>Pipeline:</span>
-<span class="step" data-step="1">Gemini</span>
-<span class="step" data-step="2">5×Qwen</span>
-<span class="step" data-step="3">Llama</span>
-<span class="step" data-step="4">GPT</span>
-<span class="step" data-step="5">Claude</span>
-</div>
+<div class="edit-warning" id="editWarning">⚠️ SELF-EDIT MODE: AI can modify its own source code</div>
 <div class="messages" id="messages"></div>
 <div class="input-area">
-<textarea id="input" placeholder="Describe what to build..." rows="1"></textarea>
+<textarea id="input" placeholder="Message..." rows="1"></textarea>
 <button id="send">Send</button>
-</div>
-<div class="context-panel" id="contextPanel">
-<h3>Shared Context</h3>
-<pre id="contextData">Loading...</pre>
 </div>
 <script>
 (function(){
-var mode='chat',messages=[],loading=false,session=localStorage.getItem('omnibot_session')||'';
+var mode='chat',messages=[],loading=false;
 var messagesEl=document.getElementById('messages'),inputEl=document.getElementById('input'),sendBtn=document.getElementById('send');
-var statusEl=document.getElementById('status'),pipelineEl=document.getElementById('pipeline'),sessionEl=document.getElementById('sessionId');
-var contextPanel=document.getElementById('contextPanel'),contextData=document.getElementById('contextData');
+var statusEl=document.getElementById('status'),editWarning=document.getElementById('editWarning');
 
 document.querySelectorAll('.mode-btn').forEach(function(btn){
   btn.addEventListener('click',function(){
-    var m=btn.dataset.mode;
-    if(m==='context'){contextPanel.classList.toggle('show');loadContext();return;}
-    mode=m;
-    document.querySelectorAll('.mode-btn').forEach(function(b){b.classList.remove('active');});
+    mode=btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    pipelineEl.classList.toggle('show',mode==='build');
+    editWarning.classList.toggle('show',mode==='edit');
+    inputEl.placeholder=mode==='edit'?'Describe how to improve OmniBot...':'Message...';
   });
 });
 
-function loadContext(){
-  fetch('/api/context'+(session?'?session='+session:'')).then(r=>r.json()).then(d=>{
-    session=d.session;sessionEl.textContent='Session: '+session.slice(0,8);
-    localStorage.setItem('omnibot_session',session);
-    contextData.textContent=JSON.stringify(d.context,null,2);
-  });
-}
-
 function render(){
-  if(!messages.length){messagesEl.innerHTML='<div style="margin:auto;text-align:center;color:#484f58"><div style="font-size:44px;margin-bottom:10px">🤖</div><div>OmniBot Orchestrator</div><div style="font-size:11px;margin-top:4px">All AIs share context</div></div>';return;}
-  messagesEl.innerHTML=messages.map(function(m){
+  if(!messages.length){messagesEl.innerHTML='<div style="margin:auto;text-align:center;color:#484f58"><div style="font-size:40px;margin-bottom:8px">🤖</div><div>OmniBot</div><div style="font-size:10px;margin-top:4px">Self-editing AI system</div></div>';return;}
+  messagesEl.innerHTML=messages.map(m=>{
     var cls=m.role==='user'?'msg-user':'msg-bot';
     var txt=m.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    txt=txt.replace(/\`([^\`]+)\`/g,'<code>$1</code>');
     return '<div class="msg '+cls+'">'+txt+'</div>';
   }).join('')+(loading?'<div class="msg msg-bot" style="color:#8b949e">🤖 Working...</div>':'');
   messagesEl.scrollTop=messagesEl.scrollHeight;
 }
 
 function setStatus(t,c){statusEl.textContent=t;statusEl.className='status'+(c?' '+c:'');}
-function setStep(n){document.querySelectorAll('.step').forEach(function(el){var s=+el.dataset.step;el.classList.remove('active','done');if(s<n)el.classList.add('done');if(s===n)el.classList.add('active');});}
 
 async function send(){
   var text=inputEl.value.trim();if(!text||loading)return;
   messages.push({role:'user',content:text});inputEl.value='';loading=true;sendBtn.disabled=true;
-  setStatus('Working...','loading');render();
+  setStatus(mode==='edit'?'Editing...':'Thinking...','loading');render();
+  
   try{
-    var endpoint=mode==='build'?'/api/build':'/api/chat';
-    var body=mode==='build'?{task:text}:{messages:messages};
-    if(session)endpoint+='?session='+session;
+    var endpoint=mode==='edit'?'/api/self-edit':'/api/chat';
+    var body=mode==='edit'?{instruction:text}:{messages:messages.map(m=>({role:m.role,content:m.content}))};
     var res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var data=await res.json();
-    if(data.session){session=data.session;sessionEl.textContent='Session: '+session.slice(0,8);localStorage.setItem('omnibot_session',session);}
-    if(mode==='build'&&data.steps){
-      var summary='## Build Complete\\n';
-      data.steps.forEach(function(s,i){summary+='**'+s.provider+'** ('+s.role+'): '+(s.output?s.output.length+' chars':'done')+'\\n';});
-      summary+='\\n---\\n'+data.final;
-      messages.push({role:'assistant',content:summary});
+    
+    if(mode==='edit'){
+      if(data.success){
+        messages.push({role:'assistant',content:'✅ '+data.message+'\\n\\nCommit: '+data.commit+'\\nView: https://github.com/thejonanshow/omnibot/actions'});
+      }else{
+        messages.push({role:'assistant',content:'❌ Edit failed: '+(data.error||'Unknown error')+'\\n\\n'+(data.preview||'')});
+      }
     }else{
       messages.push({role:'assistant',content:data.content||data.error||'Error'});
     }
     setStatus('Ready','');
-  }catch(e){messages.push({role:'assistant',content:'Error: '+e.message});setStatus('Error','error');}
+  }catch(e){
+    messages.push({role:'assistant',content:'Error: '+e.message});
+    setStatus('Error','error');
+  }
   loading=false;sendBtn.disabled=false;render();
 }
 
 sendBtn.onclick=send;
 inputEl.onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}};
-loadContext();render();
+inputEl.oninput=function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';};
+render();
 })();
 </script>
 </body>
