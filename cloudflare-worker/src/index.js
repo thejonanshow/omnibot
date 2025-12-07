@@ -242,7 +242,7 @@ export default {
       }
     }
     
-    // Self-edit endpoint - FIXED: now captures full instruction
+    // Self-edit endpoint
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
       try {
         const body = await request.json();
@@ -370,7 +370,7 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 <button class="mode-btn" data-mode="edit">Self-Edit</button>
 </div>
 <div class="cluster-mode-toggle">
-<button class="cluster-mode-btn" id="cluster-mode-btn">Cluster Mode</button>
+<button class="cluster-mode-btn" id="cluster-mode-btn" disabled>Cluster Mode</button>
 </div>
 <div class="status" id="status">Ready</div>
 </div>
@@ -473,4 +473,3 @@ render();
 </script>
 </body>
 </html>
-`;
