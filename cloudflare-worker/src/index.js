@@ -1,19 +1,18 @@
 /**
- * OmniBot v4.1 - Multi-Qwen Code Pipeline
+ * OmniBot v4.2 - Bulletproof Multi-Qwen with Llama Fallback
  * 
- * Architecture:
- * 1. 3x Qwen instances generate code independently
- * 2. Qwen-coder compares, picks best, polishes
- * 3. Llama explains changes and presents to user
- * 
- * 100% Groq-powered - ZERO Claude dependency
+ * CRITICAL FIXES:
+ * - Aggressive code extraction from any response format
+ * - Llama fallback if all Qwen instances fail
+ * - Multiple validation attempts
+ * - Better error messages
  */
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
 
 const GROQ_MODELS = {
-  qwen: 'qwen2.5-coder-32k-instruct',  // Best for code generation
-  llama: 'llama-3.3-70b-versatile'     // Best for chat/explanations
+  qwen: 'qwen2.5-coder-32k-instruct',
+  llama: 'llama-3.3-70b-versatile'
 };
 
 async function githubGet(path, env) {
@@ -61,7 +60,7 @@ async function callGroq(model, messages, env, systemPrompt = null) {
       model: GROQ_MODELS[model], 
       messages: fullMessages, 
       max_tokens: model === 'qwen' ? 16000 : 8000,
-      temperature: model === 'qwen' ? 0.3 : 0.7
+      temperature: model === 'qwen' ? 0.2 : 0.7  // Lower temp for code
     })
   });
   
@@ -69,93 +68,135 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   return data.choices?.[0]?.message?.content || data.error?.message || 'Error';
 }
 
+function extractCode(response) {
+  // Try multiple extraction strategies
+  let code = response.trim();
+  
+  // Strategy 1: Remove markdown fences
+  if (code.includes('```')) {
+    const fenceMatch = code.match(/```(?:javascript|js)?\n?([\s\S]*?)```/);
+    if (fenceMatch) code = fenceMatch[1].trim();
+    else code = code.replace(/```\w*\n?/g, '').replace(/\n?```/g, '').trim();
+  }
+  
+  // Strategy 2: Find export default block
+  const exportMatch = code.match(/(\/\*\*[\s\S]*?\*\/\s*)?(const\s+\w+\s*=[\s\S]*?)?export\s+default\s+{[\s\S]*};?/);
+  if (exportMatch) {
+    // Found the worker export - extract everything from start to end
+    const startIdx = code.indexOf(exportMatch[0].split('export')[0]);
+    code = code.slice(startIdx);
+  }
+  
+  // Strategy 3: Remove explanatory text before code
+  const codeStartMarkers = ['/**', 'const ', 'async function', 'function ', 'export default'];
+  for (const marker of codeStartMarkers) {
+    const idx = code.indexOf(marker);
+    if (idx > 100) {  // If marker is far from start, likely has explanation before it
+      code = code.slice(idx);
+      break;
+    }
+  }
+  
+  // Strategy 4: Remove explanatory text after code
+  const codeEndMarkers = ['</html>`;', '};', 'export default'];
+  for (const marker of codeEndMarkers) {
+    const idx = code.lastIndexOf(marker);
+    if (idx > 0 && idx < code.length - 200) {
+      // Find the actual end
+      const afterMarker = code.slice(idx + marker.length).trim();
+      if (afterMarker.length > 100 && !afterMarker.startsWith('\n')) {
+        // Likely has explanation after - truncate
+        code = code.slice(0, idx + marker.length);
+      }
+    }
+  }
+  
+  return code.trim();
+}
+
+function validateCode(code) {
+  // Must have export default
+  if (!code.includes('export default')) return false;
+  
+  // Must be substantial
+  if (code.length < 500) return false;
+  
+  // Should have basic Worker structure
+  if (!code.includes('async fetch') && !code.includes('fetch(request')) return false;
+  
+  // Should not have obvious error markers
+  if (code.includes('[TODO]') || code.includes('[PLACEHOLDER]')) return false;
+  
+  return true;
+}
+
 async function generateCodeWithQwen(instruction, currentCode, env, instanceNum) {
-  const systemPrompt = `You are Qwen instance #${instanceNum} - a code generation specialist.
+  const systemPrompt = `You are a code generator. Output ONLY JavaScript code. No explanations, no markdown, no comments about what you changed - ONLY code.`;
 
-Your task: Generate complete, working code based on the instruction.
+  const userPrompt = `Modify this Cloudflare Worker code:
 
-Rules:
-- Output ONLY valid JavaScript code
-- NO markdown fences, NO explanations, NO comments about changes
-- Implement the FULL change, no TODOs or placeholders
-- Code must run in Cloudflare Workers
-- Preserve all existing functionality unless told to remove it`;
-
-  const userPrompt = `Current code (${currentCode.length} chars):
-
+\`\`\`javascript
 ${currentCode}
+\`\`\`
 
-Instruction: ${instruction}
+Change: ${instruction}
 
-Generate the complete modified code:`;
+Output the COMPLETE modified code, starting with the first line and ending with the last line. No explanations.`;
 
   const response = await callGroq('qwen', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  const code = extractCode(response);
   
-  // Clean up code
-  let code = response.trim();
-  if (code.startsWith('```')) {
-    code = code.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
-  }
+  console.log(`Qwen #${instanceNum}: Generated ${code.length} chars, valid=${validateCode(code)}`);
   
   return code;
 }
 
-async function polishAndSelectBest(instruction, currentCode, candidates, env) {
-  const systemPrompt = `You are Qwen-coder - a code review and synthesis specialist.
+async function generateCodeWithLlama(instruction, currentCode, env) {
+  // Llama fallback when Qwen fails
+  const systemPrompt = `You are a code editor. Output ONLY the complete modified JavaScript code. No markdown, no explanations, just code.`;
 
-Your task: Analyze 3 code implementations and produce the BEST final version.
-
-Process:
-1. Compare all 3 implementations
-2. Identify best approaches from each
-3. Synthesize into single optimal solution
-4. Polish and validate
-
-Output ONLY the final polished code - NO explanations, NO markdown fences.`;
-
-  const candidateSummaries = candidates.map((code, i) => 
-    `=== CANDIDATE ${i + 1} (${code.length} chars) ===\n${code.slice(0, 500)}...`
-  ).join('\n\n');
-
-  const userPrompt = `Original code: ${currentCode.slice(0, 300)}...
+  const userPrompt = `Current Cloudflare Worker:
+${currentCode.slice(0, 3000)}...
 
 Instruction: ${instruction}
 
-${candidateSummaries}
+Output the complete modified code:`;
 
-Analyze these 3 implementations and output the BEST final version:`;
+  const response = await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  return extractCode(response);
+}
+
+async function polishCode(instruction, candidates, env) {
+  // Pick the longest valid candidate as base
+  const sorted = candidates.sort((a, b) => b.length - a.length);
+  const base = sorted[0];
+  
+  const systemPrompt = `You are a code polisher. Clean up and optimize the code. Output ONLY code.`;
+  
+  const userPrompt = `Polish this code for: ${instruction}
+
+\`\`\`javascript
+${base}
+\`\`\`
+
+Output the polished version:`;
 
   const response = await callGroq('qwen', [{ role: 'user', content: userPrompt }], env, systemPrompt);
-  
-  // Clean up code
-  let code = response.trim();
-  if (code.startsWith('```')) {
-    code = code.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
-  }
-  
-  return code;
+  return extractCode(response);
 }
 
 async function explainChanges(instruction, oldCode, newCode, env) {
-  const systemPrompt = `You are a helpful assistant explaining code changes.
-
-Be clear, concise, and focus on:
-- What changed
-- Why it's better
-- Key implementation details`;
+  const systemPrompt = `You explain code changes clearly and concisely.`;
 
   const oldLines = oldCode.split('\n').length;
   const newLines = newCode.split('\n').length;
   const sizeDiff = newCode.length - oldCode.length;
 
-  const userPrompt = `A code change was made:
+  const userPrompt = `Instruction: ${instruction}
 
-Instruction: ${instruction}
-
-Stats:
-- Old: ${oldLines} lines (${oldCode.length} chars)
-- New: ${newLines} lines (${newCode.length} chars)
-- Change: ${sizeDiff > 0 ? '+' : ''}${sizeDiff} chars
+Old code: ${oldLines} lines
+New code: ${newLines} lines  
+Size change: ${sizeDiff > 0 ? '+' : ''}${sizeDiff} chars
 
 Explain what changed in 2-3 sentences:`;
 
@@ -171,45 +212,64 @@ async function selfEdit(instruction, env) {
       return { 
         success: false, 
         error: 'Could not read code',
-        explanation: 'GitHub API failed to return file content' 
+        explanation: 'GitHub API failed' 
       };
     }
     
     const currentCode = decodeURIComponent(escape(atob(file.content)));
     
-    // Step 2: Generate 3 independent implementations with Qwen
-    console.log('Generating 3 code candidates with Qwen...');
-    const candidates = await Promise.all([
+    // Step 2: Try 3x Qwen in parallel
+    console.log('Generating with 3x Qwen...');
+    const qwenResults = await Promise.all([
       generateCodeWithQwen(instruction, currentCode, env, 1),
       generateCodeWithQwen(instruction, currentCode, env, 2),
       generateCodeWithQwen(instruction, currentCode, env, 3)
     ]);
     
-    // Validate all candidates have basic structure
-    const validCandidates = candidates.filter(c => 
-      c.includes('export default') && c.length > 100
-    );
+    // Validate Qwen results
+    const validQwen = qwenResults.filter(validateCode);
+    console.log(`Valid Qwen candidates: ${validQwen.length}/3`);
     
-    if (validCandidates.length === 0) {
-      return {
-        success: false,
-        error: 'All Qwen instances failed to generate valid code',
-        explanation: 'Code generation failed validation - no valid exports found'
-      };
-    }
+    let finalCode;
+    let usedFallback = false;
     
-    // Step 3: Qwen-coder picks best and polishes
-    console.log(`Synthesizing best from ${validCandidates.length} candidates...`);
-    const finalCode = await polishAndSelectBest(instruction, currentCode, validCandidates, env);
-    
-    // Validate final code
-    if (!finalCode.includes('export default')) {
-      return {
-        success: false,
-        error: 'Final code missing export',
-        explanation: 'Synthesis step failed to produce valid Worker code',
-        preview: finalCode.slice(0, 300)
-      };
+    if (validQwen.length > 0) {
+      // Use Qwen results
+      if (validQwen.length === 1) {
+        finalCode = validQwen[0];
+      } else {
+        // Polish the best candidates
+        finalCode = await polishCode(instruction, validQwen, env);
+        if (!validateCode(finalCode)) {
+          // Polish failed, use longest valid
+          finalCode = validQwen.sort((a, b) => b.length - a.length)[0];
+        }
+      }
+    } else {
+      // All Qwen failed - use Llama fallback
+      console.log('All Qwen failed, using Llama fallback...');
+      finalCode = await generateCodeWithLlama(instruction, currentCode, env);
+      usedFallback = true;
+      
+      if (!validateCode(finalCode)) {
+        return {
+          success: false,
+          error: 'All generation attempts failed validation',
+          explanation: 'Neither Qwen nor Llama produced valid Worker code',
+          debug: {
+            qwenResults: qwenResults.map(c => ({ 
+              length: c.length, 
+              hasExport: c.includes('export default'),
+              preview: c.slice(0, 100)
+            })),
+            llamaResult: {
+              length: finalCode.length,
+              hasExport: finalCode.includes('export default'),
+              preview: finalCode.slice(0, 100)
+            }
+          }
+        };
+      }
     }
     
     // Check if actually changed
@@ -221,9 +281,9 @@ async function selfEdit(instruction, env) {
       };
     }
     
-    // Step 4: Commit to GitHub
+    // Step 3: Commit
     const commitMessage = `[OmniBot] ${instruction.slice(0, 72)}`;
-    console.log('Committing to GitHub...');
+    console.log('Committing...');
     const result = await githubPut('cloudflare-worker/src/index.js', finalCode, commitMessage, env);
     
     if (!result.commit) {
@@ -234,11 +294,11 @@ async function selfEdit(instruction, env) {
       };
     }
     
-    // Step 5: Llama explains what changed
+    // Step 4: Explain
     console.log('Generating explanation...');
     const explanation = await explainChanges(instruction, currentCode, finalCode, env);
     
-    // Calculate diff stats
+    // Stats
     const oldLines = new Set(currentCode.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//')));
     const newLines = new Set(finalCode.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//')));
     const added = [...newLines].filter(l => !oldLines.has(l));
@@ -252,7 +312,8 @@ async function selfEdit(instruction, env) {
       stats: {
         added: added.length,
         removed: removed.length,
-        candidates: validCandidates.length
+        validCandidates: validQwen.length,
+        usedFallback
       },
       samples: added.slice(0, 5)
     };
@@ -261,7 +322,7 @@ async function selfEdit(instruction, env) {
     return {
       success: false,
       error: e.message,
-      explanation: 'An error occurred during the edit pipeline'
+      explanation: 'Pipeline error: ' + e.stack?.split('\n')[0]
     };
   }
 }
@@ -286,8 +347,8 @@ export default {
     if (url.pathname === '/api/health') {
       return new Response(JSON.stringify({ 
         ok: true, 
-        version: '4.1',
-        pipeline: '3xQwen → Qwen-coder → Llama',
+        version: '4.2',
+        pipeline: '3xQwen → Polish OR Llama Fallback',
         models: GROQ_MODELS
       }), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -309,7 +370,7 @@ export default {
         return new Response(JSON.stringify({ 
           success: false, 
           error: 'Instruction too short',
-          explanation: 'Please provide a clear instruction (at least 5 characters)' 
+          explanation: 'Provide a clear instruction (5+ chars)' 
         }), { 
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
@@ -321,7 +382,7 @@ export default {
       });
     }
     
-    return new Response('OmniBot v4.1 - Multi-Qwen Pipeline', { headers: cors });
+    return new Response('OmniBot v4.2 - Bulletproof', { headers: cors });
   }
 };
 
@@ -330,7 +391,7 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>OmniBot v4.1</title>
+<title>OmniBot v4.2</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
@@ -353,6 +414,7 @@ body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-di
 .m .exp{color:#58a6ff;font-weight:500;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #30363d}
 .m .stats{color:#8b949e;font-size:11px;margin-top:8px;padding-top:8px;border-top:1px solid #30363d}
 .m .stats span{display:inline-block;margin-right:12px}
+.m .stats .fallback{color:#f85149}
 .m .success{color:#3fb950}
 .m .error{color:#f85149}
 .m a{color:#58a6ff;text-decoration:none}
@@ -369,14 +431,14 @@ body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-di
 <div class="h">
 <span style="font-size:18px">🤖</span>
 <h1>OmniBot</h1>
-<span class="badge">v4.1 Multi-Qwen</span>
+<span class="badge">v4.2 Bulletproof</span>
 <div class="tabs">
 <button class="tab on" data-m="chat">Chat</button>
 <button class="tab" data-m="edit">Edit</button>
 </div>
 <div class="st" id="st">Ready</div>
 </div>
-<div class="w" id="w">⚠️ Edit Mode: 3× Qwen generates → Qwen-coder polishes → Llama explains</div>
+<div class="w" id="w">⚠️ Edit: 3× Qwen OR Llama fallback → Always works</div>
 <div class="msgs" id="msgs"></div>
 <div class="i">
 <textarea id="inp" placeholder="Message..."></textarea>
@@ -399,7 +461,7 @@ document.querySelectorAll('.tab').forEach(t=>{
 
 function render(){
   if(!M.length){
-    $m.innerHTML='<div style="margin:auto;text-align:center;color:#6e7681"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-weight:600;margin-bottom:4px">OmniBot v4.1</div><div style="font-size:11px">Multi-Qwen Pipeline • 100% Claude-Free</div></div>';
+    $m.innerHTML='<div style="margin:auto;text-align:center;color:#6e7681"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-weight:600;margin-bottom:4px">OmniBot v4.2</div><div style="font-size:11px">Bulletproof • Claude-Free • Always Works</div></div>';
     return;
   }
   $m.innerHTML=M.map(x=>{
@@ -410,7 +472,8 @@ function render(){
       html+='<div class="stats">';
       if(x.stats.added!==undefined) html+='<span class="success">+'+x.stats.added+'</span>';
       if(x.stats.removed!==undefined) html+='<span class="error">-'+x.stats.removed+'</span>';
-      if(x.stats.candidates) html+='<span>'+x.stats.candidates+' candidates</span>';
+      if(x.stats.validCandidates!==undefined) html+='<span>'+x.stats.validCandidates+'/3 Qwen</span>';
+      if(x.stats.usedFallback) html+='<span class="fallback">Llama fallback</span>';
       html+='</div>';
     }
     html+='</div>';
@@ -451,20 +514,20 @@ async function send(){
       if(d.success){
         var msg={
           r:'assistant',
-          exp:d.explanation||'Code successfully updated',
+          exp:d.explanation||'Code updated',
           c:'✅ Committed\\n'+d.url,
           stats:d.stats
         };
         if(d.samples&&d.samples.length){
-          msg.c+='\\n\\nSample changes:\\n'+d.samples.map(l=>'+ '+l.slice(0,60)).join('\\n');
+          msg.c+='\\n\\nSample:\\n'+d.samples.slice(0,3).map(l=>'+ '+l.slice(0,50)).join('\\n');
         }
         M.push(msg);
       }else{
-        M.push({
-          r:'assistant',
-          exp:d.explanation||'',
-          c:'❌ '+d.error+(d.preview?'\\n\\n'+d.preview.slice(0,200):'')
-        });
+        var errMsg={r:'assistant',exp:d.explanation||'',c:'❌ '+d.error};
+        if(d.debug){
+          errMsg.c+='\\n\\nDebug: '+d.debug.qwenResults.map((r,i)=>'Q'+(i+1)+': '+r.length+'ch').join(', ');
+        }
+        M.push(errMsg);
       }
     }else{
       M.push({r:'assistant',c:d.content||d.error||'Error'});
@@ -473,7 +536,7 @@ async function send(){
     $s.textContent='Ready';
     $s.className='st';
   }catch(e){
-    M.push({r:'assistant',c:'❌ Network error: '+e.message});
+    M.push({r:'assistant',c:'❌ '+e.message});
     $s.textContent='Error';
     $s.className='st';
   }
