@@ -4,6 +4,7 @@
  * - Better feedback on edits
  * - Claude (me) can access shared context
  * - Disabled <think> tags in Qwen responses
+ * - Added cluster mode button
  */
 
 const PROVIDERS = {
@@ -342,6 +343,9 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 .mode-toggle{display:flex;gap:3px;margin-left:auto}
 .mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
 .mode-btn.active{background:#238636;border-color:#238636;color:#fff}
+.cluster-mode-toggle{display:flex;gap:3px;margin-left:8px}
+.cluster-mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
+.cluster-mode-btn.active{background:#238636;border-color:#238636;color:#fff}
 .status{font-size:9px;padding:3px 6px;border-radius:8px;background:#238636;color:#fff;margin-left:8px}
 .status.loading{background:#9e6a03}
 .messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
@@ -365,6 +369,9 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 <button class="mode-btn active" data-mode="chat">Chat</button>
 <button class="mode-btn" data-mode="edit">Self-Edit</button>
 </div>
+<div class="cluster-mode-toggle">
+<button class="cluster-mode-btn" id="cluster-mode-btn">Cluster Mode</button>
+</div>
 <div class="status" id="status">Ready</div>
 </div>
 <div class="warning" id="warning">⚠️ Self-Edit Mode: AI will modify its own source code</div>
@@ -375,9 +382,10 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 </div>
 <script>
 (function(){
-var mode='chat',messages=[],loading=false;
+var mode='chat',clusterMode=false,messages=[],loading=false;
 var $msg=document.getElementById('messages'),$in=document.getElementById('input'),$btn=document.getElementById('send');
 var $status=document.getElementById('status'),$warn=document.getElementById('warning');
+var $clusterModeBtn=document.getElementById('cluster-mode-btn');
 
 document.querySelectorAll('.mode-btn').forEach(function(b){
   b.onclick=function(){
@@ -386,8 +394,15 @@ document.querySelectorAll('.mode-btn').forEach(function(b){
     b.classList.add('active');
     $warn.classList.toggle('show',mode==='edit');
     $in.placeholder=mode==='edit'?'Describe the change you want...':'Message...';
+    $clusterModeBtn.disabled = mode !== 'edit';
   };
 });
+
+$clusterModeBtn.onclick = function() {
+  clusterMode = !clusterMode;
+  $clusterModeBtn.textContent = clusterMode ? 'Disable Cluster Mode' : 'Enable Cluster Mode';
+  $clusterModeBtn.classList.toggle('active', clusterMode);
+}
 
 function render(){
   if(!messages.length){
@@ -457,4 +472,5 @@ render();
 })();
 </script>
 </body>
-</html>`;
+</html>
+`;
