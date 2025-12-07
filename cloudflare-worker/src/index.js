@@ -315,7 +315,7 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 .header h1{font-size:15px;font-weight:600}
 .mode-toggle{display:flex;gap:3px;margin-left:auto}
 .mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
-.mode-btn.active{background:#238636;border-color:#238636;color:#fff}
+.mode-btn.active{background:#6495ED;border-color:#6495ED;color:#fff}
 .mode-btn.danger{background:#da3633;border-color:#da3633}
 .status{font-size:9px;padding:3px 6px;border-radius:8px;background:#238636;color:#fff}
 .status.loading{background:#9e6a03}
@@ -327,20 +327,20 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 .msg code{font-family:monospace}
 .input-area{padding:8px;background:#161b22;border-top:1px solid #30363d;display:flex;gap:6px}
 .input-area textarea{flex:1;padding:8px 12px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:13px;outline:none;resize:none;min-height:40px;max-height:80px;font-family:inherit}
-.input-area button{padding:8px 14px;border-radius:8px;border:none;background:#238636;color:#fff;font-weight:600;font-size:12px;cursor:pointer}
+.input-area button{padding:8px 14px;border-radius:8px;border:none;background:#6495ED;color:#fff;font-weight:600;font-size:12px;cursor:pointer}
 .input-area button:disabled{background:#21262d;color:#484f58}
 .edit-warning{background:#9e6a03;color:#fff;padding:6px 10px;font-size:10px;text-align:center;display:none}
 .edit-warning.show{display:block}
 .cluster-mode-toggle{display:flex;gap:3px;margin-left:auto}
 .cluster-mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
-.cluster-mode-btn.active{background:#238636;border-color:#238636;color:#fff}
+.cluster-mode-btn.active{background:#6495ED;border-color:#6495ED;color:#fff}
 </style>
 </head>
 <body>
 <div class="header">
 <span style="font-size:18px">🤖</span>
 <h1>OmniBot</h1>
-<div class="mode-toggle">
+<div style="position: absolute; right: 10px; top: 10px" class="mode-toggle">
 <button class="mode-btn active" data-mode="chat">Chat</button>
 <button class="mode-btn" data-mode="edit">Self-Edit</button>
 </div>
@@ -349,5 +349,4 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 </div>
 <div class="status" id="status">Ready</div>
 </div>
-<div class="edit-warning" id="editWarning">⚠️ SELF-EDIT MODE: AI can modify its own source code</div>
-<div
+<div class="edit-warning" id="editWarning">
