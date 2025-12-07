@@ -1,429 +1,383 @@
 /**
- * Email-to-GitHub Commit Worker with Gist Logging
+ * OmniBot Worker - Email commits + Groq Chat UI
  * 
- * Receives emails from Pipedream, commits to GitHub, and logs results to a gist.
- * 
- * Required Environment Variables:
- * - GITHUB_TOKEN: GitHub Personal Access Token with 'repo' and 'gist' scopes
- * 
- * Gist URL: https://gist.github.com/thejonanshow/625dc743af3e24b82467339bf19589f2
+ * Endpoints:
+ * - GET /chat - Groq-powered chat UI
+ * - POST /api/chat - Groq API proxy
+ * - POST / - Email-to-GitHub commits
  */
+
+const CHAT_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OmniChat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+      color: #e0e0e0;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #333;
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+    .status {
+      margin-left: auto;
+      font-size: 11px;
+      color: #0f0;
+      background: rgba(0,0,0,0.5);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-family: monospace;
+    }
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .empty {
+      text-align: center;
+      color: #555;
+      margin-top: 60px;
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .msg {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-size: 15px;
+      word-break: break-word;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      border-radius: 16px 16px 4px 16px;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid #333;
+      border-radius: 16px 16px 16px 4px;
+    }
+    .msg.loading { color: #888; }
+    .input-area {
+      padding: 12px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      border-top: 1px solid #333;
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    #input {
+      flex: 1;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #333;
+      background: rgba(0,0,0,0.4);
+      color: #fff;
+      font-size: 16px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    #input:focus { border-color: #3b82f6; }
+    #send {
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 15px;
+      -webkit-appearance: none;
+    }
+    #send:disabled { background: #333; cursor: default; }
+    #send:active:not(:disabled) { transform: scale(0.98); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span style="font-size:20px">⚡</span>
+    <h1>OMNICHAT</h1>
+    <span class="status" id="status">● llama-3.3-70b</span>
+  </div>
+  <div class="messages" id="messages">
+    <div class="empty">
+      <div class="empty-icon">⚡</div>
+      <div>Groq-powered chat</div>
+      <div style="font-size:12px;margin-top:8px;color:#444">Zero Claude credits</div>
+    </div>
+  </div>
+  <div class="input-area">
+    <input type="text" id="input" placeholder="Message..." autocomplete="off">
+    <button id="send">Send</button>
+  </div>
+  <script>
+    const messages = [];
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+    const statusEl = document.getElementById('status');
+    let loading = false;
+
+    function render() {
+      if (messages.length === 0) {
+        messagesEl.innerHTML = '<div class="empty"><div class="empty-icon">⚡</div><div>Groq-powered chat</div><div style="font-size:12px;margin-top:8px;color:#444">Zero Claude credits</div></div>';
+        return;
+      }
+      messagesEl.innerHTML = messages.map(m => 
+        '<div class="msg ' + m.role + '">' + escapeHtml(m.content) + '</div>'
+      ).join('') + (loading ? '<div class="msg assistant loading">⚡ thinking...</div>' : '');
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    async function send() {
+      const text = inputEl.value.trim();
+      if (!text || loading) return;
+      
+      messages.push({ role: 'user', content: text });
+      inputEl.value = '';
+      loading = true;
+      sendBtn.disabled = true;
+      statusEl.textContent = 'thinking...';
+      statusEl.style.color = '#ff0';
+      render();
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages })
+        });
+        const data = await res.json();
+        if (data.error) {
+          messages.push({ role: 'assistant', content: 'Error: ' + data.error });
+        } else {
+          messages.push({ role: 'assistant', content: data.content });
+        }
+        statusEl.textContent = '● llama-3.3-70b';
+        statusEl.style.color = '#0f0';
+      } catch (e) {
+        messages.push({ role: 'assistant', content: 'Network error: ' + e.message });
+        statusEl.textContent = '● offline';
+        statusEl.style.color = '#f00';
+      }
+      
+      loading = false;
+      sendBtn.disabled = false;
+      render();
+      inputEl.focus();
+    }
+
+    sendBtn.onclick = send;
+    inputEl.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) send(); };
+  </script>
+</body>
+</html>`;
+
 
 export default {
   async fetch(request, env) {
-    if (request.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
+    const url = new URL(request.url);
+    
+    // CORS headers for all responses
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    };
+    
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
     }
-
-    try {
-      const body = await request.json();
-      const { subject, text } = body;
-
-      // Parse commit request from email
-      const commitRequest = parseEmailCommit(subject, text);
-      
-      if (!commitRequest) {
-        await logToGist(env.GITHUB_TOKEN, {
-          timestamp: new Date().toISOString(),
-          status: "error",
-          error: "Invalid email format - could not parse commit request",
-          subject,
-          text_preview: text?.substring(0, 100)
+    
+    // Serve chat UI
+    if (url.pathname === '/chat' || url.pathname === '/chat/') {
+      return new Response(CHAT_HTML, {
+        headers: { ...corsHeaders, 'Content-Type': 'text/html' }
+      });
+    }
+    
+    // Groq API endpoint
+    if (url.pathname === '/api/chat' && request.method === 'POST') {
+      try {
+        const { messages } = await request.json();
+        
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.GROQ_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: messages.map(m => ({ role: m.role, content: m.content })),
+            max_tokens: 2048
+          })
         });
         
-        return new Response("Invalid email format", { status: 400 });
+        const data = await groqRes.json();
+        
+        if (data.error) {
+          return new Response(JSON.stringify({ error: data.error.message }), { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        return new Response(JSON.stringify({ content: data.choices[0].message.content }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
-
-      console.log("Parsed commit request:", commitRequest);
-
-      // Commit to GitHub
-      const result = await commitToGitHub(commitRequest, env.GITHUB_TOKEN);
-
-      // Log success to gist
-      await logToGist(env.GITHUB_TOKEN, {
-        timestamp: new Date().toISOString(),
-        status: "success",
-        repository: commitRequest.repo,
-        branch: commitRequest.branch,
-        files: commitRequest.files.map(f => f.path),
-        commit_message: commitRequest.message,
-        commit_sha: result.commit.sha,
-        commit_url: result.commit.html_url
-      });
-
-      return new Response(JSON.stringify({ 
-        success: true,
-        commit: result.commit
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
-
-    } catch (error) {
-      console.error("Error processing commit:", error);
-      
-      // Log error to gist
-      await logToGist(env.GITHUB_TOKEN, {
-        timestamp: new Date().toISOString(),
-        status: "error",
-        error: error.message,
-        stack: error.stack
-      });
-
-      return new Response(JSON.stringify({ 
-        error: error.message 
-      }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
     }
+
+    // Email commit endpoint
+    if (request.method === 'POST' && (url.pathname === '/' || url.pathname === '')) {
+      return handleEmailCommit(request, env);
+    }
+    
+    // Health/info endpoint
+    return new Response('OmniBot API\\n\\nGET /chat - Groq Chat UI\\nPOST /api/chat - Groq API\\nPOST / - Email commits', { 
+      headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+    });
   }
 };
 
-/**
- * Parse commit request from email subject and body
- * 
- * Subject format: [COMMIT] owner/repo/branch - Commit message
- *                 or: [COMMIT] repo - Commit message (uses default owner)
- * 
- * Body format (COMMIT_REQUEST style):
- * COMMIT_REQUEST
- * Repository: owner/repo
- * Branch: main
- * File: path/to/file
- * Action: update
- * 
- * --- FILE CONTENT START ---
- * content here
- * --- FILE CONTENT END ---
- * 
- * Commit Message: message
- */
-function parseEmailCommit(subject, text) {
-  // Check for [COMMIT] or [OMNIBOT-COMMIT] in subject
-  if (!subject || (!subject.includes("[COMMIT]") && !subject.includes("[OMNIBOT-COMMIT]"))) {
-    return null;
-  }
-
-  // Try COMMIT_REQUEST format first
-  if (text && text.includes("COMMIT_REQUEST")) {
-    return parseCommitRequestFormat(text);
-  }
-
-  // Fall back to subject-based parsing
-  return parseSubjectFormat(subject, text);
-}
-
-/**
- * Parse COMMIT_REQUEST format from email body
- */
-function parseCommitRequestFormat(body) {
-  const lines = body.split("\n");
-  
-  const data = {
-    owner: "thejonanshow",
-    repo: null,
-    branch: "main",
-    files: [],
-    message: null
-  };
-
-  let inContent = false;
-  let currentFile = null;
-  let contentLines = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
-    if (line.includes("--- FILE CONTENT START ---")) {
-      inContent = true;
-      contentLines = [];
-      continue;
-    }
-
-    if (line.includes("--- FILE CONTENT END ---")) {
-      inContent = false;
-      if (currentFile) {
-        data.files.push({
-          path: currentFile,
-          content: contentLines.join("\n")
-        });
-        currentFile = null;
-      }
-      continue;
-    }
-
-    if (inContent) {
-      contentLines.push(lines[i]); // Keep original line with indentation
-      continue;
-    }
-
-    if (line.startsWith("Repository:")) {
-      const repo = line.split("Repository:")[1].trim();
-      if (repo.includes("/")) {
-        const parts = repo.split("/");
-        data.owner = parts[0];
-        data.repo = parts[1];
-      } else {
-        data.repo = repo;
-      }
-    } else if (line.startsWith("Branch:")) {
-      data.branch = line.split("Branch:")[1].trim();
-    } else if (line.startsWith("File:")) {
-      currentFile = line.split("File:")[1].trim();
-    } else if (line.startsWith("Commit Message:")) {
-      data.message = line.split("Commit Message:")[1].trim();
-    }
-  }
-
-  if (!data.repo || data.files.length === 0 || !data.message) {
-    return null;
-  }
-
-  return data;
-}
-
-/**
- * Parse commit info from subject line
- * Format: [COMMIT] owner/repo/branch - Commit message
- */
-function parseSubjectFormat(subject, body) {
-  const match = subject.match(/\[(?:OMNIBOT-)?COMMIT\]\s*(.+?)\s*-\s*(.+)/i);
-  if (!match) return null;
-
-  const pathPart = match[1].trim();
-  const message = match[2].trim();
-
-  const parts = pathPart.split("/");
-  let owner, repo, branch;
-
-  if (parts.length >= 3) {
-    owner = parts[0];
-    repo = parts[1];
-    branch = parts.slice(2).join("/");
-  } else if (parts.length === 2) {
-    owner = parts[0];
-    repo = parts[1];
-    branch = "main";
-  } else {
-    owner = "thejonanshow";
-    repo = parts[0];
-    branch = "main";
-  }
-
-  // Parse files from body
-  const files = parseFilesFromBody(body);
-  if (files.length === 0) {
-    return null;
-  }
-
-  return { owner, repo, branch, message, files };
-}
-
-/**
- * Parse files from email body
- * Supports multiple formats
- */
-function parseFilesFromBody(body) {
-  const files = [];
-
-  // Try JSON format
+async function handleEmailCommit(request, env) {
   try {
-    const jsonMatch = body.match(/\{[\s\S]*"files"[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed.files)) {
-        return parsed.files;
-      }
+    const body = await request.json();
+    const { subject, text } = body;
+
+    const commitRequest = parseEmailCommit(subject, text);
+    
+    if (!commitRequest) {
+      await logToGist(env.GITHUB_TOKEN, {
+        timestamp: new Date().toISOString(),
+        status: "error",
+        error: "Invalid email format",
+        subject,
+        text_preview: text?.substring(0, 100)
+      });
+      return new Response("Invalid email format", { status: 400 });
     }
-  } catch (e) {
-    // Not JSON, continue to other formats
-  }
 
-  // Try: FILE: path\ncontent\n\nFILE: path2\ncontent2
-  const blocks = body.split(/^FILE:\s*/m).slice(1);
-  for (const block of blocks) {
-    const blockLines = block.split("\n");
-    const path = blockLines[0].trim();
-    const content = blockLines.slice(1).join("\n").trim();
-    if (path && content) {
-      files.push({ path, content });
-    }
-  }
+    const result = await commitToGitHub(commitRequest, env.GITHUB_TOKEN);
 
-  return files;
-}
-
-/**
- * Commit files to GitHub using the GitHub API
- */
-async function commitToGitHub(request, token) {
-  const { owner, repo, branch, message, files } = request;
-  const baseUrl = `https://api.github.com/repos/${owner}/${repo}`;
-  const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Accept": "application/vnd.github.v3+json",
-    "User-Agent": "Email-Commit-Worker"
-  };
-
-  // Get current branch reference
-  const refRes = await fetch(`${baseUrl}/git/ref/heads/${branch}`, { headers });
-  if (!refRes.ok) {
-    throw new Error(`Branch not found: ${branch}`);
-  }
-  const refData = await refRes.json();
-  const baseSha = refData.object.sha;
-
-  // Get base commit
-  const commitRes = await fetch(`${baseUrl}/git/commits/${baseSha}`, { headers });
-  if (!commitRes.ok) {
-    throw new Error(`Failed to get commit: ${baseSha}`);
-  }
-  const commitData = await commitRes.json();
-  const baseTreeSha = commitData.tree.sha;
-
-  // Create blobs for each file
-  const treeItems = [];
-  for (const file of files) {
-    const blobRes = await fetch(`${baseUrl}/git/blobs`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: file.content,
-        encoding: "utf-8"
-      })
+    await logToGist(env.GITHUB_TOKEN, {
+      timestamp: new Date().toISOString(),
+      status: "success",
+      repository: commitRequest.repo,
+      branch: commitRequest.branch,
+      files: commitRequest.files.map(f => f.path),
+      commit_sha: result.commit.sha
     });
 
-    if (!blobRes.ok) {
-      const error = await blobRes.text();
-      throw new Error(`Failed to create blob for ${file.path}: ${error}`);
-    }
-
-    const blob = await blobRes.json();
-    treeItems.push({ 
-      path: file.path, 
-      mode: "100644", 
-      type: "blob", 
-      sha: blob.sha 
-    });
-  }
-
-  // Create new tree
-  const treeRes = await fetch(`${baseUrl}/git/trees`, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      base_tree: baseTreeSha,
-      tree: treeItems
-    })
-  });
-
-  if (!treeRes.ok) {
-    const error = await treeRes.text();
-    throw new Error(`Failed to create tree: ${error}`);
-  }
-
-  const tree = await treeRes.json();
-
-  // Create new commit
-  const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
-    method: "POST",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      tree: tree.sha,
-      parents: [baseSha]
-    })
-  });
-
-  if (!newCommitRes.ok) {
-    const error = await newCommitRes.text();
-    throw new Error(`Failed to create commit: ${error}`);
-  }
-
-  const newCommit = await newCommitRes.json();
-
-  // Update branch reference
-  const updateRefRes = await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
-    method: "PATCH",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      sha: newCommit.sha
-    })
-  });
-
-  if (!updateRefRes.ok) {
-    const error = await updateRefRes.text();
-    throw new Error(`Failed to update ref: ${error}`);
-  }
-
-  return {
-    commit: {
-      sha: newCommit.sha,
-      html_url: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`
-    }
-  };
-}
-
-/**
- * Append log entry to the commit log gist
- * Gist ID: 625dc743af3e24b82467339bf19589f2
- */
-async function logToGist(token, logEntry) {
-  const gistId = "625dc743af3e24b82467339bf19589f2";
-  const filename = "omnibot-commit-log.json";
-
-  const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Accept": "application/vnd.github.v3+json",
-    "User-Agent": "Email-Commit-Worker"
-  };
-
-  try {
-    // Get current gist content
-    const getRes = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
-    if (!getRes.ok) {
-      console.error("Failed to fetch gist:", await getRes.text());
-      return;
-    }
-
-    const gist = await getRes.json();
-    let logs = [];
-
-    // Parse existing logs
-    if (gist.files[filename]) {
-      try {
-        logs = JSON.parse(gist.files[filename].content);
-      } catch (e) {
-        console.error("Failed to parse existing logs:", e);
-        logs = [];
-      }
-    }
-
-    // Append new log entry
-    logs.push(logEntry);
-
-    // Keep only last 100 entries
-    if (logs.length > 100) {
-      logs = logs.slice(-100);
-    }
-
-    // Update gist
-    const updateRes = await fetch(`https://api.github.com/gists/${gistId}`, {
-      method: "PATCH",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        files: {
-          [filename]: {
-            content: JSON.stringify(logs, null, 2)
-          }
-        }
-      })
+    return new Response(JSON.stringify({ success: true, commit: result.commit }), {
+      headers: { "Content-Type": "application/json" }
     });
 
-    if (!updateRes.ok) {
-      console.error("Failed to update gist:", await updateRes.text());
-    }
   } catch (error) {
-    console.error("Error logging to gist:", error);
+    await logToGist(env.GITHUB_TOKEN, {
+      timestamp: new Date().toISOString(),
+      status: "error",
+      error: error.message
+    });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
+}
+
+function parseEmailCommit(subject, text) {
+  if (!text) return null;
+  
+  const repoMatch = text.match(/Repository:\s*([^\n]+)/i);
+  const branchMatch = text.match(/Branch:\s*([^\n]+)/i);
+  const fileMatch = text.match(/File:\s*([^\n]+)/i);
+  const messageMatch = text.match(/Commit Message:\s*([^\n]+)/i);
+  const contentMatch = text.match(/---\s*FILE CONTENT START\s*---\n([\s\S]*?)\n---\s*FILE CONTENT END\s*---/i);
+  
+  if (!repoMatch || !fileMatch || !contentMatch) return null;
+  
+  return {
+    repo: repoMatch[1].trim(),
+    branch: branchMatch ? branchMatch[1].trim() : 'main',
+    message: messageMatch ? messageMatch[1].trim() : 'Update via OmniBot',
+    files: [{ path: fileMatch[1].trim(), content: contentMatch[1] }]
+  };
+}
+
+async function commitToGitHub(commitRequest, token) {
+  const { repo, branch, message, files } = commitRequest;
+  const [owner, repoName] = repo.includes('/') ? repo.split('/') : ['thejonanshow', repo];
+  
+  for (const file of files) {
+    const getRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${file.path}?ref=${branch}`, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    
+    const existingFile = getRes.ok ? await getRes.json() : null;
+    const content = btoa(unescape(encodeURIComponent(file.content)));
+    
+    const putRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${file.path}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        content,
+        branch,
+        sha: existingFile?.sha
+      })
+    });
+    
+    if (!putRes.ok) throw new Error(`GitHub API error: ${await putRes.text()}`);
+    return await putRes.json();
+  }
+}
+
+async function logToGist(token, entry) {
+  const gistId = '625dc743af3e24b82467339bf19589f2';
+  try {
+    const getRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const gist = await getRes.json();
+    const existing = JSON.parse(gist.files['omnibot-log.json']?.content || '[]');
+    existing.unshift(entry);
+    const updated = existing.slice(0, 50);
+    
+    await fetch(`https://api.github.com/gists/${gistId}`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { 'omnibot-log.json': { content: JSON.stringify(updated, null, 2) } } })
+    });
+  } catch (e) { console.error('Gist log failed:', e); }
 }
