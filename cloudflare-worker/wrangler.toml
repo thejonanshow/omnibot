@@ -1,5 +1,7 @@
-name = "gmail-commit"
+name = "omnibot"
 main = "src/index.js"
-compatibility_date = "2024-12-05"
+compatibility_date = "2024-01-01"
 
-# No cron needed - triggered by your tap on the link
+[[kv_namespaces]]
+binding = "CONTEXT"
+id = "1eb0446396bb4a5ba2247364e8459adf"
