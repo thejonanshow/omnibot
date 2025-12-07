@@ -102,6 +102,20 @@ async function callProvider(provider, messages, env, systemPrompt = null) {
   } catch (e) { return `Error: ${e.message}`; }
 }
 
+async function clusterModeCall(multiAnswers, env, ctx) {
+  const providers = ['openai', 'groq_llama', 'groq_qwen', 'claude'];
+  const responses = [];
+
+  for (const provider of providers) {
+    const response = await callProvider(provider, multiAnswers, env);
+    responses.push(response);
+  }
+
+  const finalResponse = await callProvider('groq_llama', [{ role: 'system', content: `You are OmniBot's final response orchestrator. Combine the following responses into one: ${responses.join(', ')}.` }, { role: 'user', content: '' }], env);
+
+  return finalResponse;
+}
+
 // Self-edit: Let AI modify its own code
 async function selfEdit(instruction, env, ctx) {
   // Get current code
@@ -127,8 +141,8 @@ Output ONLY the code, no explanations. The code must be complete and valid JavaS
   
   // Clean up response (remove markdown if present)
   let cleanCode = newCode;
-  if (cleanCode.includes('```')) {
-    cleanCode = cleanCode.replace(/```javascript\n?/g, '').replace(/```\n?/g, '').trim();
+  if (cleanCode.includes('')) {
+    cleanCode = cleanCode.replace(/\n?/g, '').replace(/\n?/g, '').trim();
   }
   
   // Validate it looks like code
@@ -201,11 +215,18 @@ export default {
     // Chat endpoint
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       try {
-        const { messages, provider = 'groq_llama' } = await request.json();
-        const response = await callProvider(provider, messages, env, ctx.getContextPrompt());
-        return new Response(JSON.stringify({ content: response, session: sessionId }), {
-          headers: { ...cors, 'Content-Type': 'application/json' }
-        });
+        const { messages, provider = 'groq_llama', cluster = false } = await request.json();
+        if (cluster) {
+          const response = await clusterModeCall(messages, env, ctx);
+          return new Response(JSON.stringify({ content: response, session: sessionId }), {
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        } else {
+          const response = await callProvider(provider, messages, env, ctx.getContextPrompt());
+          return new Response(JSON.stringify({ content: response, session: sessionId }), {
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
@@ -310,6 +331,9 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 .input-area button:disabled{background:#21262d;color:#484f58}
 .edit-warning{background:#9e6a03;color:#fff;padding:6px 10px;font-size:10px;text-align:center;display:none}
 .edit-warning.show{display:block}
+.cluster-mode-toggle{display:flex;gap:3px;margin-left:auto}
+.cluster-mode-btn{padding:4px 8px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:10px;cursor:pointer}
+.cluster-mode-btn.active{background:#238636;border-color:#238636;color:#fff}
 </style>
 </head>
 <body>
@@ -320,76 +344,10 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 <button class="mode-btn active" data-mode="chat">Chat</button>
 <button class="mode-btn" data-mode="edit">Self-Edit</button>
 </div>
+<div class="cluster-mode-toggle">
+<button class="cluster-mode-btn" id="cluster-mode">Cluster Mode</button>
+</div>
 <div class="status" id="status">Ready</div>
 </div>
 <div class="edit-warning" id="editWarning">⚠️ SELF-EDIT MODE: AI can modify its own source code</div>
-<div class="messages" id="messages"></div>
-<div class="input-area">
-<textarea id="input" placeholder="Message..." rows="1"></textarea>
-<button id="send">Send</button>
-</div>
-<script>
-(function(){
-var mode='chat',messages=[],loading=false;
-var messagesEl=document.getElementById('messages'),inputEl=document.getElementById('input'),sendBtn=document.getElementById('send');
-var statusEl=document.getElementById('status'),editWarning=document.getElementById('editWarning');
-
-document.querySelectorAll('.mode-btn').forEach(function(btn){
-  btn.addEventListener('click',function(){
-    mode=btn.dataset.mode;
-    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    editWarning.classList.toggle('show',mode==='edit');
-    inputEl.placeholder=mode==='edit'?'Describe how to improve OmniBot...':'Message...';
-  });
-});
-
-function render(){
-  if(!messages.length){messagesEl.innerHTML='<div style="margin:auto;text-align:center;color:#484f58"><div style="font-size:40px;margin-bottom:8px">🤖</div><div>OmniBot</div><div style="font-size:10px;margin-top:4px">Self-editing AI system</div></div>';return;}
-  messagesEl.innerHTML=messages.map(m=>{
-    var cls=m.role==='user'?'msg-user':'msg-bot';
-    var txt=m.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    txt=txt.replace(/\`([^\`]+)\`/g,'<code>$1</code>');
-    return '<div class="msg '+cls+'">'+txt+'</div>';
-  }).join('')+(loading?'<div class="msg msg-bot" style="color:#8b949e">🤖 Working...</div>':'');
-  messagesEl.scrollTop=messagesEl.scrollHeight;
-}
-
-function setStatus(t,c){statusEl.textContent=t;statusEl.className='status'+(c?' '+c:'');}
-
-async function send(){
-  var text=inputEl.value.trim();if(!text||loading)return;
-  messages.push({role:'user',content:text});inputEl.value='';loading=true;sendBtn.disabled=true;
-  setStatus(mode==='edit'?'Editing...':'Thinking...','loading');render();
-  
-  try{
-    var endpoint=mode==='edit'?'/api/self-edit':'/api/chat';
-    var body=mode==='edit'?{instruction:text}:{messages:messages.map(m=>({role:m.role,content:m.content}))};
-    var res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    var data=await res.json();
-    
-    if(mode==='edit'){
-      if(data.success){
-        messages.push({role:'assistant',content:'✅ '+data.message+'\\n\\nCommit: '+data.commit+'\\nView: https://github.com/thejonanshow/omnibot/actions'});
-      }else{
-        messages.push({role:'assistant',content:'❌ Edit failed: '+(data.error||'Unknown error')+'\\n\\n'+(data.preview||'')});
-      }
-    }else{
-      messages.push({role:'assistant',content:data.content||data.error||'Error'});
-    }
-    setStatus('Ready','');
-  }catch(e){
-    messages.push({role:'assistant',content:'Error: '+e.message});
-    setStatus('Error','error');
-  }
-  loading=false;sendBtn.disabled=false;render();
-}
-
-sendBtn.onclick=send;
-inputEl.onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}};
-inputEl.oninput=function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';};
-render();
-})();
-</script>
-</body>
-</html>`;
+<div
