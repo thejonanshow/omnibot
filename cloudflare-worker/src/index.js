@@ -491,6 +491,13 @@ export default {
       }
     }
     
+    // Health endpoint
+    if (url.pathname === '/api/health') {
+      return new Response(JSON.stringify({ status: 'ok', timestamp: Date.now(), version: 1.0 }), {
+        headers: { ...cors, 'Content-Type': 'application/json' }
+      });
+    }
+    
     // API info
     return new Response(`OmniBot Self-Editing Orchestrator
 
@@ -504,6 +511,7 @@ Endpoints:
 - POST /api/read - Read file {path}
 - POST /api/write - Write file {path, content, message}
 - GET  /api/files?path=X - List files
+- GET  /api/health - Health check
 
 GitHub: ${GITHUB_REPO}
 Auto-deploy: On push to main`, { headers: cors });
