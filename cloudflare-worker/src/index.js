@@ -1,13 +1,3 @@
-/**
- * OmniBot Self-Editing Multi-AI Orchestrator
- * 
- * Features:
- * - All AIs share context via KV
- * - Can edit its own code on GitHub
- * - Auto-deploys via GitHub Actions on push to main
- * - Self-improvement loop
- */
-
 const PROVIDERS = {
   gemini: { url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', format: 'gemini' },
   groq_llama: { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', format: 'openai' },
@@ -19,7 +9,6 @@ const PROVIDERS = {
 const GITHUB_REPO = 'thejonanshow/omnibot';
 const GITHUB_BRANCH = 'main';
 
-// GitHub API helpers
 async function githubGet(path, env) {
   const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}?ref=${GITHUB_BRANCH}`, {
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'OmniBot' }
@@ -28,10 +17,8 @@ async function githubGet(path, env) {
 }
 
 async function githubPut(path, content, message, env) {
-  // Get current SHA
   const current = await githubGet(path, env);
   const sha = current.sha;
-  
   const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 'Content-Type': 'application/json', 'User-Agent': 'OmniBot' },
@@ -52,7 +39,6 @@ async function githubListFiles(path, env) {
   return res.json();
 }
 
-// Shared Context
 class SharedContext {
   constructor(kv, sessionId) {
     this.kv = kv;
@@ -116,13 +102,9 @@ async function clusterModeCall(multiAnswers, env, ctx) {
   return finalResponse;
 }
 
-// Self-edit: Let AI modify its own code
 async function selfEdit(instruction, env, ctx) {
-  // Get current code
   const currentCode = await githubGet('cloudflare-worker/src/index.js', env);
   const code = decodeURIComponent(escape(atob(currentCode.content)));
-  
-  // Ask Groq to generate the edit
   const editPrompt = `You are OmniBot's self-improvement system. You can edit your own source code.
 
 CURRENT SOURCE CODE:
@@ -135,33 +117,25 @@ ${instruction}
 
 Generate the COMPLETE updated source code. Maintain all existing functionality while implementing the requested improvement.
 Output ONLY the code, no explanations. The code must be complete and valid JavaScript.`;
-
   const newCode = await callProvider('groq_llama', [{ role: 'user', content: editPrompt }], env,
     'You are a code editor. Output only valid JavaScript code. No markdown, no explanations.');
-  
-  // Clean up response (remove markdown if present)
   let cleanCode = newCode;
   if (cleanCode.includes('')) {
     cleanCode = cleanCode.replace(/\n?/g, '').replace(/\n?/g, '').trim();
   }
-  
-  // Validate it looks like code
   if (!cleanCode.includes('export default') || cleanCode.length < 1000) {
     return { success: false, error: 'Generated code appears invalid', preview: cleanCode.slice(0, 500) };
   }
-  
-  // Commit to GitHub
   const result = await githubPut(
     'cloudflare-worker/src/index.js',
     cleanCode,
     `[OmniBot Self-Edit] ${instruction.slice(0, 50)}`,
     env
   );
-  
   if (result.commit) {
     await ctx.logSelfEdit('index.js', instruction);
-    return { 
-      success: true, 
+    return {
+      success: true,
       commit: result.commit.sha,
       message: `Code updated! Commit: ${result.commit.sha.slice(0, 7)}. Auto-deploying via GitHub Actions...`,
       deployUrl: `https://github.com/${GITHUB_REPO}/actions`
@@ -171,7 +145,18 @@ Output ONLY the code, no explanations. The code must be complete and valid JavaS
   }
 }
 
-// Read any file from the repo
+async function deployToCloudflare(env) {
+  const res = await fetch('https://api.cloudflare.com/client/v4/accounts/' + env.CLOUDFLARE_ACCOUNT_ID + '/workers/scripts/' + env.CLOUDFLARE_WORKER_ID, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'Bearer ' + env.CLOUDFLARE_TOKEN,
+      'Content-Type': 'application/javascript',
+    },
+    body: await githubGet('cloudflare-worker/src/index.js', env).then(data => decodeURIComponent(escape(atob(data.content))))
+  });
+  return res.json();
+}
+
 async function readFile(path, env) {
   const file = await githubGet(path, env);
   if (file.content) {
@@ -180,7 +165,6 @@ async function readFile(path, env) {
   return { success: false, error: file.message || 'File not found' };
 }
 
-// Write any file to the repo
 async function writeFile(path, content, message, env, ctx) {
   const result = await githubPut(path, content, message, env);
   if (result.commit) {
@@ -194,25 +178,23 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
-    
+
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
-    
+
     const sessionId = url.searchParams.get('session') || crypto.randomUUID();
     const ctx = new SharedContext(env.CONTEXT, sessionId);
     await ctx.load();
-    
+
     if (url.pathname === '/' || url.pathname === '/chat') {
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
     }
-    
-    // Get context
+
     if (url.pathname === '/api/context') {
       return new Response(JSON.stringify({ session: sessionId, context: ctx.data }), {
         headers: { ...cors, 'Content-Type': 'application/json' }
       });
     }
-    
-    // Chat endpoint
+
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       try {
         const { messages, provider = 'groq_llama', cluster = false } = await request.json();
@@ -231,23 +213,34 @@ export default {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
     }
-    
-    // Self-edit endpoint
+
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
       try {
         const { instruction } = await request.json();
         const result = await selfEdit(instruction, env, ctx);
-        return new Response(JSON.stringify(result), {
-          headers: { ...cors, 'Content-Type': 'application/json' }
-        });
+        if (result.success) {
+          const deploymentResult = await deployToCloudflare(env);
+          if (deploymentResult.success) {
+            return new Response(JSON.stringify({ ...result, deployment: deploymentResult }), {
+              headers: { ...cors, 'Content-Type': 'application/json' }
+            });
+          } else {
+            return new Response(JSON.stringify({ ...result, deploymentError: deploymentResult.error }), {
+              headers: { ...cors, 'Content-Type': 'application/json' }
+            });
+          }
+        } else {
+          return new Response(JSON.stringify(result), {
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message, stack: e.stack }), {
           status: 500, headers: { ...cors, 'Content-Type': 'application/json' }
         });
       }
     }
-    
-    // Read file endpoint
+
     if (url.pathname === '/api/read' && request.method === 'POST') {
       try {
         const { path } = await request.json();
@@ -259,12 +252,11 @@ export default {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
     }
-    
-    // Write file endpoint
+
     if (url.pathname === '/api/write' && request.method === 'POST') {
       try {
         const { path, content, message } = await request.json();
-        const result = await writeFile(path, content, message || 'OmniBot file update', env, ctx);
+        const result = await writeFile(path, content, message, env, ctx);
         return new Response(JSON.stringify(result), {
           headers: { ...cors, 'Content-Type': 'application/json' }
         });
@@ -272,8 +264,7 @@ export default {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
     }
-    
-    // List files endpoint
+
     if (url.pathname === '/api/files' && request.method === 'GET') {
       try {
         const path = url.searchParams.get('path') || 'cloudflare-worker/src';
@@ -285,7 +276,7 @@ export default {
         return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } });
       }
     }
-    
+
     return new Response(`OmniBot Self-Editing Orchestrator
 
 Endpoints:
@@ -319,7 +310,7 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 .mode-btn.danger{background:#da3633;border-color:#da3633}
 .status{font-size:9px;padding:3px 6px;border-radius:8px;background:#238636;color:#fff}
 .status.loading{background:#9e6a03}
-.messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.messages{flex:1;overflow-y:auto;padding:10px&display:flex;flex-direction:column;gap:8px}
 .msg{max-width:90%;padding:8px 12px;border-radius:14px;line-height:1.4;white-space:pre-wrap;font-size:12px}
 .msg-user{align-self:flex-end;background:#238636;border-radius:14px 14px 4px 14px}
 .msg-bot{align-self:flex-start;background:#21262d;border:1px solid #30363d;border-radius:14px 14px 14px 4px}
@@ -346,7 +337,4 @@ body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#e6
 </div>
 <div class="cluster-mode-toggle">
 <button class="cluster-mode-btn" id="cluster-mode">Cluster Mode</button>
-</div>
-<div class="status" id="status">Ready</div>
-</div>
-<div class="edit-warning" id="editWarning">
+</div
