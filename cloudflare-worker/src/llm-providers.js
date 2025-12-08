@@ -7,7 +7,7 @@
   */
 
 // Qwen/Alibaba Cloud API endpoint
-const QWEN_API_ENDPOINT = ‘https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation’;
+const QWEN_API_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
 
 /**
 
@@ -25,8 +25,8 @@ const QWEN_API_ENDPOINT = ‘https://dashscope.aliyuncs.com/api/v1/services/aigc
   export async function callQwen(message, conversation, env, sessionId) {
   // Check if Qwen API key is configured
   if (!env.QWEN_API_KEY && !env.DASHSCOPE_API_KEY) {
-  console.log(’[Qwen] No API key configured, skipping’);
-  throw new Error(‘Qwen API key not configured’);
+  console.log('[Qwen] No API key configured, skipping');
+  throw new Error('Qwen API key not configured');
   }
 
 const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
@@ -34,7 +34,7 @@ const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
 // Build messages array
 const messages = [
 {
-role: ‘system’,
+role: 'system',
 content: `You are Qwen, a highly capable AI assistant specialized in code generation and technical tasks.
 You excel at:
 
@@ -52,12 +52,12 @@ When writing code:
 
 Current session: ${sessionId}`
 },
-…conversation.map(m => ({
+...conversation.map(m => ({
 role: m.role,
 content: m.content
 })),
 {
-role: ‘user’,
+role: 'user',
 content: message
 }
 ];
@@ -66,18 +66,18 @@ console.log(`[Qwen] Calling API with ${messages.length} messages`);
 
 try {
 const response = await fetch(QWEN_API_ENDPOINT, {
-method: ‘POST’,
+method: 'POST',
 headers: {
-‘Authorization’: `Bearer ${apiKey}`,
-‘Content-Type’: ‘application/json’
+'Authorization': `Bearer ${apiKey}`,
+'Content-Type': 'application/json'
 },
 body: JSON.stringify({
-model: ‘qwen-max’, // or ‘qwen-plus’, ‘qwen-turbo’
+model: 'qwen-max', // or 'qwen-plus', 'qwen-turbo'
 input: {
 messages: messages
 },
 parameters: {
-result_format: ‘message’,
+result_format: 'message',
 max_tokens: 4096,
 temperature: 0.7,
 top_p: 0.8
@@ -85,7 +85,6 @@ top_p: 0.8
 })
 });
 
-```
 if (!response.ok) {
   const errorText = await response.text();
   console.error(`[Qwen] API error: ${response.status} - ${errorText}`);
@@ -119,7 +118,6 @@ return {
   usage: data.usage || {},
   provider: 'qwen'
 };
-```
 
 } catch (error) {
 console.error(`[Qwen] Call failed: ${error.message}`);
@@ -142,29 +140,29 @@ throw error;
   const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
 
 if (!apiKey) {
-throw new Error(‘Qwen API key not configured’);
+throw new Error('Qwen API key not configured');
 }
 
 // OpenAI-compatible endpoint (if available)
-const endpoint = env.QWEN_OPENAI_ENDPOINT || ‘https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions’;
+const endpoint = env.QWEN_OPENAI_ENDPOINT || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
 
 const messages = [
 {
-role: ‘system’,
-content: ‘You are a helpful AI assistant specialized in code generation and technical tasks.’
+role: 'system',
+content: 'You are a helpful AI assistant specialized in code generation and technical tasks.'
 },
-…conversation,
-{ role: ‘user’, content: message }
+...conversation,
+{ role: 'user', content: message }
 ];
 
 const response = await fetch(endpoint, {
-method: ‘POST’,
+method: 'POST',
 headers: {
-‘Authorization’: `Bearer ${apiKey}`,
-‘Content-Type’: ‘application/json’
+'Authorization': `Bearer ${apiKey}`,
+'Content-Type': 'application/json'
 },
 body: JSON.stringify({
-model: ‘qwen-max’,
+model: 'qwen-max',
 messages: messages,
 max_tokens: 4096,
 temperature: 0.7
@@ -187,10 +185,10 @@ return response.json();
   */
   export async function testQwenConnection(env) {
   try {
-  const result = await callQwen(‘Say “OK” if you can hear me.’, [], env, ‘test’);
-  return result.choices?.[0]?.message?.content?.includes(‘OK’) ?? false;
+  const result = await callQwen('Say "OK" if you can hear me.', [], env, 'test');
+  return result.choices?.[0]?.message?.content?.includes('OK') ?? false;
   } catch (error) {
-  console.error(’[Qwen] Connection test failed:’, error.message);
+  console.error('[Qwen] Connection test failed:', error.message);
   return false;
   }
   }
