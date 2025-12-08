@@ -1,11 +1,24 @@
 /**
- * OmniBot v4.4 - SAFE Edition
+ * OmniBot - Axolotl Edition
+ * https://en.wikipedia.org/wiki/Axolotl
+ * 
+ * Semantic versioning via exotic sea creatures (alphabetical):
+ * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus, E: Electric Eel
+ * F: Frogfish, G: Goblin Shark, H: Hagfish, I: Icefish, J: Jellyfish
+ * K: Kissing Gourami, L: Leafy Sea Dragon, M: Mantis Shrimp, N: Nautilus
+ * O: Oarfish, P: Pufferfish, Q: Queen Angelfish, R: Ribbon Eel, S: Sea Pig
+ * T: Tardigrade, U: Umbrella Octopus, V: Vampire Squid, W: Wobbegong
+ * X: Xiphias (Swordfish), Y: Yeti Crab, Z: Zebrafish
+ * Then: Anglerfish, Barreleye, Chimaera, Dragon Moray...
+ * 
+ * Current: Axolotl (A) - First stable version with safety validation
  * 
  * CRITICAL SAFETY FEATURES:
  * - Validates code structure BEFORE committing
  * - Cannot destroy core functions (selfEdit, callGroq, etc)
  * - Rejects wholesale replacements
  * - Only allows targeted modifications
+ * - NO data extraction - passes full response to validation
  */
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
@@ -132,6 +145,9 @@ function cleanCodeFences(text) {
   
   return cleaned;
 }
+
+// Alias for backward compatibility with tests
+const extractCodeFromFinal = cleanCodeFences;
 
 async function generateWithLlama(instruction, currentCode, env) {
   const systemPrompt = `You are modifying Cloudflare Worker code.
@@ -290,8 +306,9 @@ export default {
     if (url.pathname === '/api/health') {
       return new Response(JSON.stringify({ 
         ok: true, 
-        version: '4.4',
-        safetyFeatures: ['structure-validation', 'no-wholesale-replacement'],
+        creature: 'Axolotl',
+        wikipedia: 'https://en.wikipedia.org/wiki/Axolotl',
+        safetyFeatures: ['structure-validation', 'no-wholesale-replacement', 'no-extraction'],
         models: GROQ_MODELS
       }), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -334,7 +351,7 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>OmniBot v4.4</title>
+<title>OmniBot - Axolotl</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
@@ -373,7 +390,7 @@ body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-di
 <div class="h">
 <span style="font-size:18px">🤖</span>
 <h1>OmniBot</h1>
-<span class="badge">v4.4 SAFE</span>
+<span class="badge" title="https://en.wikipedia.org/wiki/Axolotl">🦎 Axolotl</span>
 <div class="tabs">
 <button class="tab on" data-m="chat">Chat</button>
 <button class="tab" data-m="edit">Edit</button>
@@ -403,7 +420,7 @@ document.querySelectorAll('.tab').forEach(t=>{
 
 function render(){
   if(!M.length){
-    $m.innerHTML='<div style="margin:auto;text-align:center;color:#6e7681"><div style="font-size:36px;margin-bottom:8px">🤖</div><div style="font-weight:600;margin-bottom:4px">OmniBot v4.4</div><div style="font-size:11px">Safe Edition • Cannot Self-Destruct</div></div>';
+    $m.innerHTML='<div style="margin:auto;text-align:center;color:#6e7681"><div style="font-size:36px;margin-bottom:8px">🦎</div><div style="font-weight:600;margin-bottom:4px">OmniBot Axolotl</div><div style="font-size:11px"><a href="https://en.wikipedia.org/wiki/Axolotl" target="_blank" style="color:#58a6ff">Safe Edition</a> • Cannot Self-Destruct</div></div>';
     return;
   }
   $m.innerHTML=M.map(x=>{
