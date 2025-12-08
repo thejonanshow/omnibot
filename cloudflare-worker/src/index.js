@@ -118,54 +118,43 @@ function validateCodeStructure(code) {
   return { valid: true };
 }
 
-function extractCodeFromFinal(response) {
-  let code = response.trim();
+function cleanCodeFences(text) {
+  // ONLY remove markdown fences - preserve EVERYTHING else
+  let cleaned = text.trim();
   
-  // Remove markdown fences - use GREEDY match to get largest code block
-  if (code.includes('```')) {
-    // Find ALL code blocks and use the LARGEST one
-    const allMatches = code.matchAll(/```(?:javascript|js)?\n?([\s\S]*?)```/g);
-    const blocks = [...allMatches].map(m => m[1].trim());
-    
-    if (blocks.length > 0) {
-      // Use the longest block (most likely the full code)
-      code = blocks.sort((a, b) => b.length - a.length)[0];
-    } else {
-      // Fallback: remove all fences
-      code = code.replace(/```\w*\n?/g, '').replace(/\n?```/g, '').trim();
-    }
+  // Remove outer fences if present
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:javascript|js)?\s*\n?/, '');
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.replace(/\n?```\s*$/, '');
   }
   
-  // Remove any explanation text before code
-  const codeStart = code.search(/^(\/\*\*|const\s+\w+\s*=|async\s+function|export\s+default)/m);
-  if (codeStart > 50) {
-    code = code.slice(codeStart);
-  }
-  
-  return code.trim();
+  return cleaned;
 }
 
 async function generateWithLlama(instruction, currentCode, env) {
-  const systemPrompt = `You are modifying an existing Cloudflare Worker application.
+  const systemPrompt = `You are modifying Cloudflare Worker code.
+
+OUTPUT ONLY THE COMPLETE MODIFIED CODE.
+NO explanations, NO markdown fences, NO "here's the code", NO comments about what changed.
+Just the raw JavaScript code starting with /** and ending with the closing HTML template.
 
 CRITICAL RULES:
-1. You must MODIFY the existing code, NOT replace it entirely
-2. All existing functions must remain intact
+1. MODIFY the existing code, do NOT replace it
+2. Keep ALL existing functions intact
 3. Only change what's specifically requested
-4. Output the COMPLETE modified code
-5. Never use APIs that don't exist in Workers (no DOMParser, no window, no document)`;
+4. Code must work in Cloudflare Workers (no browser APIs)`;
 
-  const userPrompt = `Current Worker code (${currentCode.length} chars):
+  const userPrompt = `Current code (${currentCode.length} chars):
 
 \`\`\`javascript
 ${currentCode}
 \`\`\`
 
-Instruction: ${instruction}
+Change: ${instruction}
 
-IMPORTANT: Modify the existing code to implement this change. Do NOT create a new minimal script. Keep ALL existing functionality intact.
-
-Output the complete modified code:`;
+Output the COMPLETE modified code (no explanations):`;
 
   const response = await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
   
@@ -193,9 +182,9 @@ async function selfEdit(instruction, env) {
     console.log('Generating with Llama...');
     const response = await generateWithLlama(instruction, currentCode, env);
     
-    // Step 3: Extract code
-    const finalCode = extractCodeFromFinal(response);
-    console.log(`Extracted: ${finalCode.length} chars`);
+    // Step 3: Clean code fences ONLY (no extraction)
+    const finalCode = cleanCodeFences(response);
+    console.log(`After fence removal: ${finalCode.length} chars`);
     
     // Step 4: CRITICAL SAFETY CHECK
     const validation = validateCodeStructure(finalCode);
