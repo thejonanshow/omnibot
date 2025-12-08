@@ -46,12 +46,37 @@ jobs:
       
       - name: Check for browser APIs (Worker runtime only)
         run: |
-          # Exclude HTML template content from check
-          if grep -v '<script>' cloudflare-worker/src/index.js | grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage"; then
-            echo "ERROR: Worker runtime contains browser APIs!"
-            exit 1
-          fi
-          echo "✓ No browser APIs in Worker runtime"
+          # Smart check that properly excludes HTML template content
+          python3 << 'PYEND'
+          import sys
+          
+          with open('cloudflare-worker/src/index.js', 'r') as f:
+              content = f.read()
+          
+          # Track template literals (backtick strings)
+          in_template = False
+          worker_lines = []
+          
+          for line in content.split('\n'):
+              backticks = line.count('`')
+              # Odd number of backticks toggles template state
+              if backticks % 2 == 1:
+                  in_template = not in_template
+              # Only check lines outside templates
+              if not in_template and backticks == 0:
+                  worker_lines.append(line)
+          
+          worker_code = '\n'.join(worker_lines)
+          
+          # Check for browser APIs
+          apis = ['DOMParser', 'window.', 'document.', 'localStorage', 'sessionStorage']
+          for api in apis:
+              if api in worker_code:
+                  print(f"ERROR: Worker runtime contains browser API: {api}")
+                  sys.exit(1)
+          
+          print("✓ No browser APIs in Worker runtime")
+          PYEND
       
       - name: Verify required functions exist
         run: |
