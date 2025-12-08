@@ -1,0 +1,213 @@
+/* ═══════════════════════════════════════════════════════════════
+   OMNIBOT CYBERPUNK THEMES
+   Award-winning UI themes inspired by sci-fi classics
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+    --transition-fast: 0.15s ease;
+    --transition-medium: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --sidebar-width: 280px;
+    --header-height: 60px;
+    --border-radius: 12px;
+    --border-radius-sm: 8px;
+}
+
+/* MATRIX - Digital Rain */
+[data-theme="matrix"] {
+    --bg-primary: #000000;
+    --bg-secondary: #0a0f0a;
+    --bg-tertiary: #0d140d;
+    --bg-input: #060a06;
+    --text-primary: #00ff41;
+    --text-secondary: #00cc33;
+    --text-muted: #007722;
+    --text-inverse: #000000;
+    --accent-primary: #00ff41;
+    --accent-secondary: #39ff14;
+    --accent-glow: rgba(0, 255, 65, 0.4);
+    --accent-subtle: rgba(0, 255, 65, 0.1);
+    --border-color: #003b00;
+    --border-glow: rgba(0, 255, 65, 0.3);
+    --message-user: linear-gradient(135deg, #0d1f0d 0%, #0a1a0a 100%);
+    --message-ai: linear-gradient(135deg, #061006 0%, #040a04 100%);
+    --shadow-md: 0 4px 20px rgba(0, 255, 65, 0.15);
+    --shadow-glow: 0 0 30px rgba(0, 255, 65, 0.3);
+    --font-display: 'Share Tech Mono', monospace;
+    --font-body: 'JetBrains Mono', monospace;
+    --scanline-opacity: 0.03;
+}
+
+/* BLADE RUNNER - Neon Noir 2049 */
+[data-theme="blade-runner"] {
+    --bg-primary: #0a0810;
+    --bg-secondary: #12101a;
+    --bg-tertiary: #1a1624;
+    --bg-input: #0d0a14;
+    --text-primary: #ff6b35;
+    --text-secondary: #e85d2d;
+    --text-muted: #8b5a3c;
+    --text-inverse: #0a0810;
+    --accent-primary: #ff6b35;
+    --accent-secondary: #00d4ff;
+    --accent-glow: rgba(255, 107, 53, 0.4);
+    --accent-subtle: rgba(255, 107, 53, 0.1);
+    --border-color: #2a2035;
+    --border-glow: rgba(255, 107, 53, 0.3);
+    --message-user: linear-gradient(135deg, #1f1520 0%, #15101a 100%);
+    --message-ai: linear-gradient(135deg, #0f0c14 0%, #0a0810 100%);
+    --shadow-md: 0 4px 20px rgba(255, 107, 53, 0.15);
+    --shadow-glow: 0 0 30px rgba(255, 107, 53, 0.3);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'Rajdhani', sans-serif;
+    --scanline-opacity: 0.02;
+}
+
+/* GHOST IN THE SHELL - Digital Consciousness */
+[data-theme="ghost"] {
+    --bg-primary: #060912;
+    --bg-secondary: #0c1018;
+    --bg-tertiary: #121620;
+    --bg-input: #080b14;
+    --text-primary: #00e5ff;
+    --text-secondary: #00b8cc;
+    --text-muted: #006680;
+    --text-inverse: #060912;
+    --accent-primary: #00e5ff;
+    --accent-secondary: #ff0080;
+    --accent-glow: rgba(0, 229, 255, 0.4);
+    --accent-subtle: rgba(0, 229, 255, 0.1);
+    --border-color: #1a2030;
+    --border-glow: rgba(0, 229, 255, 0.3);
+    --message-user: linear-gradient(135deg, #0f1520 0%, #0a1018 100%);
+    --message-ai: linear-gradient(135deg, #080c14 0%, #060912 100%);
+    --shadow-md: 0 4px 20px rgba(0, 229, 255, 0.15);
+    --shadow-glow: 0 0 30px rgba(0, 229, 255, 0.3);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'Rajdhani', sans-serif;
+    --scanline-opacity: 0.015;
+}
+
+/* TRON LEGACY - The Grid */
+[data-theme="tron"] {
+    --bg-primary: #000000;
+    --bg-secondary: #050a10;
+    --bg-tertiary: #0a1018;
+    --bg-input: #030608;
+    --text-primary: #6fdfff;
+    --text-secondary: #4fc3dc;
+    --text-muted: #2a7a8c;
+    --text-inverse: #000000;
+    --accent-primary: #6fdfff;
+    --accent-secondary: #ff9500;
+    --accent-glow: rgba(111, 223, 255, 0.5);
+    --accent-subtle: rgba(111, 223, 255, 0.1);
+    --border-color: #1a3040;
+    --border-glow: rgba(111, 223, 255, 0.4);
+    --message-user: linear-gradient(135deg, #0a1520 0%, #051015 100%);
+    --message-ai: linear-gradient(135deg, #050a10 0%, #000000 100%);
+    --shadow-md: 0 4px 20px rgba(111, 223, 255, 0.2);
+    --shadow-glow: 0 0 40px rgba(111, 223, 255, 0.4);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'Share Tech Mono', monospace;
+    --scanline-opacity: 0;
+}
+
+/* NEUROMANCER - Cyberspace */
+[data-theme="neuromancer"] {
+    --bg-primary: #0a0015;
+    --bg-secondary: #10001f;
+    --bg-tertiary: #18002a;
+    --bg-input: #08000f;
+    --text-primary: #ff00d4;
+    --text-secondary: #cc00aa;
+    --text-muted: #800066;
+    --text-inverse: #0a0015;
+    --accent-primary: #ff00d4;
+    --accent-secondary: #00ffcc;
+    --accent-glow: rgba(255, 0, 212, 0.4);
+    --accent-subtle: rgba(255, 0, 212, 0.1);
+    --border-color: #300045;
+    --border-glow: rgba(255, 0, 212, 0.3);
+    --message-user: linear-gradient(135deg, #1a0028 0%, #10001a 100%);
+    --message-ai: linear-gradient(135deg, #0d0018 0%, #0a0015 100%);
+    --shadow-md: 0 4px 20px rgba(255, 0, 212, 0.2);
+    --shadow-glow: 0 0 30px rgba(255, 0, 212, 0.35);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'JetBrains Mono', monospace;
+    --scanline-opacity: 0.02;
+}
+
+/* AKIRA - Neo-Tokyo */
+[data-theme="akira"] {
+    --bg-primary: #0f0508;
+    --bg-secondary: #180a10;
+    --bg-tertiary: #220f18;
+    --bg-input: #0a0305;
+    --text-primary: #ff1744;
+    --text-secondary: #d81b3c;
+    --text-muted: #8b1a30;
+    --text-inverse: #0f0508;
+    --accent-primary: #ff1744;
+    --accent-secondary: #ffeb3b;
+    --accent-glow: rgba(255, 23, 68, 0.4);
+    --accent-subtle: rgba(255, 23, 68, 0.1);
+    --border-color: #3d1a28;
+    --border-glow: rgba(255, 23, 68, 0.3);
+    --message-user: linear-gradient(135deg, #200f18 0%, #180a10 100%);
+    --message-ai: linear-gradient(135deg, #120810 0%, #0f0508 100%);
+    --shadow-md: 0 4px 20px rgba(255, 23, 68, 0.2);
+    --shadow-glow: 0 0 30px rgba(255, 23, 68, 0.35);
+    --font-display: 'Rajdhani', sans-serif;
+    --font-body: 'Rajdhani', sans-serif;
+    --scanline-opacity: 0.025;
+}
+
+/* HAL 9000 - I'm Sorry Dave */
+[data-theme="hal"] {
+    --bg-primary: #000000;
+    --bg-secondary: #0a0000;
+    --bg-tertiary: #100000;
+    --bg-input: #050000;
+    --text-primary: #ff0000;
+    --text-secondary: #cc0000;
+    --text-muted: #660000;
+    --text-inverse: #000000;
+    --accent-primary: #ff0000;
+    --accent-secondary: #ffcc00;
+    --accent-glow: rgba(255, 0, 0, 0.5);
+    --accent-subtle: rgba(255, 0, 0, 0.1);
+    --border-color: #2a0000;
+    --border-glow: rgba(255, 0, 0, 0.4);
+    --message-user: linear-gradient(135deg, #150000 0%, #0a0000 100%);
+    --message-ai: linear-gradient(135deg, #080000 0%, #000000 100%);
+    --shadow-md: 0 4px 20px rgba(255, 0, 0, 0.2);
+    --shadow-glow: 0 0 40px rgba(255, 0, 0, 0.5);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'Share Tech Mono', monospace;
+    --scanline-opacity: 0.02;
+}
+
+/* SYNTHWAVE - Retrowave Dreams */
+[data-theme="synthwave"] {
+    --bg-primary: #1a0a2e;
+    --bg-secondary: #241040;
+    --bg-tertiary: #2e1652;
+    --bg-input: #140822;
+    --text-primary: #ff71ce;
+    --text-secondary: #e05eb0;
+    --text-muted: #8a3a6b;
+    --text-inverse: #1a0a2e;
+    --accent-primary: #ff71ce;
+    --accent-secondary: #01cdfe;
+    --accent-glow: rgba(255, 113, 206, 0.4);
+    --accent-subtle: rgba(255, 113, 206, 0.1);
+    --border-color: #4a2278;
+    --border-glow: rgba(255, 113, 206, 0.3);
+    --message-user: linear-gradient(135deg, #2e1652 0%, #241040 100%);
+    --message-ai: linear-gradient(135deg, #1e0c38 0%, #1a0a2e 100%);
+    --shadow-md: 0 4px 20px rgba(255, 113, 206, 0.2);
+    --shadow-glow: 0 0 30px rgba(255, 113, 206, 0.35);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'Rajdhani', sans-serif;
+    --scanline-opacity: 0.015;
+}
