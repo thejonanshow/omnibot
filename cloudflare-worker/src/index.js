@@ -532,12 +532,12 @@ const HTML = `<!DOCTYPE html>
         if (message.role === 'user') {
           messageElement.innerHTML = \`
             <span class="user">You</span>
-            <span class="content">${message.content}</span>
+            <span class="content">\${message.content}</span>
           \`;
         } else {
           messageElement.innerHTML = \`
             <span class="user">Assistant</span>
-            <span class="content">${message.content}</span>
+            <span class="content">\${message.content}</span>
           \`;
         }
         chatContainer.appendChild(messageElement);
@@ -545,5 +545,6 @@ const HTML = `<!DOCTYPE html>
     }
   </script>
 </body>
-</html>`;\n
+</html>`;
+
 
