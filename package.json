@@ -1,69 +1,15 @@
 {
-  "name": "omnibot",
+  "name": "omnibot-tests",
   "version": "1.0.0",
+  "description": "OmniBot test suite",
   "type": "module",
-  "description": "AI agent with LLM rotation, function calling, and self-upgrade capabilities",
   "scripts": {
-    "test": "node --test tests/**/*.test.js 2>/dev/null || echo 'No tests found - add tests to tests/ directory'",
-    "test:watch": "node --test --watch tests/**/*.test.js",
-    "test:coverage": "node --test --experimental-test-coverage tests/**/*.test.js && node scripts/check-coverage.js",
-    "test:coverage-only": "node --test --experimental-test-coverage tests/**/*.test.js",
-    "check:coverage": "node scripts/check-coverage.js",
-    "test:unit": "node --test tests/**/*.test.js",
-    "test:integration": "node --test tests/integration/**/*.spec.js",
-    "test:api": "node --test tests/api/**/*.spec.js",
-    "test:security": "node --test tests/security/**/*.spec.js",
-    "test:smoke": "node --test tests/smoke/**/*.spec.js",
-    "test:e2e": "npx playwright test",
-    "test:e2e:ui": "npx playwright test --ui",
-    "test:e2e:headed": "npx playwright test --headed",
-    "test:e2e:debug": "npx playwright test --debug",
-    "test:e2e:report": "npx playwright show-report",
-    "test:all": "npm run test && npm run test:e2e",
-    "test:comprehensive": "npm run test:unit && npm run test:integration && npm run test:api && npm run test:security && npm run test:smoke && npm run test:e2e",
-    "lint": "echo '⚠️  ESLint not configured - add eslint to devDependencies for linting'",
-    "lint:fix": "echo '⚠️  ESLint not configured'",
-    "build": "echo '✅ No build step required for Cloudflare Workers'",
-    "deploy": "./deploy.sh",
-    "deploy:staging": "./deploy.sh staging",
-    "deploy:production": "./deploy.sh production",
-    "setup": "./setup.sh",
-    "dev": "cd cloudflare-worker && npm run dev",
-    "dev:worker": "cd cloudflare-worker && npx wrangler dev",
-    "log:worker:staging": "cd cloudflare-worker && npx wrangler tail --env staging",
-    "log:worker:prod": "cd cloudflare-worker && npx wrangler tail --env production",
-    "log:worker": "npm run log:worker:staging",
-    "log:pages:staging": "cd frontend && npx wrangler pages deployment tail --project-name omnibot-ui-staging",
-    "log:pages:prod": "cd frontend && npx wrangler pages deployment tail --project-name omni-agent-ui",
-    "log:pages": "npm run log:pages:staging",
-    "status": "curl -s https://omnibot-router-staging.workers.dev/status | jq .",
-    "status:prod": "curl -s https://omnibot-router.workers.dev/status | jq .",
-    "health": "curl -s https://omnibot-router-staging.workers.dev/health | jq .",
-    "health:prod": "curl -s https://omnibot-router.workers.dev/health | jq .",
-    "validate": "cd cloudflare-worker && node --check src/index.js && echo '✅ Syntax valid'",
-    "clean": "rm -rf node_modules cloudflare-worker/node_modules package-lock.json cloudflare-worker/package-lock.json",
-    "reinstall": "npm run clean && npm install && cd cloudflare-worker && npm install"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "test": "mocha test/*.test.js --timeout 10000",
+    "test:structure": "mocha test/omnibot.test.js --grep 'Structure' --timeout 5000",
+    "test:safety": "mocha test/omnibot.test.js --grep 'Safety' --timeout 5000"
   },
   "devDependencies": {
-    "@playwright/test": "^1.56.1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/thejonanshow/omnibot.git"
-  },
-  "keywords": [
-    "ai",
-    "llm",
-    "voice",
-    "cloudflare-workers",
-    "groq",
-    "gemini",
-    "claude",
-    "openai"
-  ],
-  "author": "Jonan Scheffler",
-  "license": "MIT"
+    "mocha": "^10.2.0",
+    "chai": "^4.3.10"
+  }
 }
