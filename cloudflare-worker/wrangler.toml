@@ -2,10 +2,5 @@ name = "omnibot"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
-[env.production]
-name = "omnibot"
-route = "omnibot.jonanscheffler.workers.dev/*"
-
-# Environment variables (secrets set via GitHub Actions)
-# GITHUB_TOKEN
-# GROQ_API_KEY
+# No environment sections - deploy directly to omnibot worker
+# Secrets are set via GitHub Actions or wrangler secret put
