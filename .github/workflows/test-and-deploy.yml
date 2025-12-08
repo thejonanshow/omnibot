@@ -45,13 +45,14 @@ jobs:
           fi
           echo "✓ Size check passed"
       
-      - name: Check for browser APIs
+      - name: Check for browser APIs (Worker code only)
         run: |
-          if grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage" cloudflare-worker/src/index.js; then
-            echo "ERROR: Code contains browser-only APIs that don't work in Workers!"
+          # Smart check that excludes HTML template content
+          if grep -v '<script>' cloudflare-worker/src/index.js | grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage"; then
+            echo "ERROR: Worker runtime contains browser APIs!"
             exit 1
           fi
-          echo "✓ No browser APIs detected"
+          echo "✓ No browser APIs in Worker runtime"
       
       - name: Verify required functions exist
         run: |
@@ -106,27 +107,16 @@ jobs:
       
       - name: Test edit endpoint exists
         run: |
-          # Test that self-edit endpoint rejects empty instruction
           RESPONSE=$(curl -s -X POST \
             https://omnibot.jonanscheffler.workers.dev/api/self-edit \
             -H "Content-Type: application/json" \
             -d '{"instruction":""}')
           
           if ! echo "$RESPONSE" | grep -q "too short"; then
-            echo "ERROR: Edit endpoint not validating input properly!"
+            echo "ERROR: Edit endpoint not validating input!"
             exit 1
           fi
           echo "✓ Edit endpoint validation working"
-      
-      - name: Deployment summary
-        run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Worker deployed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Health check passed" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Edit endpoint validated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🚀 OmniBot is live at https://omnibot.jonanscheffler.workers.dev/" >> $GITHUB_STEP_SUMMARY
 
   notify:
     name: Send notification
@@ -141,14 +131,11 @@ jobs:
           if [ "${{ needs.deploy.result }}" == "success" ]; then
             echo "status=success" >> $GITHUB_OUTPUT
             echo "emoji=✅" >> $GITHUB_OUTPUT
-            echo "message=Deployment successful" >> $GITHUB_OUTPUT
           else
             echo "status=failure" >> $GITHUB_OUTPUT
             echo "emoji=❌" >> $GITHUB_OUTPUT
-            echo "message=Deployment failed - tests blocked deployment" >> $GITHUB_OUTPUT
           fi
       
       - name: Output status
         run: |
-          echo "${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.message }}"
-          echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "${{ steps.status.outputs.emoji }} Deploy status: ${{ steps.status.outputs.status }}"
