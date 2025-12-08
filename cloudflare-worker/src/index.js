@@ -1,4 +1,5 @@
 /**
+// CI test: Fixed browser API detection for HTML templates
  * OmniBot - Axolotl Edition
  * https://en.wikipedia.org/wiki/Axolotl
  * 
