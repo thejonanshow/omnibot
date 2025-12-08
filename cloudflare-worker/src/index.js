@@ -27,6 +27,8 @@
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
 
+const GITHUB_API_URL = 'https://api.github.com';
+
 const GROQ_MODELS = {
   qwen: 'qwen2.5-coder-32k-instruct',
   llama: 'llama-3.3-70b-versatile'
@@ -42,7 +44,7 @@ const REQUIRED_FUNCTIONS = [
 ];
 
 async function githubGet(path, env) {
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}?ref=main`, {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}?ref=main`, {
     headers: { 
       'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
       'Accept': 'application/vnd.github.v3+json', 
@@ -54,7 +56,7 @@ async function githubGet(path, env) {
 
 async function githubPut(path, content, message, env) {
   const current = await githubGet(path, env);
-  const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${path}`, {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}`, {
     method: 'PUT',
     headers: { 
       'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
@@ -97,6 +99,17 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   }
   
   return data.choices?.[0]?.message?.content || 'No response';
+}
+
+async function getGithubLogs(env) {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/actions/runs`, {
+    headers: { 
+      'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
+      'Accept': 'application/vnd.github.v3+json', 
+      'User-Agent': 'OmniBot' 
+    }
+  });
+  return res.json();
 }
 
 function validateCodeStructure(code) {
@@ -290,6 +303,11 @@ Explain what changed (2-3 sentences):`;
   return await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
+async function getGithubDeployLogs(env) {
+  const logs = await getGithubLogs(env);
+  return logs;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -336,6 +354,16 @@ export default {
           success: false, 
           error: 'Instruction too short',
           explanation: 'Provide clear instruction (5+ chars)' 
+        }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      if (instruction.includes('access GitHub logs')) {
+        const logs = await getGithubDeployLogs(env);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          logs: logs 
         }), { 
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
