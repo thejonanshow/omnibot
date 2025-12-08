@@ -467,13 +467,26 @@ const HTML = `<!DOCTYPE html>
     .input-container button:hover {
       background-color: #3e8e41;
     }
+    .edit-mode {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: #4CAF50;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .edit-mode:hover {
+      background-color: #3e8e41;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <h1>OmniBot - Axolotl</h1>
-      <button id="edit-button">Edit</button>
     </div>
     <div class="chat-container" id="chat-container">
       <!-- Messages will be rendered here -->
@@ -482,6 +495,7 @@ const HTML = `<!DOCTYPE html>
       <input id="input-field" type="text" placeholder="Type a message...">
       <button id="send-button">Send</button>
     </div>
+    <button class="edit-mode" id="edit-button">Edit Mode</button>
   </div>
   <script>
     const chatContainer = document.getElementById('chat-container');
@@ -545,6 +559,4 @@ const HTML = `<!DOCTYPE html>
     }
   </script>
 </body>
-</html>`;
-
-
+</html>
