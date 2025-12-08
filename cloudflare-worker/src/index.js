@@ -545,4 +545,4 @@ const HTML = `<!DOCTYPE html>
     }
   </script>
 </body>
-</html>
+</html>`;
