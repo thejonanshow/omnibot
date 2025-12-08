@@ -121,24 +121,25 @@ function validateCodeStructure(code) {
 function extractCodeFromFinal(response) {
   let code = response.trim();
   
-  // Remove markdown fences
+  // Remove markdown fences - use GREEDY match to get largest code block
   if (code.includes('```')) {
-    const match = code.match(/```(?:javascript|js)?\n?([\s\S]*?)```/);
-    if (match) {
-      code = match[1].trim();
+    // Find ALL code blocks and use the LARGEST one
+    const allMatches = code.matchAll(/```(?:javascript|js)?\n?([\s\S]*?)```/g);
+    const blocks = [...allMatches].map(m => m[1].trim());
+    
+    if (blocks.length > 0) {
+      // Use the longest block (most likely the full code)
+      code = blocks.sort((a, b) => b.length - a.length)[0];
     } else {
+      // Fallback: remove all fences
       code = code.replace(/```\w*\n?/g, '').replace(/\n?```/g, '').trim();
     }
   }
   
-  // Find code start
-  const codeMarkers = ['/**', 'const GITHUB_REPO', 'async function', 'export default'];
-  for (const marker of codeMarkers) {
-    const idx = code.indexOf(marker);
-    if (idx > 50) {
-      code = code.slice(idx);
-      break;
-    }
+  // Remove any explanation text before code
+  const codeStart = code.search(/^(\/\*\*|const\s+\w+\s*=|async\s+function|export\s+default)/m);
+  if (codeStart > 50) {
+    code = code.slice(codeStart);
   }
   
   return code.trim();
