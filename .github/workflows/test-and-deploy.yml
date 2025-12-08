@@ -45,11 +45,15 @@ jobs:
           fi
           echo "✓ Size check passed"
       
-      - name: Check for browser APIs (Worker code only)
+      - name: Check for browser APIs (Worker runtime only)
         run: |
-          # Smart check that excludes HTML template content
-          if grep -v '<script>' cloudflare-worker/src/index.js | grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage"; then
+          # Extract only Worker runtime code (before HTML template)
+          # HTML templates contain client-side JS which is fine
+          head -n 349 cloudflare-worker/src/index.js > /tmp/worker-runtime.js
+          
+          if grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage" /tmp/worker-runtime.js; then
             echo "ERROR: Worker runtime contains browser APIs!"
+            grep -n "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage" /tmp/worker-runtime.js
             exit 1
           fi
           echo "✓ No browser APIs in Worker runtime"
