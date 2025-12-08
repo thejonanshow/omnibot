@@ -305,7 +305,8 @@ export default {
     
     if (url.pathname === '/api/health') {
       return new Response(JSON.stringify({ 
-        ok: true, 
+        ok: true,
+        version: 'Axolotl',  // For test compatibility
         creature: 'Axolotl',
         wikipedia: 'https://en.wikipedia.org/wiki/Axolotl',
         safetyFeatures: ['structure-validation', 'no-wholesale-replacement', 'no-extraction'],
