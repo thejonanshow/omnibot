@@ -66,7 +66,7 @@
         }
         
         /* ========================================
-           CYBERPUNK THEME (Enhanced)
+           CYBERPUNK THEME (Enhanced with Neon Glow)
            ======================================== */
         body.theme-cyberpunk {
             --bg-primary: #0a0a1a;
@@ -90,6 +90,37 @@
             --shadow-lg: 0 12px 36px rgba(255, 0, 255, 0.35);
             background: var(--bg-primary);
             color: var(--text-primary);
+        }
+        
+        /* Cyberpunk-specific enhancements */
+        body.theme-cyberpunk .header {
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.3), 0 4px 12px rgba(0, 255, 255, 0.2);
+        }
+        
+        body.theme-cyberpunk h1 {
+            text-shadow: 0 0 10px var(--accent-primary), 0 0 20px var(--accent-secondary);
+        }
+        
+        body.theme-cyberpunk .message.user {
+            border: 1px solid rgba(255, 0, 255, 0.3);
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.2), inset 0 0 10px rgba(255, 0, 255, 0.05);
+        }
+        
+        body.theme-cyberpunk .message.assistant {
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.15), inset 0 0 10px rgba(0, 255, 255, 0.05);
+        }
+        
+        body.theme-cyberpunk button:hover {
+            box-shadow: 0 0 20px var(--accent-primary), 0 4px 16px rgba(255, 0, 255, 0.4);
+        }
+        
+        body.theme-cyberpunk textarea:focus {
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3), 0 0 0 3px rgba(0, 255, 255, 0.1);
+        }
+        
+        body.theme-cyberpunk .connection-status {
+            box-shadow: 0 0 15px var(--accent-primary), 0 0 25px var(--accent-primary);
         }
         
         /* ========================================
@@ -394,15 +425,15 @@
         }
         
         /* ========================================
-           PORTAL THEME (NEW)
+           PORTAL THEME (Light Mode)
            ======================================== */
         body.theme-portal {
             --bg-primary: #f5f5f5;
             --bg-secondary: #ffffff;
             --bg-tertiary: #e8e8e8;
-            --text-primary: #2a2a2a;
-            --text-secondary: #5a5a5a;
-            --text-muted: #8a8a8a;
+            --text-primary: #1a1a1a;
+            --text-secondary: #4a4a4a;
+            --text-muted: #7a7a7a;
             --accent-primary: #FF8C00;
             --accent-secondary: #0096FF;
             --border-color: #d0d0d0;
@@ -422,6 +453,18 @@
         
         body.theme-portal .message.user {
             color: #ffffff;
+        }
+        
+        body.theme-portal .message.assistant {
+            border: 1px solid #d0d0d0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+        
+        body.theme-portal h1 {
+            background: linear-gradient(135deg, #FF8C00, #0096FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         /* ========================================
@@ -542,6 +585,40 @@
         button:focus-visible {
             outline: 2px solid var(--accent-primary);
             outline-offset: 2px;
+        }
+        
+        /* Theme Toggle Button - Special styling */
+        .theme-toggle-btn {
+            font-size: 1.25rem;
+            padding: 8px 12px;
+            min-width: 48px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .theme-toggle-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: var(--accent-primary);
+            opacity: 0.3;
+            transform: translate(-50%, -50%);
+            transition: width 0.3s ease, height 0.3s ease;
+        }
+        
+        .theme-toggle-btn:hover::before {
+            width: 100px;
+            height: 100px;
+        }
+        
+        .theme-toggle-btn:hover {
+            box-shadow: 0 0 20px var(--accent-primary);
         }
         
         /* ========================================
@@ -1279,6 +1356,9 @@
             </div>
         </div>
         <div class="controls">
+            <button id="theme-toggle-btn" class="theme-toggle-btn" title="Toggle Theme" aria-label="Toggle theme">
+                🌙
+            </button>
             <button id="status-btn" title="Refresh Status" aria-label="Refresh status">
                 📊 Status
             </button>
@@ -1472,8 +1552,16 @@
         let config = {
             routerUrl: localStorage.getItem('routerUrl') || '',
             secret: localStorage.getItem('secret') || '',
-            theme: localStorage.getItem('theme') || 'matrix'
+            theme: localStorage.getItem('theme') || detectSystemTheme()
         };
+        
+        // Detect system theme preference
+        function detectSystemTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                return 'portal'; // Light theme
+            }
+            return 'cyberpunk'; // Default dark cyberpunk theme
+        }
         
         // State
         let conversation = [];
@@ -1494,8 +1582,10 @@
             setupSpeechRecognition();
             setupEventListeners();
             setupScrollBehavior();
+            setupThemeToggle();
             autoResize();
             applyTheme(config.theme);
+            updateThemeToggleIcon();
             
             if (config.routerUrl) {
                 updateStatus();
@@ -1523,8 +1613,12 @@
 
             voiceBtn.addEventListener('click', toggleVoice);
             sendBtn.addEventListener('click', sendMessage);
-            themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
+            themeSelect.addEventListener('change', (e) => {
+                localStorage.setItem('themeManuallySet', 'true');
+                applyTheme(e.target.value);
+            });
 
+            document.getElementById('theme-toggle-btn').addEventListener('click', toggleThemeQuick);
             document.getElementById('status-btn').addEventListener('click', updateStatus);
             document.getElementById('settings-btn').addEventListener('click', openSettings);
             document.getElementById('settings-overlay').addEventListener('click', closeSettings);
@@ -1951,6 +2045,76 @@
             panel.className = `settings-panel theme-${theme}`;
             config.theme = theme;
             localStorage.setItem('theme', theme);
+            updateThemeToggleIcon();
+        }
+        
+        // Setup theme toggle with system preference monitoring
+        function setupThemeToggle() {
+            // Listen for system theme changes
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                    // Only auto-switch if user hasn't manually set a theme
+                    if (!localStorage.getItem('themeManuallySet')) {
+                        const newTheme = e.matches ? 'cyberpunk' : 'portal';
+                        applyTheme(newTheme);
+                    }
+                });
+            }
+        }
+        
+        // Quick theme toggle between light and dark
+        function toggleThemeQuick() {
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const lightThemes = ['portal'];
+            
+            const isDark = darkThemes.includes(config.theme);
+            let newTheme;
+            
+            if (isDark) {
+                // Switch to light
+                newTheme = 'portal';
+            } else {
+                // Switch to dark cyberpunk
+                newTheme = 'cyberpunk';
+            }
+            
+            localStorage.setItem('themeManuallySet', 'true');
+            applyTheme(newTheme);
+            document.getElementById('theme-select').value = newTheme;
+            
+            // Add visual feedback animation
+            const btn = document.getElementById('theme-toggle-btn');
+            btn.style.transition = 'transform 0.2s ease';
+            btn.style.transform = 'scale(0.9) rotate(180deg)';
+            setTimeout(() => {
+                btn.style.transform = '';
+            }, 200);
+            
+            // Announce theme change for screen readers
+            const announcement = document.createElement('div');
+            announcement.setAttribute('role', 'status');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.style.position = 'absolute';
+            announcement.style.left = '-10000px';
+            announcement.textContent = `Theme switched to ${newTheme === 'portal' ? 'light' : 'dark'} mode`;
+            document.body.appendChild(announcement);
+            setTimeout(() => announcement.remove(), 1000);
+        }
+        
+        // Update theme toggle button icon
+        function updateThemeToggleIcon() {
+            const btn = document.getElementById('theme-toggle-btn');
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            
+            if (darkThemes.includes(config.theme)) {
+                btn.textContent = '☀️'; // Sun icon for switching to light
+                btn.title = 'Switch to Light Theme';
+                btn.setAttribute('aria-label', 'Switch to light theme');
+            } else {
+                btn.textContent = '🌙'; // Moon icon for switching to dark
+                btn.title = 'Switch to Dark Theme';
+                btn.setAttribute('aria-label', 'Switch to dark theme');
+            }
         }
 
         // Settings Panel
