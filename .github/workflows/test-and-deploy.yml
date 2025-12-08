@@ -23,8 +23,7 @@ jobs:
           node-version: '20'
       
       - name: Install test dependencies
-        run: |
-          npm install
+        run: npm install
       
       - name: Run structure tests
         run: npm run test:structure
@@ -40,20 +39,16 @@ jobs:
           SIZE=$(wc -c < cloudflare-worker/src/index.js)
           echo "Worker code size: $SIZE bytes"
           if [ $SIZE -lt 5000 ]; then
-            echo "ERROR: Code too small ($SIZE bytes) - possible replacement attack!"
+            echo "ERROR: Code too small - possible replacement attack!"
             exit 1
           fi
           echo "✓ Size check passed"
       
       - name: Check for browser APIs (Worker runtime only)
         run: |
-          # Extract only Worker runtime code (before HTML template)
-          # HTML templates contain client-side JS which is fine
-          head -n 349 cloudflare-worker/src/index.js > /tmp/worker-runtime.js
-          
-          if grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage" /tmp/worker-runtime.js; then
+          # Exclude HTML template content from check
+          if grep -v '<script>' cloudflare-worker/src/index.js | grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage"; then
             echo "ERROR: Worker runtime contains browser APIs!"
-            grep -n "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage" /tmp/worker-runtime.js
             exit 1
           fi
           echo "✓ No browser APIs in Worker runtime"
@@ -87,13 +82,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
-          workingDirectory: cloudflare-worker
+          node-version: '20'
+      
+      - name: Install Wrangler
+        run: npm install -g wrangler
+      
+      - name: Deploy to Cloudflare Workers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd cloudflare-worker
+          wrangler deploy --compatibility-date=2024-01-01
       
       - name: Wait for deployment
         run: sleep 30
@@ -121,6 +124,17 @@ jobs:
             exit 1
           fi
           echo "✓ Edit endpoint validation working"
+      
+      - name: Deployment summary
+        run: |
+          echo "## 🦎 OmniBot Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Worker deployed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Health check passed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Edit endpoint validated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 Live at https://omnibot.jonanscheffler.workers.dev/" >> $GITHUB_STEP_SUMMARY
 
   notify:
     name: Send notification
@@ -142,4 +156,4 @@ jobs:
       
       - name: Output status
         run: |
-          echo "${{ steps.status.outputs.emoji }} Deploy status: ${{ steps.status.outputs.status }}"
+          echo "${{ steps.status.outputs.emoji }} Deploy: ${{ steps.status.outputs.status }}"
