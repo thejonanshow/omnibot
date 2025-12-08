@@ -23,7 +23,8 @@ jobs:
           node-version: '20'
       
       - name: Install test dependencies
-        run: npm install
+        run: |
+          npm install
       
       - name: Run structure tests
         run: npm run test:structure
@@ -39,44 +40,28 @@ jobs:
           SIZE=$(wc -c < cloudflare-worker/src/index.js)
           echo "Worker code size: $SIZE bytes"
           if [ $SIZE -lt 5000 ]; then
-            echo "ERROR: Code too small - possible replacement attack!"
+            echo "ERROR: Code too small ($SIZE bytes) - possible replacement attack!"
             exit 1
           fi
           echo "✓ Size check passed"
       
-      - name: Check for browser APIs (Worker runtime only)
+      - name: Check for browser APIs (Worker code only)
         run: |
-          # Smart check that properly excludes HTML template content
-          python3 << 'PYEND'
-          import sys
+          # Find where HTML template starts (line with 'const HTML = ')
+          HTML_START=$(grep -n "^const HTML = " cloudflare-worker/src/index.js | cut -d: -f1)
           
-          with open('cloudflare-worker/src/index.js', 'r') as f:
-              content = f.read()
+          if [ -z "$HTML_START" ]; then
+            echo "WARNING: Could not find HTML template, checking entire file"
+            HTML_START=999999
+          fi
           
-          # Track template literals (backtick strings)
-          in_template = False
-          worker_lines = []
-          
-          for line in content.split('\n'):
-              backticks = line.count('`')
-              # Odd number of backticks toggles template state
-              if backticks % 2 == 1:
-                  in_template = not in_template
-              # Only check lines outside templates
-              if not in_template and backticks == 0:
-                  worker_lines.append(line)
-          
-          worker_code = '\n'.join(worker_lines)
-          
-          # Check for browser APIs
-          apis = ['DOMParser', 'window.', 'document.', 'localStorage', 'sessionStorage']
-          for api in apis:
-              if api in worker_code:
-                  print(f"ERROR: Worker runtime contains browser API: {api}")
-                  sys.exit(1)
-          
-          print("✓ No browser APIs in Worker runtime")
-          PYEND
+          # Check only Worker runtime code (before HTML template)
+          if head -$((HTML_START - 1)) cloudflare-worker/src/index.js | grep -q "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage"; then
+            echo "ERROR: Worker runtime code contains browser-only APIs!"
+            head -$((HTML_START - 1)) cloudflare-worker/src/index.js | grep -n "DOMParser\|window\.\|document\.\|localStorage\|sessionStorage"
+            exit 1
+          fi
+          echo "✓ No browser APIs in Worker runtime code"
       
       - name: Verify required functions exist
         run: |
@@ -107,21 +92,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install Wrangler
-        run: npm install -g wrangler
-      
       - name: Deploy to Cloudflare Workers
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          cd cloudflare-worker
-          wrangler deploy --compatibility-date=2024-01-01
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          workingDirectory: cloudflare-worker
       
       - name: Wait for deployment
         run: sleep 30
@@ -149,17 +126,6 @@ jobs:
             exit 1
           fi
           echo "✓ Edit endpoint validation working"
-      
-      - name: Deployment summary
-        run: |
-          echo "## 🦎 OmniBot Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Worker deployed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Health check passed" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Edit endpoint validated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🚀 Live at https://omnibot.jonanscheffler.workers.dev/" >> $GITHUB_STEP_SUMMARY
 
   notify:
     name: Send notification
@@ -181,4 +147,4 @@ jobs:
       
       - name: Output status
         run: |
-          echo "${{ steps.status.outputs.emoji }} Deploy: ${{ steps.status.outputs.status }}"
+          echo "${{ steps.status.outputs.emoji }} Deploy status: ${{ steps.status.outputs.status }}"
