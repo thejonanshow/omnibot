@@ -6,14 +6,14 @@
 - codebase, commit changes to GitHub, and trigger redeployment.
 - 
 - Flow:
-- 1. User says “upgrade mode” then describes changes
+- 1. User says "upgrade mode" then describes changes
 - 1. System fetches current codebase from GitHub
 - 1. AI generates code modifications
 - 1. Changes are committed to GitHub
 - 1. GitHub Actions deploys the update
    */
 
-const GITHUB_API = ‘https://api.github.com’;
+const GITHUB_API = 'https://api.github.com';
 
 /**
 
@@ -24,13 +24,13 @@ const GITHUB_API = ‘https://api.github.com’;
 - @returns {Promise<Object>} Map of file paths to contents
   */
   export async function getCodebaseContext(env) {
-  const repo = env.GITHUB_REPO || ‘thejonanshow/omnibot’;
-  const branch = env.GITHUB_BRANCH || ‘main’;
+  const repo = env.GITHUB_REPO || 'thejonanshow/omnibot';
+  const branch = env.GITHUB_BRANCH || 'main';
   const token = env.GITHUB_TOKEN;
 
 if (!token) {
-console.error(’[Upgrade] No GITHUB_TOKEN configured’);
-throw new Error(‘GitHub token not configured for upgrades’);
+console.error('[Upgrade] No GITHUB_TOKEN configured');
+throw new Error('GitHub token not configured for upgrades');
 }
 
 console.log(`[Upgrade] Fetching codebase from ${repo}@${branch}`);
@@ -39,15 +39,15 @@ const files = {};
 
 // Key files to fetch for context
 const filePaths = [
-‘cloudflare-worker/src/index.js’,
-‘cloudflare-worker/src/upgrade.js’,
-‘cloudflare-worker/src/llm-providers.js’,
-‘cloudflare-worker/src/lib/usage.js’,
-‘cloudflare-worker/wrangler.toml’,
-‘cloudflare-worker/package.json’,
-‘frontend/index.html’,
-‘package.json’,
-‘README.md’
+'cloudflare-worker/src/index.js',
+'cloudflare-worker/src/upgrade.js',
+'cloudflare-worker/src/llm-providers.js',
+'cloudflare-worker/src/lib/usage.js',
+'cloudflare-worker/wrangler.toml',
+'cloudflare-worker/package.json',
+'frontend/index.html',
+'package.json',
+'README.md'
 ];
 
 for (const path of filePaths) {
@@ -80,9 +80,9 @@ return files;
 
 const response = await fetch(url, {
 headers: {
-‘Authorization’: `Bearer ${token}`,
-‘Accept’: ‘application/vnd.github.v3.raw’,
-‘User-Agent’: ‘Omnibot-Upgrade/1.0’
+'Authorization': `Bearer ${token}`,
+'Accept': 'application/vnd.github.v3.raw',
+'User-Agent': 'Omnibot-Upgrade/1.0'
 }
 });
 
@@ -105,13 +105,12 @@ return response.text();
 - @returns {Promise<Response>} Upgrade result
   */
   export async function handleUpgrade(request, env) {
-  console.log(’[Upgrade] Processing upgrade request’);
+  console.log('[Upgrade] Processing upgrade request');
 
 try {
 const body = await request.json();
 const { instruction, files } = body;
 
-```
 if (!instruction) {
   return new Response(JSON.stringify({
     success: false,
@@ -163,16 +162,15 @@ return new Response(JSON.stringify({
 }), {
   headers: { 'Content-Type': 'application/json' }
 });
-```
 
 } catch (error) {
-console.error(’[Upgrade] Error:’, error);
+console.error('[Upgrade] Error:', error);
 return new Response(JSON.stringify({
 success: false,
 error: error.message
 }), {
 status: 500,
-headers: { ‘Content-Type’: ‘application/json’ }
+headers: { 'Content-Type': 'application/json' }
 });
 }
 }
@@ -182,7 +180,7 @@ headers: { ‘Content-Type’: ‘application/json’ }
 - Analyze an upgrade instruction and determine what changes are needed
 - This is a placeholder - real implementation would use AI
 - 
-- @param {string} instruction - User’s upgrade instruction
+- @param {string} instruction - User's upgrade instruction
 - @param {Object} files - Current codebase files
 - @returns {Object} Analysis result with suggested changes
   */
@@ -191,35 +189,35 @@ headers: { ‘Content-Type’: ‘application/json’ }
   const changes = [];
 
 // Simple keyword-based analysis (placeholder for AI)
-if (lowerInstruction.includes(‘theme’) || lowerInstruction.includes(‘color’)) {
+if (lowerInstruction.includes('theme') || lowerInstruction.includes('color')) {
 changes.push({
-file: ‘frontend/index.html’,
-reason: ‘Theme/color modification requested’,
-type: ‘modify’
+file: 'frontend/index.html',
+reason: 'Theme/color modification requested',
+type: 'modify'
 });
 }
 
-if (lowerInstruction.includes(‘button’) || lowerInstruction.includes(‘ui’)) {
+if (lowerInstruction.includes('button') || lowerInstruction.includes('ui')) {
 changes.push({
-file: ‘frontend/index.html’,
-reason: ‘UI element modification requested’,
-type: ‘modify’
+file: 'frontend/index.html',
+reason: 'UI element modification requested',
+type: 'modify'
 });
 }
 
-if (lowerInstruction.includes(‘api’) || lowerInstruction.includes(‘endpoint’)) {
+if (lowerInstruction.includes('api') || lowerInstruction.includes('endpoint')) {
 changes.push({
-file: ‘cloudflare-worker/src/index.js’,
-reason: ‘API/endpoint modification requested’,
-type: ‘modify’
+file: 'cloudflare-worker/src/index.js',
+reason: 'API/endpoint modification requested',
+type: 'modify'
 });
 }
 
-if (lowerInstruction.includes(‘provider’) || lowerInstruction.includes(‘llm’)) {
+if (lowerInstruction.includes('provider') || lowerInstruction.includes('llm')) {
 changes.push({
-file: ‘cloudflare-worker/src/llm-providers.js’,
-reason: ‘LLM provider modification requested’,
-type: ‘modify’
+file: 'cloudflare-worker/src/llm-providers.js',
+reason: 'LLM provider modification requested',
+type: 'modify'
 });
 }
 
@@ -255,7 +253,7 @@ console.log(`[Upgrade] Message: ${message}`);
 
 return {
 success: false,
-message: ‘Full commit implementation pending - changes analyzed but not committed’,
+message: 'Full commit implementation pending - changes analyzed but not committed',
 sha: null,
 changes_analyzed: changes
 };
@@ -275,9 +273,9 @@ changes_analyzed: changes
 
 const response = await fetch(url, {
 headers: {
-‘Authorization’: `Bearer ${token}`,
-‘Accept’: ‘application/vnd.github.v3+json’,
-‘User-Agent’: ‘Omnibot-Upgrade/1.0’
+'Authorization': `Bearer ${token}`,
+'Accept': 'application/vnd.github.v3+json',
+'User-Agent': 'Omnibot-Upgrade/1.0'
 }
 });
 
@@ -302,16 +300,16 @@ return data.object.sha;
   const url = `${GITHUB_API}/repos/${repo}/git/blobs`;
 
 const response = await fetch(url, {
-method: ‘POST’,
+method: 'POST',
 headers: {
-‘Authorization’: `Bearer ${token}`,
-‘Accept’: ‘application/vnd.github.v3+json’,
-‘Content-Type’: ‘application/json’,
-‘User-Agent’: ‘Omnibot-Upgrade/1.0’
+'Authorization': `Bearer ${token}`,
+'Accept': 'application/vnd.github.v3+json',
+'Content-Type': 'application/json',
+'User-Agent': 'Omnibot-Upgrade/1.0'
 },
 body: JSON.stringify({
 content: content,
-encoding: ‘utf-8’
+encoding: 'utf-8'
 })
 });
 

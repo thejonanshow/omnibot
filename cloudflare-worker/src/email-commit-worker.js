@@ -249,6 +249,7 @@ async function commitToGitHub(request, token) {
   };
 }
 
+/**
  * 
  * Required Environment Variables:
  * - HMAC_SECRET: Your HMAC secret (from past conversations)
