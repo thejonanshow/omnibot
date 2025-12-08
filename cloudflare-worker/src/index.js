@@ -344,15 +344,15 @@ body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-di
 .h .badge{font-size:9px;padding:2px 6px;border-radius:4px;background:#1f6feb;color:#fff}
 .tabs{display:flex;gap:3px;margin-left:auto}
 .tab{padding:4px 10px;border-radius:5px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:11px;cursor:pointer;transition:all .2s}
-.tab.on{background:#238636;border-color:#238636;color:#fff}
-.st{font-size:9px;padding:3px 8px;border-radius:8px;background:#238636;color:#fff;margin-left:8px}
+.tab.on{background:#6495ed;border-color:#6495ed;color:#fff}
+.st{font-size:9px;padding:3px 8px;border-radius:8px;background:#6495ed;color:#fff;margin-left:8px}
 .st.ld{background:#9e6a03;animation:pulse 1.5s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 .w{background:#9e6a03;color:#fff;padding:8px;font-size:11px;text-align:center;display:none;border-bottom:1px solid #6e4a03}
 .w.on{display:block}
 .msgs{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
 .m{max-width:90%;padding:10px 14px;border-radius:14px;line-height:1.5;white-space:pre-wrap;font-size:13px;word-break:break-word}
-.m.u{align-self:flex-end;background:#238636;border-radius:14px 14px 4px 14px}
+.m.u{align-self:flex-end;background:#6495ed;border-radius:14px 14px 4px 14px}
 .m.b{align-self:flex-start;background:#21262d;border:1px solid #30363d;border-radius:14px 14px 14px 4px}
 .m .exp{color:#58a6ff;font-weight:500;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #30363d}
 .m .stats{color:#8b949e;font-size:11px;margin-top:8px;padding-top:8px;border-top:1px solid #30363d}
@@ -364,8 +364,8 @@ body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-di
 .i{padding:10px;background:#161b22;border-top:1px solid #30363d;display:flex;gap:8px}
 .i textarea{flex:1;padding:10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;font-size:14px;resize:none;min-height:42px;max-height:120px;font-family:inherit;outline:none}
 .i textarea:focus{border-color:#388bfd;box-shadow:0 0 0 1px #388bfd}
-.i button{padding:10px 16px;border-radius:8px;border:none;background:#238636;color:#fff;font-weight:600;cursor:pointer;transition:background .2s}
-.i button:hover{background:#2ea043}
+.i button{padding:10px 16px;border-radius:8px;border:none;background:#6495ed;color:#fff;font-weight:600;cursor:pointer;transition:background .2s}
+.i button:hover{background:#4682b4}
 .i button:disabled{background:#21262d;color:#484f58;cursor:not-allowed}
 </style>
 </head>
@@ -505,4 +505,4 @@ render();
 })();
 </script>
 </body>
-</html>`;
+</html>
