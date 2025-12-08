@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="matrix">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OmniBot - Cyberpunk AI Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Orbitron:wght@400;500;600;700;800&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/themes.css">
+    <link rel="stylesheet" href="styles/base.css">
+    <link rel="stylesheet" href="styles/input-mobile.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">Ω</div>
+                <span class="logo-text">OMNIBOT</span>
+            </div>
+            <button class="new-chat-btn" id="newChatBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                New Chat
+            </button>
+            <div class="chat-history" id="chatHistory">
+                <div class="chat-item active">
+                    <svg class="chat-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    <span class="chat-item-text">Welcome to OmniBot</span>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <div class="theme-section">
+                    <div class="theme-label">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line></svg>
+                        Theme
+                    </div>
+                    <div class="theme-grid">
+                        <div><button class="theme-btn active" data-theme="matrix" title="Matrix"></button><div class="theme-name">Matrix</div></div>
+                        <div><button class="theme-btn" data-theme="blade-runner" title="Blade Runner"></button><div class="theme-name">Blade Runner</div></div>
+                        <div><button class="theme-btn" data-theme="ghost" title="Ghost in the Shell"></button><div class="theme-name">Ghost</div></div>
+                        <div><button class="theme-btn" data-theme="tron" title="Tron Legacy"></button><div class="theme-name">Tron</div></div>
+                        <div><button class="theme-btn" data-theme="neuromancer" title="Neuromancer"></button><div class="theme-name">Neuro</div></div>
+                        <div><button class="theme-btn" data-theme="akira" title="Akira"></button><div class="theme-name">Akira</div></div>
+                        <div><button class="theme-btn" data-theme="hal" title="HAL 9000"></button><div class="theme-name">HAL</div></div>
+                        <div><button class="theme-btn" data-theme="synthwave" title="Synthwave"></button><div class="theme-name">Synth</div></div>
+                    </div>
+                </div>
+                <button class="settings-btn" id="settingsBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Settings
+                </button>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="mobile-header">
+                <button class="menu-btn" id="menuBtn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg></button>
+                <div class="logo-text">OMNIBOT</div>
+                <button class="header-btn" id="mobileSettingsBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle></svg></button>
+            </header>
+            <header class="chat-header">
+                <div class="chat-title"><span class="status-indicator"></span><span id="chatTitleText">New Conversation</span></div>
+                <div class="header-actions">
+                    <button class="header-btn" id="voiceToggle" title="Toggle voice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg></button>
+                    <button class="header-btn" id="clearChatBtn" title="Clear chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                </div>
+            </header>
+            <div class="messages-container" id="messagesContainer">
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-logo">Ω</div>
+                    <h1 class="empty-title">Welcome to OmniBot</h1>
+                    <p class="empty-subtitle">Your cyberpunk AI companion. Ask me anything, or try one of these suggestions:</p>
+                    <div class="suggestions">
+                        <button class="suggestion-chip">Explain quantum computing</button>
+                        <button class="suggestion-chip">Write a haiku about code</button>
+                        <button class="suggestion-chip">Help me debug my script</button>
+                        <button class="suggestion-chip">What's new in tech?</button>
+                    </div>
+                </div>
+            </div>
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <textarea class="input-textarea" id="messageInput" placeholder="Type your message..." rows="1"></textarea>
+                    <div class="input-actions">
+                        <button class="input-btn" id="voiceInputBtn" title="Voice input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></button>
+                        <button class="send-btn" id="sendBtn" title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+                    </div>
+                </div>
+                <div class="input-hint">Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line</div>
+            </div>
+        </main>
+    </div>
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Settings</h2>
+                <button class="modal-close" id="closeModal"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group"><label class="setting-label">Router URL</label><input type="text" class="setting-input" id="routerUrl" placeholder="https://your-worker.workers.dev"></div>
+                <div class="setting-group"><label class="setting-label">Shared Secret</label><input type="password" class="setting-input" id="sharedSecret" placeholder="Your secret key"></div>
+                <div class="setting-group"><label class="setting-label">LLM Provider</label><select class="setting-select" id="llmProvider"><option value="auto">Auto (Rotate)</option><option value="groq">Groq (Llama)</option><option value="gemini">Google Gemini</option><option value="claude">Anthropic Claude</option><option value="openai">OpenAI GPT</option></select></div>
+                <div class="setting-group"><label class="setting-label">Voice</label><select class="setting-select" id="voiceSelect"><option value="default">System Default</option></select></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelSettings">Cancel</button>
+                <button class="btn btn-primary" id="saveSettings">Save Changes</button>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
