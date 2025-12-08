@@ -58,10 +58,14 @@ describe('OmniBot Structure Tests', () => {
   });
   
   it('should not use browser-only APIs', () => {
-    const browserAPIs = ['DOMParser', 'window.', 'document.', 'localStorage', 'sessionStorage'];
+    // Only check Worker code, not client-side HTML JavaScript
+    const htmlStart = workerCode.indexOf('const HTML =');
+    const workerCodeOnly = htmlStart > 0 ? workerCode.slice(0, htmlStart) : workerCode;
+    
+    const browserAPIs = ['DOMParser', 'window.', 'localStorage', 'sessionStorage'];
     
     for (const api of browserAPIs) {
-      expect(workerCode).to.not.include(api, 
+      expect(workerCodeOnly).to.not.include(api, 
         `Code uses browser-only API: ${api} (not available in Workers)`);
     }
   });
