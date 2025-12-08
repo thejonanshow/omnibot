@@ -2,6 +2,10 @@ name = "omnibot"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
-[[kv_namespaces]]
-binding = "CONTEXT"
-id = "1eb0446396bb4a5ba2247364e8459adf"
+[env.production]
+name = "omnibot"
+route = "omnibot.jonanscheffler.workers.dev/*"
+
+# Environment variables (secrets set via GitHub Actions)
+# GITHUB_TOKEN
+# GROQ_API_KEY
