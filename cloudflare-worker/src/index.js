@@ -204,9 +204,11 @@ async function selfEdit(instruction, env) {
         error: 'Safety check failed',
         explanation: validation.reason,
         debug: {
+          instruction: instruction,
           responseLength: response.length,
           extractedLength: finalCode.length,
-          preview: finalCode.slice(0, 500)
+          fullLlamaResponse: response,  // FULL response for debugging
+          extractedCode: finalCode      // What we extracted
         }
       };
     }
@@ -473,6 +475,21 @@ async function send(){
         M.push(msg);
       }else{
         var err={r:'assistant',exp:d.explanation||'',c:'❌ '+d.error};
+        if(d.debug){
+          // Show full debug info in expandable section
+          err.c+='\\n\\n📋 Debug Info:';
+          err.c+='\\nInstruction: '+d.debug.instruction;
+          err.c+='\\nLlama response: '+d.debug.responseLength+' chars';
+          err.c+='\\nExtracted code: '+d.debug.extractedLength+' chars';
+          if(d.debug.fullLlamaResponse){
+            err.c+='\\n\\n--- FULL LLAMA RESPONSE ---\\n'+d.debug.fullLlamaResponse.slice(0,2000);
+            if(d.debug.fullLlamaResponse.length>2000) err.c+='\\n... ('+((d.debug.fullLlamaResponse.length-2000))+' more chars)';
+          }
+          if(d.debug.extractedCode){
+            err.c+='\\n\\n--- EXTRACTED CODE ---\\n'+d.debug.extractedCode.slice(0,1000);
+            if(d.debug.extractedCode.length>1000) err.c+='\\n... ('+((d.debug.extractedCode.length-1000))+' more chars)';
+          }
+        }
         M.push(err);
       }
     }else{
