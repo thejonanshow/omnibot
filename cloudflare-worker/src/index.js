@@ -317,7 +317,7 @@ const HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OmniBot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #0d0d0d;
@@ -333,19 +333,136 @@ const HTML = `<!DOCTYPE html>
       --success: #22c55e;
       --warning: #f59e0b;
       --error: #ef4444;
-      --radius: 16px;
-      --radius-sm: 8px;
+      --glow: transparent;
+      --font-main: 'IBM Plex Sans', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
     }
     
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     html, body {
       height: 100%;
-      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      font-family: var(--font-main);
       background: var(--bg);
       color: var(--text);
       overflow: hidden;
       -webkit-font-smoothing: antialiased;
+    }
+    
+    /* THEMES */
+    
+    /* Modern Dark (default) */
+    .theme-modern {
+      --bg: #0d0d0d;
+      --bg-secondary: #171717;
+      --bg-tertiary: #262626;
+      --text: #fafafa;
+      --text-secondary: #a1a1aa;
+      --accent: #3b82f6;
+      --user-bubble: #3b82f6;
+      --ai-bubble: #262626;
+      --border: #27272a;
+    }
+    
+    /* Matrix */
+    .theme-matrix {
+      --bg: #000a00;
+      --bg-secondary: #001400;
+      --bg-tertiary: #002200;
+      --text: #00ff41;
+      --text-secondary: #00cc33;
+      --accent: #00ff41;
+      --user-bubble: #003300;
+      --ai-bubble: #001a00;
+      --border: #004400;
+      --glow: 0 0 10px rgba(0, 255, 65, 0.3);
+      --font-main: 'IBM Plex Mono', monospace;
+    }
+    
+    /* Cyberpunk */
+    .theme-cyberpunk {
+      --bg: #0a000f;
+      --bg-secondary: #15001f;
+      --bg-tertiary: #200030;
+      --text: #ff00ff;
+      --text-secondary: #cc00cc;
+      --accent: #00ffff;
+      --user-bubble: #330033;
+      --ai-bubble: #1a001a;
+      --border: #440044;
+      --glow: 0 0 15px rgba(255, 0, 255, 0.3);
+    }
+    
+    /* HAL 9000 */
+    .theme-hal {
+      --bg: #0a0000;
+      --bg-secondary: #150000;
+      --bg-tertiary: #200000;
+      --text: #ff0000;
+      --text-secondary: #cc0000;
+      --accent: #ff0000;
+      --user-bubble: #330000;
+      --ai-bubble: #1a0000;
+      --border: #440000;
+      --glow: 0 0 20px rgba(255, 0, 0, 0.4);
+    }
+    
+    /* Tron */
+    .theme-tron {
+      --bg: #000005;
+      --bg-secondary: #000510;
+      --bg-tertiary: #000a18;
+      --text: #6fdfff;
+      --text-secondary: #4fc3dc;
+      --accent: #6fdfff;
+      --user-bubble: #001a30;
+      --ai-bubble: #000d1a;
+      --border: #002040;
+      --glow: 0 0 15px rgba(111, 223, 255, 0.4);
+      --font-main: 'Orbitron', sans-serif;
+    }
+    
+    /* Neuromancer */
+    .theme-neuromancer {
+      --bg: #05000a;
+      --bg-secondary: #0a0014;
+      --bg-tertiary: #10001f;
+      --text: #bf5fff;
+      --text-secondary: #9945cc;
+      --accent: #bf5fff;
+      --user-bubble: #200040;
+      --ai-bubble: #100020;
+      --border: #300050;
+      --glow: 0 0 12px rgba(191, 95, 255, 0.3);
+    }
+    
+    /* Borg */
+    .theme-borg {
+      --bg: #050505;
+      --bg-secondary: #0a0a0a;
+      --bg-tertiary: #151515;
+      --text: #00ff00;
+      --text-secondary: #00cc00;
+      --accent: #00ff00;
+      --user-bubble: #0a1a0a;
+      --ai-bubble: #050f05;
+      --border: #1a2a1a;
+      --glow: 0 0 8px rgba(0, 255, 0, 0.5);
+      --font-main: 'IBM Plex Mono', monospace;
+    }
+    
+    /* Dune */
+    .theme-dune {
+      --bg: #1a1408;
+      --bg-secondary: #252010;
+      --bg-tertiary: #302a18;
+      --text: #f4a261;
+      --text-secondary: #e07b00;
+      --accent: #f4a261;
+      --user-bubble: #3d3015;
+      --ai-bubble: #28200d;
+      --border: #4a3a1a;
+      --glow: 0 0 10px rgba(244, 162, 97, 0.2);
     }
     
     .app {
@@ -356,7 +473,6 @@ const HTML = `<!DOCTYPE html>
       margin: 0 auto;
     }
     
-    /* Header */
     .header {
       padding: 12px 16px;
       display: flex;
@@ -364,8 +480,7 @@ const HTML = `<!DOCTYPE html>
       justify-content: space-between;
       border-bottom: 1px solid var(--border);
       background: var(--bg);
-      position: relative;
-      z-index: 10;
+      box-shadow: var(--glow);
     }
     
     .logo {
@@ -377,35 +492,26 @@ const HTML = `<!DOCTYPE html>
     .logo-icon {
       width: 32px;
       height: 32px;
-      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+      background: var(--accent);
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 16px;
+      color: var(--bg);
+      font-weight: bold;
+      box-shadow: var(--glow);
     }
     
-    .logo-text {
-      font-weight: 600;
-      font-size: 16px;
-      letter-spacing: -0.02em;
-    }
+    .logo-text { font-weight: 600; font-size: 16px; }
+    .logo-version { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
     
-    .logo-version {
-      font-size: 11px;
-      color: var(--text-secondary);
-      font-family: 'IBM Plex Mono', monospace;
-    }
-    
-    .header-actions {
-      display: flex;
-      gap: 8px;
-    }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
     
     .icon-btn {
       width: 36px;
       height: 36px;
-      border-radius: var(--radius-sm);
+      border-radius: 8px;
       border: none;
       background: transparent;
       color: var(--text-secondary);
@@ -417,15 +523,13 @@ const HTML = `<!DOCTYPE html>
     }
     
     .icon-btn:hover { background: var(--bg-tertiary); color: var(--text); }
-    .icon-btn:active { transform: scale(0.95); }
     
-    /* Mode tabs */
     .tabs {
       display: flex;
       gap: 4px;
       padding: 4px;
       background: var(--bg-secondary);
-      border-radius: var(--radius-sm);
+      border-radius: 8px;
     }
     
     .tab {
@@ -441,25 +545,16 @@ const HTML = `<!DOCTYPE html>
       font-family: inherit;
     }
     
-    .tab.active {
-      background: var(--bg-tertiary);
-      color: var(--text);
-    }
+    .tab.active { background: var(--bg-tertiary); color: var(--text); }
     
-    /* Messages */
     .messages {
       flex: 1;
       overflow-y: auto;
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      scroll-behavior: smooth;
+      gap: 12px;
     }
-    
-    .messages::-webkit-scrollbar { width: 6px; }
-    .messages::-webkit-scrollbar-track { background: transparent; }
-    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     
     .empty-state {
       flex: 1;
@@ -472,29 +567,14 @@ const HTML = `<!DOCTYPE html>
       padding: 40px 20px;
     }
     
-    .empty-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.6;
-    }
-    
-    .empty-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 8px;
-    }
-    
-    .empty-subtitle {
-      font-size: 14px;
-      max-width: 300px;
-      line-height: 1.5;
-    }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
+    .empty-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    .empty-subtitle { font-size: 14px; max-width: 300px; line-height: 1.5; }
     
     .msg {
       max-width: 85%;
       padding: 12px 16px;
-      border-radius: var(--radius);
+      border-radius: 16px;
       font-size: 15px;
       line-height: 1.6;
       white-space: pre-wrap;
@@ -510,14 +590,14 @@ const HTML = `<!DOCTYPE html>
     .msg.user {
       align-self: flex-end;
       background: var(--user-bubble);
-      border-radius: var(--radius) var(--radius) 4px var(--radius);
+      border-radius: 16px 16px 4px 16px;
     }
     
     .msg.assistant {
       align-self: flex-start;
       background: var(--ai-bubble);
       border: 1px solid var(--border);
-      border-radius: var(--radius) var(--radius) var(--radius) 4px;
+      border-radius: 16px 16px 16px 4px;
     }
     
     .msg.system {
@@ -526,30 +606,21 @@ const HTML = `<!DOCTYPE html>
       border: 1px solid var(--border);
       font-size: 13px;
       padding: 10px 16px;
-      border-radius: var(--radius);
+      border-radius: 16px;
       max-width: 90%;
     }
     
-    .msg.system.success { border-color: var(--success); color: var(--success); }
-    .msg.system.error { border-color: var(--error); color: var(--error); }
+    .msg.success { border-color: var(--success); }
+    .msg.error { border-color: var(--error); }
+    .msg a { color: var(--accent); }
     
-    .msg a { color: #60a5fa; text-decoration: none; }
-    .msg a:hover { text-decoration: underline; }
-    
-    .typing {
-      display: flex;
-      gap: 4px;
-      padding: 16px;
-    }
-    
+    .typing { display: flex; gap: 4px; padding: 8px 0; }
     .typing span {
-      width: 8px;
-      height: 8px;
+      width: 8px; height: 8px;
       background: var(--text-secondary);
       border-radius: 50%;
       animation: bounce 1.4s infinite;
     }
-    
     .typing span:nth-child(2) { animation-delay: 0.2s; }
     .typing span:nth-child(3) { animation-delay: 0.4s; }
     
@@ -558,23 +629,41 @@ const HTML = `<!DOCTYPE html>
       30% { transform: translateY(-8px); }
     }
     
-    /* Input */
     .input-area {
       padding: 12px 16px 24px;
       border-top: 1px solid var(--border);
       background: var(--bg);
     }
     
-    .input-wrapper {
+    .status {
       display: flex;
-      gap: 10px;
-      align-items: flex-end;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      font-family: var(--font-mono);
     }
+    
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+    
+    .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    
+    .input-wrapper { display: flex; gap: 10px; align-items: flex-end; }
     
     .input-field {
       flex: 1;
       padding: 12px 16px;
-      border-radius: var(--radius);
+      border-radius: 16px;
       border: 1px solid var(--border);
       background: var(--bg-secondary);
       color: var(--text);
@@ -584,32 +673,29 @@ const HTML = `<!DOCTYPE html>
       outline: none;
       min-height: 48px;
       max-height: 150px;
-      transition: border-color 0.15s;
     }
     
     .input-field::placeholder { color: var(--text-secondary); }
-    .input-field:focus { border-color: var(--accent); }
+    .input-field:focus { border-color: var(--accent); box-shadow: var(--glow); }
     
     .send-btn {
-      width: 48px;
-      height: 48px;
-      border-radius: var(--radius);
+      width: 48px; height: 48px;
+      border-radius: 16px;
       border: none;
       background: var(--accent);
-      color: white;
+      color: var(--bg);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.15s;
-      flex-shrink: 0;
+      box-shadow: var(--glow);
     }
     
-    .send-btn:hover { background: var(--accent-hover); }
-    .send-btn:active { transform: scale(0.95); }
-    .send-btn:disabled { background: var(--bg-tertiary); cursor: default; }
+    .send-btn:hover { filter: brightness(1.1); }
+    .send-btn:disabled { opacity: 0.5; cursor: default; }
     
-    /* Settings panel */
+    /* Settings Panel */
     .settings-panel {
       position: fixed;
       top: 0;
@@ -634,67 +720,52 @@ const HTML = `<!DOCTYPE html>
       align-items: center;
     }
     
-    .settings-title {
-      font-weight: 600;
-      font-size: 16px;
-    }
+    .settings-title { font-weight: 600; }
     
-    .settings-body {
-      flex: 1;
-      padding: 16px;
-      overflow-y: auto;
-    }
-    
-    .setting-group {
-      margin-bottom: 24px;
-    }
+    .settings-body { flex: 1; padding: 16px; overflow-y: auto; }
     
     .setting-label {
-      font-size: 12px;
-      font-weight: 500;
+      font-size: 11px;
+      font-weight: 600;
       color: var(--text-secondary);
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     
-    .theme-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
+    .theme-list { display: flex; flex-direction: column; gap: 6px; }
     
     .theme-btn {
       padding: 12px;
-      border-radius: var(--radius-sm);
+      border-radius: 8px;
       border: 2px solid var(--border);
       background: var(--bg);
       color: var(--text);
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
-      transition: all 0.15s;
       text-align: left;
       font-family: inherit;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s;
     }
     
     .theme-btn:hover { border-color: var(--text-secondary); }
     .theme-btn.active { border-color: var(--accent); background: var(--bg-tertiary); }
     
-    .theme-preview {
-      width: 100%;
-      height: 24px;
-      border-radius: 4px;
-      margin-bottom: 8px;
+    .theme-dot {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
     
     .overlay {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
       z-index: 99;
       opacity: 0;
       visibility: hidden;
@@ -703,116 +774,8 @@ const HTML = `<!DOCTYPE html>
     
     .overlay.open { opacity: 1; visibility: visible; }
     
-    /* Themes */
-    .theme-midnight {
-      --bg: #0d0d0d;
-      --bg-secondary: #171717;
-      --bg-tertiary: #262626;
-      --text: #fafafa;
-      --text-secondary: #a1a1aa;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
-      --user-bubble: #3b82f6;
-      --ai-bubble: #262626;
-      --border: #27272a;
-    }
-    
-    .theme-matrix {
-      --bg: #000a00;
-      --bg-secondary: #001400;
-      --bg-tertiary: #002200;
-      --text: #00ff41;
-      --text-secondary: #00aa2a;
-      --accent: #00ff41;
-      --accent-hover: #00dd35;
-      --user-bubble: #004400;
-      --ai-bubble: #001a00;
-      --border: #003300;
-      font-family: 'IBM Plex Mono', monospace;
-    }
-    
-    .theme-cyberpunk {
-      --bg: #0a000f;
-      --bg-secondary: #150020;
-      --bg-tertiary: #200030;
-      --text: #ff00ff;
-      --text-secondary: #cc00cc;
-      --accent: #00ffff;
-      --accent-hover: #00dddd;
-      --user-bubble: #ff006688;
-      --ai-bubble: #200030;
-      --border: #400060;
-    }
-    
-    .theme-sunset {
-      --bg: #1a1215;
-      --bg-secondary: #2a1c22;
-      --bg-tertiary: #3d2830;
-      --text: #fef3f2;
-      --text-secondary: #fda4af;
-      --accent: #f97316;
-      --accent-hover: #ea580c;
-      --user-bubble: #c2410c;
-      --ai-bubble: #3d2830;
-      --border: #4a3038;
-    }
-    
-    .theme-ocean {
-      --bg: #0c1929;
-      --bg-secondary: #132337;
-      --bg-tertiary: #1a3045;
-      --text: #e0f2fe;
-      --text-secondary: #7dd3fc;
-      --accent: #0ea5e9;
-      --accent-hover: #0284c7;
-      --user-bubble: #0369a1;
-      --ai-bubble: #1a3045;
-      --border: #1e4057;
-    }
-    
-    .theme-forest {
-      --bg: #0a1410;
-      --bg-secondary: #111f18;
-      --bg-tertiary: #1a2f22;
-      --text: #ecfdf5;
-      --text-secondary: #86efac;
-      --accent: #22c55e;
-      --accent-hover: #16a34a;
-      --user-bubble: #166534;
-      --ai-bubble: #1a2f22;
-      --border: #234d30;
-    }
-    
-    /* Status indicator */
-    .status {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: var(--text-secondary);
-      font-family: 'IBM Plex Mono', monospace;
-    }
-    
-    .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--success);
-    }
-    
-    .status-dot.loading {
-      background: var(--warning);
-      animation: pulse 1s infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    
-    /* Warning banner for edit mode */
     .edit-warning {
-      background: linear-gradient(90deg, var(--warning) 0%, #d97706 100%);
+      background: var(--warning);
       color: #000;
       padding: 8px 16px;
       font-size: 12px;
@@ -822,29 +785,24 @@ const HTML = `<!DOCTYPE html>
     }
     
     .edit-warning.show { display: block; }
-
-    /* Mobile adjustments */
+    
     @media (max-width: 640px) {
       .settings-panel { width: 100%; right: -100%; }
-      .msg { max-width: 90%; }
     }
   </style>
 </head>
-<body class="theme-midnight">
+<body class="theme-modern">
   <div class="app">
-    <div class="edit-warning" id="editWarning">
-      ⚠️ Edit Mode: AI will modify its own source code
-    </div>
+    <div class="edit-warning" id="editWarning">⚠️ Edit Mode: AI will modify its own source code</div>
     
     <header class="header">
       <div class="logo">
         <div class="logo-icon">Ω</div>
         <div>
           <div class="logo-text">OmniBot</div>
-          <div class="logo-version">Blobfish Edition</div>
+          <div class="logo-version">Blobfish</div>
         </div>
       </div>
-      
       <div class="header-actions">
         <div class="tabs">
           <button class="tab active" data-mode="chat">Chat</button>
@@ -863,7 +821,7 @@ const HTML = `<!DOCTYPE html>
       <div class="empty-state">
         <div class="empty-icon">Ω</div>
         <div class="empty-title">Welcome to OmniBot</div>
-        <div class="empty-subtitle">Self-editing AI assistant. Chat or switch to Edit mode to modify the source code.</div>
+        <div class="empty-subtitle">Self-editing AI. Chat or switch to Edit mode to modify source code.</div>
       </div>
     </div>
     
@@ -897,34 +855,32 @@ const HTML = `<!DOCTYPE html>
       </button>
     </div>
     <div class="settings-body">
-      <div class="setting-group">
-        <div class="setting-label">Theme</div>
-        <div class="theme-grid">
-          <button class="theme-btn active" data-theme="midnight">
-            <div class="theme-preview" style="background: linear-gradient(135deg, #171717 0%, #3b82f6 100%)"></div>
-            Midnight
-          </button>
-          <button class="theme-btn" data-theme="matrix">
-            <div class="theme-preview" style="background: linear-gradient(135deg, #001400 0%, #00ff41 100%)"></div>
-            Matrix
-          </button>
-          <button class="theme-btn" data-theme="cyberpunk">
-            <div class="theme-preview" style="background: linear-gradient(135deg, #150020 0%, #ff00ff 50%, #00ffff 100%)"></div>
-            Cyberpunk
-          </button>
-          <button class="theme-btn" data-theme="sunset">
-            <div class="theme-preview" style="background: linear-gradient(135deg, #2a1c22 0%, #f97316 100%)"></div>
-            Sunset
-          </button>
-          <button class="theme-btn" data-theme="ocean">
-            <div class="theme-preview" style="background: linear-gradient(135deg, #132337 0%, #0ea5e9 100%)"></div>
-            Ocean
-          </button>
-          <button class="theme-btn" data-theme="forest">
-            <div class="theme-preview" style="background: linear-gradient(135deg, #111f18 0%, #22c55e 100%)"></div>
-            Forest
-          </button>
-        </div>
+      <div class="setting-label">Theme</div>
+      <div class="theme-list">
+        <button class="theme-btn" data-theme="modern">
+          <span class="theme-dot" style="background: #3b82f6"></span>Modern Dark
+        </button>
+        <button class="theme-btn" data-theme="matrix">
+          <span class="theme-dot" style="background: #00ff41"></span>Matrix
+        </button>
+        <button class="theme-btn" data-theme="cyberpunk">
+          <span class="theme-dot" style="background: linear-gradient(135deg, #ff00ff, #00ffff)"></span>Cyberpunk
+        </button>
+        <button class="theme-btn" data-theme="hal">
+          <span class="theme-dot" style="background: #ff0000"></span>HAL 9000
+        </button>
+        <button class="theme-btn" data-theme="tron">
+          <span class="theme-dot" style="background: #6fdfff"></span>Tron
+        </button>
+        <button class="theme-btn" data-theme="neuromancer">
+          <span class="theme-dot" style="background: #bf5fff"></span>Neuromancer
+        </button>
+        <button class="theme-btn" data-theme="borg">
+          <span class="theme-dot" style="background: #00ff00"></span>Borg
+        </button>
+        <button class="theme-btn" data-theme="dune">
+          <span class="theme-dot" style="background: #f4a261"></span>Dune
+        </button>
       </div>
     </div>
   </div>
@@ -946,68 +902,78 @@ const HTML = `<!DOCTYPE html>
       var $closeSettings = document.getElementById('closeSettings');
       var $overlay = document.getElementById('overlay');
       
-      // Load saved theme
-      var savedTheme = localStorage.getItem('omnibot-theme') || 'midnight';
+      // Load saved theme safely
+      var savedTheme = localStorage.getItem('omnibot-theme') || 'modern';
       document.body.className = 'theme-' + savedTheme;
-      document.querySelector('[data-theme="' + savedTheme + '"]').classList.add('active');
+      
+      // Update active theme button
+      var themeBtn = document.querySelector('[data-theme="' + savedTheme + '"]');
+      if (themeBtn) themeBtn.classList.add('active');
       
       // Tab switching
       document.querySelectorAll('.tab').forEach(function(tab) {
-        tab.addEventListener('click', function() {
+        tab.onclick = function() {
           document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
           tab.classList.add('active');
           mode = tab.dataset.mode;
           $editWarning.classList.toggle('show', mode === 'edit');
           $input.placeholder = mode === 'edit' ? 'Describe the change...' : 'Send a message...';
-        });
+        };
       });
       
       // Settings panel
-      function openSettings() {
+      $settingsBtn.onclick = function() {
         $settingsPanel.classList.add('open');
         $overlay.classList.add('open');
-      }
+      };
       
-      function closeSettings() {
+      $closeSettings.onclick = function() {
         $settingsPanel.classList.remove('open');
         $overlay.classList.remove('open');
-      }
+      };
       
-      $settingsBtn.addEventListener('click', openSettings);
-      $closeSettings.addEventListener('click', closeSettings);
-      $overlay.addEventListener('click', closeSettings);
+      $overlay.onclick = function() {
+        $settingsPanel.classList.remove('open');
+        $overlay.classList.remove('open');
+      };
       
       // Theme switching
       document.querySelectorAll('.theme-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
+        btn.onclick = function() {
           document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           var theme = btn.dataset.theme;
           document.body.className = 'theme-' + theme;
           localStorage.setItem('omnibot-theme', theme);
-        });
+        };
       });
       
       // Auto-resize textarea
-      $input.addEventListener('input', function() {
+      $input.oninput = function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 150) + 'px';
-      });
+      };
       
       function escapeHtml(text) {
-        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+        var div = document.createElement('div');
+        div.textContent = text;
+        var escaped = div.innerHTML;
+        return escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
       }
       
       function render() {
         if (messages.length === 0) {
-          $messages.innerHTML = '<div class="empty-state"><div class="empty-icon">Ω</div><div class="empty-title">Welcome to OmniBot</div><div class="empty-subtitle">Self-editing AI assistant. Chat or switch to Edit mode to modify the source code.</div></div>';
+          $messages.innerHTML = '<div class="empty-state"><div class="empty-icon">Ω</div><div class="empty-title">Welcome to OmniBot</div><div class="empty-subtitle">Self-editing AI. Chat or switch to Edit mode to modify source code.</div></div>';
           return;
         }
         
-        var html = messages.map(function(m) {
-          return '<div class="msg ' + m.role + (m.type ? ' ' + m.type : '') + '">' + escapeHtml(m.content) + '</div>';
-        }).join('');
+        var html = '';
+        for (var i = 0; i < messages.length; i++) {
+          var m = messages[i];
+          var cls = 'msg ' + m.role;
+          if (m.type) cls += ' ' + m.type;
+          html += '<div class="' + cls + '">' + escapeHtml(m.content) + '</div>';
+        }
         
         if (loading) {
           html += '<div class="msg assistant"><div class="typing"><span></span><span></span><span></span></div></div>';
@@ -1019,10 +985,14 @@ const HTML = `<!DOCTYPE html>
       
       function setStatus(text, isLoading) {
         $statusText.textContent = text;
-        $statusDot.classList.toggle('loading', isLoading);
+        if (isLoading) {
+          $statusDot.classList.add('loading');
+        } else {
+          $statusDot.classList.remove('loading');
+        }
       }
       
-      async function send() {
+      function send() {
         var text = $input.value.trim();
         if (!text || loading) return;
         
@@ -1034,56 +1004,65 @@ const HTML = `<!DOCTYPE html>
         setStatus(mode === 'edit' ? 'Editing...' : 'Thinking...', true);
         render();
         
-        try {
-          var endpoint = mode === 'edit' ? '/api/self-edit' : '/api/chat';
-          var body = mode === 'edit' 
-            ? { instruction: text }
-            : { messages: messages.filter(function(m) { return m.role !== 'system'; }).map(function(m) { return { role: m.role, content: m.content }; }) };
-          
-          var response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-          
-          var data = await response.json();
-          
+        var endpoint = mode === 'edit' ? '/api/self-edit' : '/api/chat';
+        var body;
+        
+        if (mode === 'edit') {
+          body = JSON.stringify({ instruction: text });
+        } else {
+          var chatMsgs = [];
+          for (var i = 0; i < messages.length; i++) {
+            if (messages[i].role !== 'system') {
+              chatMsgs.push({ role: messages[i].role, content: messages[i].content });
+            }
+          }
+          body = JSON.stringify({ messages: chatMsgs });
+        }
+        
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
           if (mode === 'edit') {
             if (data.success) {
               messages.push({ 
                 role: 'system', 
                 type: 'success',
-                content: '✓ ' + data.explanation + '\n\nCommit: ' + data.url
+                content: 'Done: ' + data.explanation + '\n\nCommit: ' + data.url
               });
             } else {
               messages.push({ 
                 role: 'system', 
                 type: 'error',
-                content: '✗ ' + (data.error || 'Edit failed') + (data.explanation ? '\n' + data.explanation : '')
+                content: 'Error: ' + (data.error || 'Edit failed') + (data.explanation ? '\n' + data.explanation : '')
               });
             }
           } else {
             messages.push({ role: 'assistant', content: data.content || data.error || 'No response' });
           }
-          
           setStatus('Ready', false);
-        } catch (e) {
-          messages.push({ role: 'system', type: 'error', content: '✗ Error: ' + e.message });
+        })
+        .catch(function(e) {
+          messages.push({ role: 'system', type: 'error', content: 'Error: ' + e.message });
           setStatus('Error', false);
-        }
-        
-        loading = false;
-        $sendBtn.disabled = false;
-        render();
+        })
+        .finally(function() {
+          loading = false;
+          $sendBtn.disabled = false;
+          render();
+        });
       }
       
-      $sendBtn.addEventListener('click', send);
-      $input.addEventListener('keydown', function(e) {
+      $sendBtn.onclick = send;
+      $input.onkeydown = function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           send();
         }
-      });
+      };
       
       render();
     })();
