@@ -539,15 +539,15 @@ const HTML = `<!DOCTYPE html>
         const messageElement = document.createElement('div');
         messageElement.classList.add('message');
         if (message.role === 'user') {
-          messageElement.innerHTML = `
+          messageElement.innerHTML = \`
             <span class="user">You</span>
             <span class="content">${message.content}</span>
-          `;
+          \`;
         } else {
-          messageElement.innerHTML = `
+          messageElement.innerHTML = \`
             <span class="user">Assistant</span>
             <span class="content">${message.content}</span>
-          `;
+          \`;
         }
         chatContainer.appendChild(messageElement);
       });
