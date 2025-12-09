@@ -466,6 +466,21 @@ const HTML = `<!DOCTYPE html>
       --glow: 0 0 10px rgba(244, 162, 97, 0.2);
     }
     
+    /* Star Trek */
+    body.theme-star-trek {
+      --bg: #001a33;
+      --bg-secondary: #002255;
+      --bg-tertiary: #003366;
+      --text: #66cccc;
+      --text-secondary: #44aabb;
+      --accent: #66cccc;
+      --user-bubble: #004488;
+      --ai-bubble: #002255;
+      --border: #0055cc;
+      --glow: 0 0 10px rgba(102, 204, 204, 0.3);
+      --font-main: 'IBM Plex Mono', monospace;
+    }
+    
     .app {
       height: 100%;
       display: flex;
@@ -895,6 +910,9 @@ const HTML = `<!DOCTYPE html>
         <button class="theme-btn" data-theme="dune">
           <span class="theme-dot" style="background: #f4a261"></span>Dune
         </button>
+        <button class="theme-btn" data-theme="star-trek">
+          <span class="theme-dot" style="background: #66cccc"></span>Star Trek
+        </button>
       </div>
     </div>
   </div>
@@ -949,31 +967,4 @@ const HTML = `<!DOCTYPE html>
           // Update UI for mode
           if (mode === 'edit') {
             $modeIndicator.classList.add('edit');
-            $input.classList.add('edit-mode');
-            $input.placeholder = 'Describe the change to make...';
-          } else {
-            $modeIndicator.classList.remove('edit');
-            $input.classList.remove('edit-mode');
-            $input.placeholder = 'Send a message...';
-          }
-        });
-      });
-      
-      // Settings panel
-      $settingsBtn.addEventListener('click', function() {
-        $settingsPanel.classList.add('open');
-        $overlay.classList.add('open');
-      });
-      
-      function closeSettingsPanel() {
-        $settingsPanel.classList.remove('open');
-        $overlay.classList.remove('open');
-      }
-      
-      $closeSettings.addEventListener('click', closeSettingsPanel);
-      $overlay.addEventListener('click', closeSettingsPanel);
-      
-      // Theme switching
-      document.querySelectorAll('.theme-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          document.querySelectorAll('.theme-btn').forEach(function(b
+            $input.classList.add
