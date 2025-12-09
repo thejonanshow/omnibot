@@ -1,40 +1,33 @@
 /**
-// CI/CD Status: All tests passing! Browser API detection fixed.
-// Deployment ready - wrangler configured correctly.
-
-// CI test: Fixed browser API detection for HTML templates
- * OmniBot - Cuttlefish Edition
- * https://en.wikipedia.org/wiki/Cuttlefish
+ * OmniBot - Dumbo Octopus Edition
+ * https://en.wikipedia.org/wiki/Grimpoteuthis
  * 
  * Semantic versioning via exotic sea creatures (alphabetical):
- * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus, E: Electric Eel
- * F: Frogfish, G: Goblin Shark, H: Hagfish, I: Icefish, J: Jellyfish
- * K: Kissing Gourami, L: Leafy Sea Dragon, M: Mantis Shrimp, N: Nautilus
- * O: Oarfish, P: Pufferfish, Q: Queen Angelfish, R: Ribbon Eel, S: Sea Pig
- * T: Tardigrade, U: Umbrella Octopus, V: Vampire Squid, W: Wobbegong
- * X: Xiphias (Swordfish), Y: Yeti Crab, Z: Zebrafish
- * Then: Anglerfish, Barreleye, Chimaera, Dragon Moray...
+ * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus...
  * 
- * Current: Cuttlefish (C) - Fixed UI, inline edit mode, working themes
+ * Current: Dumbo Octopus (D) - Star Trek LCARS UI, Google Auth, Live Updates
  * 
- * CRITICAL SAFETY FEATURES:
- * - Validates code structure BEFORE committing
- * - Cannot destroy core functions (selfEdit, callGroq, etc)
- * - Rejects wholesale replacements
- * - Only allows targeted modifications
- * - NO data extraction - passes full response to validation
+ * Features:
+ * - LCARS-style Star Trek TNG interface
+ * - Google OAuth for jonanscheffler@gmail.com
+ * - Live streaming edit updates
+ * - Staging/Production visual indicators
+ * - Full telemetry dashboard
+ * - KV context viewer & editor
+ * - Master prompt configuration
+ * - All AIs get full context from KV
  */
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
-
 const GITHUB_API_URL = 'https://api.github.com';
+const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
+const VERSION = 'Dumbo Octopus';
 
 const GROQ_MODELS = {
   qwen: 'qwen2.5-coder-32k-instruct',
   llama: 'llama-3.3-70b-versatile'
 };
 
-// CRITICAL: Functions that must exist in any version
 const REQUIRED_FUNCTIONS = [
   'async function selfEdit',
   'async function callGroq',
@@ -42,6 +35,77 @@ const REQUIRED_FUNCTIONS = [
   'async function githubPut',
   'export default'
 ];
+
+// Default master prompt for all AI operations
+const DEFAULT_MASTER_PROMPT = `You are OmniBot, a self-editing AI assistant.
+
+Project Context:
+- Repository: thejonanshow/omnibot
+- Platform: Cloudflare Workers
+- LLM Provider: Groq (Llama 3.3 70B, Qwen 2.5)
+- Version: ${VERSION}
+
+Capabilities:
+- Chat with users
+- Edit your own source code
+- Access shared context via KV
+- Full safety validation before commits
+
+Rules:
+- Never remove required functions
+- Always preserve HTML UI
+- Code must work in Cloudflare Workers (no browser APIs in runtime)
+- Validate all changes before committing`;
+
+async function getContext(env) {
+  if (!env.CONTEXT) return { prompt: DEFAULT_MASTER_PROMPT, data: {} };
+  
+  try {
+    const prompt = await env.CONTEXT.get('master_prompt') || DEFAULT_MASTER_PROMPT;
+    const data = JSON.parse(await env.CONTEXT.get('shared_data') || '{}');
+    const telemetry = JSON.parse(await env.CONTEXT.get('telemetry') || '{}');
+    return { prompt, data, telemetry };
+  } catch (e) {
+    return { prompt: DEFAULT_MASTER_PROMPT, data: {}, telemetry: {} };
+  }
+}
+
+async function setContext(key, value, env) {
+  if (!env.CONTEXT) return false;
+  try {
+    await env.CONTEXT.put(key, typeof value === 'string' ? value : JSON.stringify(value));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function logTelemetry(event, data, env) {
+  if (!env.CONTEXT) return;
+  
+  try {
+    const telemetry = JSON.parse(await env.CONTEXT.get('telemetry') || '{}');
+    const now = new Date().toISOString();
+    
+    if (!telemetry.events) telemetry.events = [];
+    telemetry.events.unshift({ timestamp: now, event, data });
+    telemetry.events = telemetry.events.slice(0, 100); // Keep last 100 events
+    
+    // Update stats
+    if (!telemetry.stats) telemetry.stats = {};
+    telemetry.stats[event] = (telemetry.stats[event] || 0) + 1;
+    telemetry.stats.lastActivity = now;
+    
+    // Track context size
+    const context = await env.CONTEXT.get('shared_data') || '';
+    telemetry.stats.contextSize = context.length;
+    telemetry.stats.contextWords = context.split(/\s+/).filter(w => w).length;
+    
+    await env.CONTEXT.put('telemetry', JSON.stringify(telemetry));
+  } catch (e) {
+    console.error('Telemetry error:', e);
+  }
+}
 
 async function githubGet(path, env) {
   const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}?ref=main`, {
@@ -74,9 +138,16 @@ async function githubPut(path, content, message, env) {
 }
 
 async function callGroq(model, messages, env, systemPrompt = null) {
-  const fullMessages = systemPrompt 
-    ? [{ role: 'system', content: systemPrompt }, ...messages]
-    : messages;
+  // Get master prompt from context
+  const context = await getContext(env);
+  const fullSystemPrompt = systemPrompt 
+    ? `${context.prompt}\n\n${systemPrompt}`
+    : context.prompt;
+  
+  const fullMessages = [
+    { role: 'system', content: fullSystemPrompt },
+    ...messages
+  ];
     
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -101,19 +172,7 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   return data.choices?.[0]?.message?.content || 'No response';
 }
 
-async function getGithubLogs(env) {
-  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/actions/runs`, {
-    headers: { 
-      'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
-      'Accept': 'application/vnd.github.v3+json', 
-      'User-Agent': 'OmniBot' 
-    }
-  });
-  return res.json();
-}
-
 function validateCodeStructure(code) {
-  // CRITICAL: Ensure all required functions exist
   const missing = [];
   
   for (const required of REQUIRED_FUNCTIONS) {
@@ -129,7 +188,6 @@ function validateCodeStructure(code) {
     };
   }
   
-  // Check minimum size (full OmniBot should be ~10KB+)
   if (code.length < 5000) {
     return {
       valid: false,
@@ -137,7 +195,6 @@ function validateCodeStructure(code) {
     };
   }
   
-  // Check for HTML content (the UI)
   if (!code.includes('const HTML =') && !code.includes('<html>')) {
     return {
       valid: false,
@@ -149,35 +206,29 @@ function validateCodeStructure(code) {
 }
 
 function cleanCodeFences(text) {
-  // ONLY remove markdown fences - preserve EVERYTHING else
   let cleaned = text.trim();
-  
-  // Remove outer fences if present
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:javascript|js)?\s*\n?/, '');
   }
   if (cleaned.endsWith('```')) {
     cleaned = cleaned.replace(/\n?```\s*$/, '');
   }
-  
   return cleaned;
 }
 
-// Alias for backward compatibility with tests
-const extractCodeFromFinal = cleanCodeFences;
-
 async function generateWithLlama(instruction, currentCode, env) {
+  const context = await getContext(env);
+  
   const systemPrompt = `You are modifying Cloudflare Worker code.
 
-OUTPUT ONLY THE COMPLETE MODIFIED CODE.
-NO explanations, NO markdown fences, NO "here's the code", NO comments about what changed.
-Just the raw JavaScript code starting with /** and ending with the closing HTML template.
+${context.prompt}
 
-CRITICAL RULES:
-1. MODIFY the existing code, do NOT replace it
-2. Keep ALL existing functions intact
-3. Only change what's specifically requested
-4. Code must work in Cloudflare Workers (no browser APIs)`;
+Shared Context:
+${JSON.stringify(context.data, null, 2)}
+
+OUTPUT ONLY THE COMPLETE MODIFIED CODE.
+NO explanations, NO markdown fences, NO "here's the code".
+Just the raw JavaScript code starting with /** and ending with the closing };`;
 
   const userPrompt = `Current code (${currentCode.length} chars):
 
@@ -187,732 +238,657 @@ ${currentCode}
 
 Change: ${instruction}
 
-Output the COMPLETE modified code (no explanations):`;
-
-  const response = await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
-  
-  console.log(`Llama: ${response.length} chars`);
-  
-  return response;
-}
-
-async function selfEdit(instruction, env) {
-  try {
-    // Step 1: Read current code
-    const file = await githubGet('cloudflare-worker/src/index.js', env);
-    if (!file.content) {
-      return { 
-        success: false, 
-        error: 'Could not read code',
-        explanation: 'GitHub API failed' 
-      };
-    }
-    
-    const currentCode = decodeURIComponent(escape(atob(file.content)));
-    console.log(`Current code: ${currentCode.length} chars`);
-    
-    // Step 2: Use Llama to modify the code
-    console.log('Generating with Llama...');
-    const response = await generateWithLlama(instruction, currentCode, env);
-    
-    // Step 3: Clean code fences ONLY (no extraction)
-    const finalCode = cleanCodeFences(response);
-    console.log(`After fence removal: ${finalCode.length} chars`);
-    
-    // Step 4: CRITICAL SAFETY CHECK
-    const validation = validateCodeStructure(finalCode);
-    if (!validation.valid) {
-      return {
-        success: false,
-        error: 'Safety check failed',
-        explanation: validation.reason,
-        debug: {
-          instruction: instruction,
-          responseLength: response.length,
-          extractedLength: finalCode.length,
-          fullLlamaResponse: response,  // FULL response for debugging
-          extractedCode: finalCode      // What we extracted
-        }
-      };
-    }
-    
-    // Check if actually changed
-    if (currentCode.replace(/\s/g, '') === finalCode.replace(/\s/g, '')) {
-      return {
-        success: false,
-        error: 'No changes made',
-        explanation: 'Generated code identical to current'
-      };
-    }
-    
-    // Step 5: Commit
-    const commitMessage = `[OmniBot] ${instruction.slice(0, 72)}`;
-    console.log('Committing...');
-    const result = await githubPut('cloudflare-worker/src/index.js', finalCode, commitMessage, env);
-    
-    if (!result.commit) {
-      return {
-        success: false,
-        error: result.message || 'Commit failed',
-        explanation: 'GitHub rejected commit'
-      };
-    }
-    
-    // Step 6: Explain
-    const explanation = await explainChanges(instruction, currentCode, finalCode, env);
-    
-    // Stats
-    const oldLines = new Set(currentCode.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//')));
-    const newLines = new Set(finalCode.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//')));
-    const added = [...newLines].filter(l => !oldLines.has(l));
-    const removed = [...oldLines].filter(l => !newLines.has(l));
-    
-    return {
-      success: true,
-      explanation: explanation.trim(),
-      commit: result.commit.sha,
-      url: result.commit.html_url,
-      stats: {
-        added: added.length,
-        removed: removed.length,
-        size: finalCode.length
-      },
-      samples: added.slice(0, 5)
-    };
-    
-  } catch (e) {
-    return {
-      success: false,
-      error: e.message,
-      explanation: 'Pipeline error',
-      stack: e.stack?.split('\n').slice(0, 3).join('\n')
-    };
-  }
-}
-
-async function explainChanges(instruction, oldCode, newCode, env) {
-  const systemPrompt = `Explain code changes concisely.`;
-
-  const userPrompt = `Instruction: ${instruction}
-
-Old: ${oldCode.split('\n').length} lines
-New: ${newCode.split('\n').length} lines
-
-Explain what changed (2-3 sentences):`;
+Output the COMPLETE modified code:`;
 
   return await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
-async function getGithubDeployLogs(env) {
-  const logs = await getGithubLogs(env);
-  return logs;
+async function selfEdit(instruction, env, streamCallback = null) {
+  try {
+    await logTelemetry('edit_start', { instruction }, env);
+    
+    if (streamCallback) streamCallback({ status: 'reading', message: 'Reading current code...' });
+    
+    const file = await githubGet('cloudflare-worker/src/index.js', env);
+    if (!file.content) {
+      return { success: false, error: 'Could not read code', explanation: 'GitHub API failed' };
+    }
+    
+    const currentCode = decodeURIComponent(escape(atob(file.content)));
+    
+    if (streamCallback) streamCallback({ status: 'generating', message: 'AI is modifying code...' });
+    
+    const response = await generateWithLlama(instruction, currentCode, env);
+    const finalCode = cleanCodeFences(response);
+    
+    if (streamCallback) streamCallback({ status: 'validating', message: 'Validating changes...' });
+    
+    const validation = validateCodeStructure(finalCode);
+    if (!validation.valid) {
+      await logTelemetry('edit_failed', { reason: validation.reason }, env);
+      return {
+        success: false,
+        error: 'Safety check failed',
+        explanation: validation.reason
+      };
+    }
+    
+    if (currentCode.replace(/\s/g, '') === finalCode.replace(/\s/g, '')) {
+      return { success: false, error: 'No changes made', explanation: 'Generated code identical to current' };
+    }
+    
+    if (streamCallback) streamCallback({ status: 'committing', message: 'Committing to GitHub...' });
+    
+    const commitMessage = `[OmniBot] ${instruction.slice(0, 72)}`;
+    const result = await githubPut('cloudflare-worker/src/index.js', finalCode, commitMessage, env);
+    
+    if (!result.commit) {
+      return { success: false, error: result.message || 'Commit failed', explanation: 'GitHub rejected commit' };
+    }
+    
+    await logTelemetry('edit_success', { 
+      instruction, 
+      commit: result.commit.sha,
+      oldSize: currentCode.length,
+      newSize: finalCode.length 
+    }, env);
+    
+    return {
+      success: true,
+      explanation: `Modified code based on: ${instruction}`,
+      commit: result.commit.sha,
+      url: result.commit.html_url,
+      stats: {
+        oldSize: currentCode.length,
+        newSize: finalCode.length
+      }
+    };
+    
+  } catch (e) {
+    await logTelemetry('edit_error', { error: e.message }, env);
+    return { success: false, error: e.message, explanation: 'Pipeline error' };
+  }
 }
 
-
+async function verifyGoogleToken(token, env) {
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
+    const data = await res.json();
+    
+    if (data.email === ALLOWED_EMAIL && data.email_verified === 'true') {
+      return { valid: true, email: data.email };
+    }
+    return { valid: false, reason: 'Unauthorized email' };
+  } catch (e) {
+    return { valid: false, reason: e.message };
+  }
+}
 
 const HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OmniBot</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <title>OmniBot - LCARS Interface</title>
+  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0d0d0d;
-      --bg-secondary: #171717;
-      --bg-tertiary: #262626;
-      --text: #fafafa;
-      --text-secondary: #a1a1aa;
-      --accent: #ef4444;
-      --accent-hover: #dc2626;
-      --user-bubble: #ef4444;
-      --ai-bubble: #262626;
-      --border: #27272a;
-      --success: #22c55e;
-      --warning: #f59e0b;
-      --error: #ef4444;
-      --glow: transparent;
-      --font-main: 'IBM Plex Sans', -apple-system, sans-serif;
-      --font-mono: 'IBM Plex Mono', monospace;
+      --lcars-orange: #ff9900;
+      --lcars-blue: #99ccff;
+      --lcars-purple: #cc99cc;
+      --lcars-red: #cc6666;
+      --lcars-tan: #ffcc99;
+      --lcars-gold: #ffcc00;
+      --lcars-bg: #000000;
+      --lcars-text: #ff9900;
+      --env-color: #ff9900;
     }
+    
+    body.staging { --env-color: #ffcc00; }
+    body.production { --env-color: #cc6666; }
     
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
     html, body {
       height: 100%;
-      font-family: var(--font-main);
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Antonio', sans-serif;
+      background: var(--lcars-bg);
+      color: var(--lcars-text);
       overflow: hidden;
-      -webkit-font-smoothing: antialiased;
     }
     
-    /* === THEMES === */
-    
-    /* Modern Dark (default) */
-    body.theme-modern {
-      --bg: #0d0d0d;
-      --bg-secondary: #171717;
-      --bg-tertiary: #262626;
-      --text: #fafafa;
-      --text-secondary: #a1a1aa;
-      --accent: #ef4444;
-      --user-bubble: #ef4444;
-      --ai-bubble: #262626;
-      --border: #27272a;
-      --glow: none;
-    }
-    
-    /* Matrix */
-    body.theme-matrix {
-      --bg: #000a00;
-      --bg-secondary: #001400;
-      --bg-tertiary: #002200;
-      --text: #00ff41;
-      --text-secondary: #00cc33;
-      --accent: #00ff41;
-      --user-bubble: #003300;
-      --ai-bubble: #001a00;
-      --border: #004400;
-      --glow: 0 0 10px rgba(0, 255, 65, 0.3);
-      --font-main: 'IBM Plex Mono', monospace;
-    }
-    
-    /* Cyberpunk */
-    body.theme-cyberpunk {
-      --bg: #0a000f;
-      --bg-secondary: #15001f;
-      --bg-tertiary: #200030;
-      --text: #ff00ff;
-      --text-secondary: #cc00cc;
-      --accent: #00ffff;
-      --user-bubble: #330033;
-      --ai-bubble: #1a001a;
-      --border: #440044;
-      --glow: 0 0 15px rgba(255, 0, 255, 0.3);
-    }
-    
-    /* HAL 9000 */
-    body.theme-hal {
-      --bg: #0a0000;
-      --bg-secondary: #150000;
-      --bg-tertiary: #200000;
-      --text: #ff0000;
-      --text-secondary: #cc0000;
-      --accent: #ff0000;
-      --user-bubble: #330000;
-      --ai-bubble: #1a0000;
-      --border: #440000;
-      --glow: 0 0 20px rgba(255, 0, 0, 0.4);
-    }
-    
-    /* Tron */
-    body.theme-tron {
-      --bg: #000005;
-      --bg-secondary: #000510;
-      --bg-tertiary: #000a18;
-      --text: #6fdfff;
-      --text-secondary: #4fc3dc;
-      --accent: #6fdfff;
-      --user-bubble: #001a30;
-      --ai-bubble: #000d1a;
-      --border: #002040;
-      --glow: 0 0 15px rgba(111, 223, 255, 0.4);
-      --font-main: 'Orbitron', sans-serif;
-    }
-    
-    /* Neuromancer */
-    body.theme-neuromancer {
-      --bg: #05000a;
-      --bg-secondary: #0a0014;
-      --bg-tertiary: #10001f;
-      --text: #bf5fff;
-      --text-secondary: #9945cc;
-      --accent: #bf5fff;
-      --user-bubble: #200040;
-      --ai-bubble: #100020;
-      --border: #300050;
-      --glow: 0 0 12px rgba(191, 95, 255, 0.3);
-    }
-    
-    /* Borg */
-    body.theme-borg {
-      --bg: #050505;
-      --bg-secondary: #0a0a0a;
-      --bg-tertiary: #151515;
-      --text: #00ff00;
-      --text-secondary: #00cc00;
-      --accent: #00ff00;
-      --user-bubble: #0a1a0a;
-      --ai-bubble: #050f05;
-      --border: #1a2a1a;
-      --glow: 0 0 8px rgba(0, 255, 0, 0.5);
-      --font-main: 'IBM Plex Mono', monospace;
-    }
-    
-    /* Dune */
-    body.theme-dune {
-      --bg: #1a1408;
-      --bg-secondary: #252010;
-      --bg-tertiary: #302a18;
-      --text: #f4a261;
-      --text-secondary: #e07b00;
-      --accent: #f4a261;
-      --user-bubble: #3d3015;
-      --ai-bubble: #28200d;
-      --border: #4a3a1a;
-      --glow: 0 0 10px rgba(244, 162, 97, 0.2);
-    }
-    
-    /* Star Trek */
-    body.theme-star-trek {
-      --bg: #001a33;
-      --bg-secondary: #002255;
-      --bg-tertiary: #003366;
-      --text: #66cccc;
-      --text-secondary: #44aabb;
-      --accent: #66cccc;
-      --user-bubble: #004488;
-      --ai-bubble: #002255;
-      --border: #0055cc;
-      --glow: 0 0 10px rgba(102, 204, 204, 0.3);
-      --font-main: 'IBM Plex Mono', monospace;
-    }
-    
-    .app {
+    .lcars-frame {
       height: 100%;
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      grid-template-rows: 80px 1fr 60px;
+      gap: 4px;
+      padding: 4px;
+    }
+    
+    .lcars-sidebar {
+      grid-row: 1 / -1;
+      background: var(--lcars-orange);
+      border-radius: 0 0 0 40px;
       display: flex;
       flex-direction: column;
-      max-width: 900px;
-      margin: 0 auto;
     }
     
-    .header {
-      padding: 12px 16px;
+    .lcars-sidebar-top {
+      height: 80px;
+      background: var(--lcars-purple);
+      border-radius: 0 0 0 40px;
+    }
+    
+    .lcars-sidebar-content {
+      flex: 1;
+      padding: 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .lcars-btn {
+      background: var(--lcars-blue);
+      border: none;
+      padding: 12px 8px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #000;
+      cursor: pointer;
+      border-radius: 0 20px 20px 0;
+      margin-right: 20px;
+      transition: all 0.1s;
+    }
+    
+    .lcars-btn:hover { filter: brightness(1.2); }
+    .lcars-btn.active { background: var(--lcars-gold); }
+    .lcars-btn.danger { background: var(--lcars-red); }
+    
+    .lcars-header {
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
+    }
+    
+    .lcars-header-curve {
+      width: 80px;
+      background: var(--lcars-purple);
+      border-radius: 0 0 40px 0;
+    }
+    
+    .lcars-header-bar {
+      flex: 1;
+      background: var(--lcars-tan);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      box-shadow: var(--glow);
+      padding: 0 20px;
     }
     
-    .logo {
+    .lcars-title {
+      font-size: 28px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: #000;
+    }
+    
+    .lcars-env {
+      background: var(--env-color);
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #000;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .lcars-header-end {
+      width: 40px;
+      background: var(--lcars-orange);
+      border-radius: 20px;
+    }
+    
+    .lcars-main {
+      background: #111;
+      border: 3px solid var(--lcars-orange);
+      border-radius: 20px;
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      overflow: hidden;
     }
-    
-    .logo-icon {
-      width: 32px;
-      height: 32px;
-      background: var(--accent);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      color: var(--bg);
-      font-weight: bold;
-      box-shadow: var(--glow);
-    }
-    
-    .logo-text { font-weight: 600; font-size: 16px; }
-    .logo-version { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
-    
-    .header-actions { display: flex; gap: 8px; align-items: center; }
-    
-    .icon-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      border: none;
-      background: transparent;
-      color: var(--text-secondary);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s;
-    }
-    
-    .icon-btn:hover { background: var(--bg-tertiary); color: var(--text); }
-    
-    .tabs {
-      display: flex;
-      gap: 4px;
-      padding: 4px;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-    }
-    
-    .tab {
-      padding: 6px 14px;
-      border-radius: 6px;
-      border: none;
-      background: transparent;
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-family: inherit;
-    }
-    
-    .tab.active { background: var(--bg-tertiary); color: var(--text); }
     
     .messages {
       flex: 1;
       overflow-y: auto;
-      padding: 16px;
+      padding: 20px;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
     
-    .empty-state {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      color: var(--text-secondary);
-      padding: 40px 20px;
-    }
-    
-    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
-    .empty-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-    .empty-subtitle { font-size: 14px; max-width: 300px; line-height: 1.5; }
-    
     .msg {
       max-width: 85%;
       padding: 12px 16px;
-      border-radius: 16px;
-      font-size: 15px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-break: break-word;
-      animation: fadeIn 0.2s ease;
+      border-radius: 4px;
+      font-size: 14px;
+      line-height: 1.5;
+      animation: fadeIn 0.2s;
     }
     
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
+      from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
     
     .msg.user {
       align-self: flex-end;
-      background: var(--user-bubble);
-      border-radius: 16px 16px 4px 16px;
+      background: var(--lcars-blue);
+      color: #000;
     }
     
     .msg.assistant {
       align-self: flex-start;
-      background: var(--ai-bubble);
-      border: 1px solid var(--border);
-      border-radius: 16px 16px 16px 4px;
+      background: #222;
+      border: 1px solid var(--lcars-orange);
     }
     
     .msg.system {
       align-self: center;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      font-size: 13px;
-      padding: 10px 16px;
-      border-radius: 16px;
-      max-width: 90%;
+      background: var(--lcars-purple);
+      color: #000;
+      font-size: 12px;
     }
     
-    .msg.success { border-color: var(--success); }
-    .msg.error { border-color: var(--error); }
-    .msg a { color: var(--accent); }
+    .msg.success { border-color: #0f0; background: #001100; }
+    .msg.error { border-color: var(--lcars-red); background: #110000; }
     
-    .typing { display: flex; gap: 4px; padding: 8px 0; }
-    .typing span {
-      width: 8px; height: 8px;
-      background: var(--text-secondary);
+    .edit-status {
+      padding: 8px 20px;
+      background: #222;
+      border-top: 2px solid var(--lcars-orange);
+      font-size: 12px;
+      display: none;
+    }
+    
+    .edit-status.active {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .edit-status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--lcars-gold);
       border-radius: 50%;
-      animation: bounce 1.4s infinite;
+      animation: blink 0.5s infinite;
     }
-    .typing span:nth-child(2) { animation-delay: 0.2s; }
-    .typing span:nth-child(3) { animation-delay: 0.4s; }
     
-    @keyframes bounce {
-      0%, 60%, 100% { transform: translateY(0); }
-      30% { transform: translateY(-8px); }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
     }
     
     .input-area {
-      padding: 12px 16px 24px;
-      border-top: 1px solid var(--border);
-      background: var(--bg);
-    }
-    
-    .status {
+      padding: 12px 20px;
+      background: #111;
+      border-top: 3px solid var(--lcars-orange);
       display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-      font-family: var(--font-mono);
+      gap: 12px;
     }
-    
-    .status-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--success);
-    }
-    
-    .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    
-    .input-wrapper { display: flex; gap: 10px; align-items: flex-end; }
     
     .input-field {
       flex: 1;
+      background: #000;
+      border: 2px solid var(--lcars-blue);
+      border-radius: 4px;
       padding: 12px 16px;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      background: var(--bg-secondary);
-      color: var(--text);
-      font-size: 15px;
       font-family: inherit;
-      resize: none;
+      font-size: 14px;
+      color: var(--lcars-text);
       outline: none;
-      min-height: 48px;
-      max-height: 150px;
-      transition: all 0.15s;
+      resize: none;
     }
     
-    .input-field::placeholder { color: var(--text-secondary); }
-    .input-field:focus { border-color: var(--accent); box-shadow: var(--glow); }
+    .input-field:focus {
+      border-color: var(--lcars-gold);
+    }
     
-    /* Edit mode styling for input */
     .input-field.edit-mode {
-      background: var(--bg-tertiary);
-      border-color: var(--warning);
-      box-shadow: 0 0 0 1px var(--warning);
+      border-color: var(--lcars-red);
     }
     
     .send-btn {
-      width: 48px; height: 48px;
-      border-radius: 16px;
+      background: var(--lcars-orange);
       border: none;
-      background: var(--accent);
-      color: var(--bg);
+      border-radius: 4px;
+      padding: 12px 24px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #000;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s;
-      box-shadow: var(--glow);
     }
     
-    .send-btn:hover { filter: brightness(1.1); }
-    .send-btn:disabled { opacity: 0.5; cursor: default; }
+    .send-btn:hover { filter: brightness(1.2); }
+    .send-btn:disabled { opacity: 0.5; }
     
-    /* Settings Panel */
-    .settings-panel {
+    .lcars-footer {
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
+    }
+    
+    .lcars-footer-curve {
+      width: 80px;
+      background: var(--lcars-blue);
+      border-radius: 0 40px 0 0;
+    }
+    
+    .lcars-footer-bar {
+      flex: 1;
+      background: var(--lcars-purple);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 20px;
+    }
+    
+    .lcars-stat {
+      font-size: 12px;
+      color: #000;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    
+    .lcars-footer-end {
+      width: 40px;
+      background: var(--lcars-tan);
+      border-radius: 20px 0 0 0;
+    }
+    
+    /* Modal styles */
+    .modal {
       position: fixed;
       top: 0;
-      right: -320px;
-      width: 320px;
-      height: 100%;
-      background: var(--bg-secondary);
-      border-left: 1px solid var(--border);
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      align-items: center;
+      justify-content: center;
       z-index: 100;
-      transition: right 0.3s ease;
+    }
+    
+    .modal.open { display: flex; }
+    
+    .modal-content {
+      background: #111;
+      border: 3px solid var(--lcars-orange);
+      border-radius: 20px;
+      width: 90%;
+      max-width: 800px;
+      max-height: 80vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
     }
     
-    .settings-panel.open { right: 0; }
-    
-    .settings-header {
-      padding: 16px;
-      border-bottom: 1px solid var(--border);
+    .modal-header {
+      background: var(--lcars-orange);
+      padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
     
-    .settings-title { font-weight: 600; }
-    
-    .settings-body { flex: 1; padding: 16px; overflow-y: auto; }
-    
-    .setting-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-secondary);
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 12px;
+      color: #000;
     }
     
-    .theme-list { display: flex; flex-direction: column; gap: 6px; }
-    
-    .theme-btn {
-      padding: 12px;
-      border-radius: 8px;
-      border: 2px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      text-align: left;
-      font-family: inherit;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      transition: all 0.15s;
-    }
-    
-    .theme-btn:hover { border-color: var(--text-secondary); }
-    .theme-btn.active { border-color: var(--accent); background: var(--bg-tertiary); }
-    
-    .theme-dot {
-      width: 16px; height: 16px;
+    .modal-close {
+      background: var(--lcars-red);
+      border: none;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
-      flex-shrink: 0;
+      font-size: 18px;
+      color: #000;
+      cursor: pointer;
     }
     
-    .overlay {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.6);
-      z-index: 99;
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s;
+    .modal-body {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
     }
     
-    .overlay.open { opacity: 1; visibility: visible; }
+    .modal-textarea {
+      width: 100%;
+      min-height: 300px;
+      background: #000;
+      border: 2px solid var(--lcars-blue);
+      border-radius: 4px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: var(--lcars-text);
+      resize: vertical;
+    }
     
-    /* Mode indicator in input area */
-    .mode-indicator {
-      display: none;
-      padding: 6px 12px;
-      margin-bottom: 8px;
-      font-size: 12px;
-      font-weight: 500;
+    .modal-footer {
+      padding: 16px 20px;
+      background: #222;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .telemetry-card {
+      background: #222;
+      border: 2px solid var(--lcars-blue);
       border-radius: 8px;
+      padding: 12px;
       text-align: center;
     }
     
-    .mode-indicator.edit {
-      display: block;
-      background: rgba(245, 158, 11, 0.2);
-      color: var(--warning);
-      border: 1px solid var(--warning);
+    .telemetry-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--lcars-gold);
     }
     
-    @media (max-width: 640px) {
-      .settings-panel { width: 100%; right: -100%; }
+    .telemetry-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--lcars-blue);
+      margin-top: 4px;
+    }
+    
+    .event-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .event-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid #333;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    
+    /* Auth overlay */
+    .auth-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    
+    .auth-overlay.hidden { display: none; }
+    
+    .auth-title {
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--lcars-orange);
+      margin-bottom: 40px;
+      text-transform: uppercase;
+      letter-spacing: 8px;
+    }
+    
+    .google-btn {
+      background: var(--lcars-blue);
+      border: none;
+      padding: 16px 40px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #000;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+    
+    .google-btn:hover { filter: brightness(1.2); }
+    
+    @media (max-width: 768px) {
+      .lcars-frame {
+        grid-template-columns: 80px 1fr;
+        grid-template-rows: 60px 1fr 50px;
+      }
+      
+      .lcars-title { font-size: 18px; }
+      .lcars-btn { font-size: 9px; padding: 8px 4px; }
     }
   </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body class="theme-modern">
-  <div class="app">
-    <header class="header">
-      <div class="logo">
-        <div class="logo-icon">Ω</div>
-        <div>
-          <div class="logo-text">OmniBot</div>
-          <div class="logo-version">Cuttlefish</div>
-        </div>
-      </div>
-      <div class="header-actions">
-        <div class="tabs">
-          <button class="tab active" data-mode="chat">Chat</button>
-          <button class="tab" data-mode="edit">Edit</button>
-        </div>
-        <button class="icon-btn" id="settingsBtn" title="Settings">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"></path>
-          </svg>
-        </button>
-      </div>
-    </header>
-    
-    <div class="messages" id="messages">
-      <div class="empty-state">
-        <div class="empty-icon">Ω</div>
-        <div class="empty-title">Welcome to OmniBot</div>
-        <div class="empty-subtitle">Self-editing AI. Chat or switch to Edit mode to modify source code.</div>
+<body class="staging">
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-title">OmniBot</div>
+    <div id="googleSignIn"></div>
+  </div>
+
+  <div class="lcars-frame">
+    <div class="lcars-sidebar">
+      <div class="lcars-sidebar-top"></div>
+      <div class="lcars-sidebar-content">
+        <button class="lcars-btn active" data-mode="chat">Chat</button>
+        <button class="lcars-btn" data-mode="edit">Edit</button>
+        <button class="lcars-btn" data-view="context">Context</button>
+        <button class="lcars-btn" data-view="telemetry">Telemetry</button>
+        <button class="lcars-btn" data-view="prompt">Prompt</button>
+        <button class="lcars-btn danger" id="promoteBtn">Promote</button>
       </div>
     </div>
     
-    <div class="input-area">
-      <div class="mode-indicator" id="modeIndicator">⚡ EDIT MODE - AI will modify its own source code</div>
-      <div class="status">
-        <span class="status-dot" id="statusDot"></span>
-        <span id="statusText">Ready</span>
+    <div class="lcars-header">
+      <div class="lcars-header-curve"></div>
+      <div class="lcars-header-bar">
+        <div class="lcars-title">OmniBot</div>
+        <div class="lcars-env" id="envBadge">STAGING</div>
       </div>
-      <div class="input-wrapper">
-        <textarea class="input-field" id="input" placeholder="Send a message..." rows="1"></textarea>
-        <button class="send-btn" id="sendBtn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-        </button>
+      <div class="lcars-header-end"></div>
+    </div>
+    
+    <div class="lcars-main">
+      <div class="messages" id="messages">
+        <div class="msg system">Welcome to OmniBot - LCARS Interface. Authorized: jonanscheffler@gmail.com</div>
+      </div>
+      <div class="edit-status" id="editStatus">
+        <div class="edit-status-dot"></div>
+        <span id="editStatusText">Processing...</span>
+      </div>
+      <div class="input-area">
+        <textarea class="input-field" id="input" placeholder="Enter command..." rows="1"></textarea>
+        <button class="send-btn" id="sendBtn">ENGAGE</button>
+      </div>
+    </div>
+    
+    <div class="lcars-footer">
+      <div class="lcars-footer-curve"></div>
+      <div class="lcars-footer-bar">
+        <span class="lcars-stat" id="statVersion">Version: Dumbo Octopus</span>
+        <span class="lcars-stat" id="statContext">Context: 0 words</span>
+        <span class="lcars-stat" id="statEdits">Edits: 0</span>
+      </div>
+      <div class="lcars-footer-end"></div>
+    </div>
+  </div>
+  
+  <!-- Context Modal -->
+  <div class="modal" id="contextModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Shared Context</span>
+        <button class="modal-close" onclick="closeModal('contextModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <textarea class="modal-textarea" id="contextData" placeholder="Enter shared context data (JSON)..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="lcars-btn" onclick="saveContext()">Save Context</button>
       </div>
     </div>
   </div>
   
-  <div class="overlay" id="overlay"></div>
-  
-  <div class="settings-panel" id="settingsPanel">
-    <div class="settings-header">
-      <span class="settings-title">Settings</span>
-      <button class="icon-btn" id="closeSettings">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
+  <!-- Telemetry Modal -->
+  <div class="modal" id="telemetryModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Telemetry Dashboard</span>
+        <button class="modal-close" onclick="closeModal('telemetryModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="telemetry-grid" id="telemetryGrid"></div>
+        <h3 style="margin: 20px 0 10px; color: var(--lcars-orange);">Recent Events</h3>
+        <div class="event-list" id="eventList"></div>
+      </div>
     </div>
-    <div class="settings-body">
-      <div class="setting-label">Theme</div>
-      <div class="theme-list">
-        <button class="theme-btn active" data-theme="modern">
-          <span class="theme-dot" style="background: #ef4444"></span>Modern Dark
-        </button>
-        <button class="theme-btn" data-theme="matrix">
-          <span class="theme-dot" style="background: #00ff41"></span>Matrix
-        </button>
-        <button class="theme-btn" data-theme="cyberpunk">
-          <span class="theme-dot" style="background: linear-gradient(135deg, #ff00ff, #00ffff)"></span>Cyberpunk
-        </button>
-        <button class="theme-btn" data-theme="hal">
-          <span class="theme-dot" style="background: #ff0000"></span>HAL 9000
-        </button>
-        <button class="theme-btn" data-theme="tron">
-          <span class="theme-dot" style="background: #6fdfff"></span>Tron
-        </button>
-        <button class="theme-btn" data-theme="neuromancer">
-          <span class="theme-dot" style="background: #bf5fff"></span>Neuromancer
-        </button>
-        <button class="theme-btn" data-theme="borg">
-          <span class="theme-dot" style="background: #00ff00"></span>Borg
-        </button>
-        <button class="theme-btn" data-theme="dune">
-          <span class="theme-dot" style="background: #f4a261"></span>Dune
-        </button>
-        <button class="theme-btn" data-theme="star-trek">
-          <span class="theme-dot" style="background: #66cccc"></span>Star Trek
-        </button>
+  </div>
+  
+  <!-- Prompt Modal -->
+  <div class="modal" id="promptModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Master Prompt</span>
+        <button class="modal-close" onclick="closeModal('promptModal')">×</button>
+      </div>
+      <div class="modal-body">
+        <textarea class="modal-textarea" id="masterPrompt" placeholder="Enter master prompt for all AI operations..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="lcars-btn" onclick="savePrompt()">Save Prompt</button>
       </div>
     </div>
   </div>
@@ -921,50 +897,516 @@ const HTML = `<!DOCTYPE html>
     (function() {
       'use strict';
       
-      // State
-      var mode = 'chat';
-      var messages = [];
-      var loading = false;
+      let mode = 'chat';
+      let messages = [];
+      let loading = false;
+      let authToken = null;
+      let isProduction = window.location.hostname.includes('omnibot.') && !window.location.hostname.includes('staging');
       
-      // DOM Elements
-      var $messages = document.getElementById('messages');
-      var $input = document.getElementById('input');
-      var $sendBtn = document.getElementById('sendBtn');
-      var $statusDot = document.getElementById('statusDot');
-      var $statusText = document.getElementById('statusText');
-      var $modeIndicator = document.getElementById('modeIndicator');
-      var $settingsBtn = document.getElementById('settingsBtn');
-      var $settingsPanel = document.getElementById('settingsPanel');
-      var $closeSettings = document.getElementById('closeSettings');
-      var $overlay = document.getElementById('overlay');
+      const $messages = document.getElementById('messages');
+      const $input = document.getElementById('input');
+      const $sendBtn = document.getElementById('sendBtn');
+      const $editStatus = document.getElementById('editStatus');
+      const $editStatusText = document.getElementById('editStatusText');
+      const $envBadge = document.getElementById('envBadge');
+      const $authOverlay = document.getElementById('authOverlay');
+      const $promoteBtn = document.getElementById('promoteBtn');
       
-      // Initialize theme from localStorage
-      function initTheme() {
-        try {
-          var saved = localStorage.getItem('omnibot-theme');
-          if (saved) {
-            document.body.className = 'theme-' + saved;
-            var btn = document.querySelector('[data-theme="' + saved + '"]');
-            if (btn) {
-              document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
-              btn.classList.add('active');
-            }
+      // Set environment
+      if (isProduction) {
+        document.body.classList.remove('staging');
+        document.body.classList.add('production');
+        $envBadge.textContent = 'PRODUCTION';
+        $envBadge.style.background = 'var(--lcars-red)';
+        $promoteBtn.style.display = 'none';
+      }
+      
+      // Google Sign-In
+      function initGoogleAuth() {
+        if (typeof google === 'undefined') {
+          setTimeout(initGoogleAuth, 100);
+          return;
+        }
+        
+        google.accounts.id.initialize({
+          client_id: '107783640386-ja8kfg90o5hfkgdbbv1pg3s753r24mf7.apps.googleusercontent.com',
+          callback: handleCredentialResponse
+        });
+        
+        google.accounts.id.renderButton(
+          document.getElementById('googleSignIn'),
+          { theme: 'filled_black', size: 'large', text: 'signin_with' }
+        );
+      }
+      
+      function handleCredentialResponse(response) {
+        authToken = response.credential;
+        
+        // Verify with backend
+        fetch('/api/verify-auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: authToken })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.valid) {
+            $authOverlay.classList.add('hidden');
+            loadStats();
+          } else {
+            alert('Unauthorized: ' + (data.reason || 'Access denied'));
           }
-        } catch(e) {
-          console.log('localStorage not available');
+        });
+      }
+      
+      // Check if already authed (for dev/testing)
+      const skipAuth = window.location.search.includes('skipauth=1');
+      if (skipAuth) {
+        $authOverlay.classList.add('hidden');
+      } else {
+        initGoogleAuth();
+      }
+      
+      // Mode switching
+      document.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.onclick = function() {
+          document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          mode = btn.dataset.mode;
+          $input.classList.toggle('edit-mode', mode === 'edit');
+          $input.placeholder = mode === 'edit' ? 'Describe the change...' : 'Enter command...';
+        };
+      });
+      
+      // View modals
+      document.querySelectorAll('[data-view]').forEach(btn => {
+        btn.onclick = function() {
+          const view = btn.dataset.view;
+          openModal(view + 'Modal');
+          if (view === 'telemetry') loadTelemetry();
+          if (view === 'context') loadContext();
+          if (view === 'prompt') loadPrompt();
+        };
+      });
+      
+      function openModal(id) {
+        document.getElementById(id).classList.add('open');
+      }
+      
+      window.closeModal = function(id) {
+        document.getElementById(id).classList.remove('open');
+      };
+      
+      // Promote button
+      $promoteBtn.onclick = function() {
+        if (confirm('Promote staging to production?')) {
+          fetch('/api/promote', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+              if (data.success) {
+                addMessage('system', 'Promotion triggered! CI/CD will deploy to production.', 'success');
+              } else {
+                addMessage('system', 'Promotion failed: ' + data.error, 'error');
+              }
+            });
+        }
+      };
+      
+      function addMessage(role, content, type) {
+        messages.push({ role, content, type });
+        render();
+      }
+      
+      function render() {
+        let html = '';
+        for (const m of messages) {
+          let cls = 'msg ' + m.role;
+          if (m.type) cls += ' ' + m.type;
+          html += '<div class="' + cls + '">' + escapeHtml(m.content) + '</div>';
+        }
+        if (loading) {
+          html += '<div class="msg assistant">Processing...</div>';
+        }
+        $messages.innerHTML = html;
+        $messages.scrollTop = $messages.scrollHeight;
+      }
+      
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML.replace(/(https?:\\/\\/[^\\s]+)/g, '<a href="$1" target="_blank" style="color: var(--lcars-blue)">$1</a>');
+      }
+      
+      function setEditStatus(text, active) {
+        $editStatus.classList.toggle('active', active);
+        $editStatusText.textContent = text;
+      }
+      
+      async function send() {
+        const text = $input.value.trim();
+        if (!text || loading) return;
+        
+        addMessage('user', text);
+        $input.value = '';
+        loading = true;
+        $sendBtn.disabled = true;
+        
+        if (mode === 'edit') {
+          setEditStatus('Reading current code...', true);
+        }
+        
+        try {
+          const endpoint = mode === 'edit' ? '/api/self-edit' : '/api/chat';
+          const body = mode === 'edit' 
+            ? { instruction: text }
+            : { messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })) };
+          
+          // For edit mode, use event stream for live updates
+          if (mode === 'edit') {
+            const response = await fetch(endpoint + '?stream=1', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let result = '';
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              const chunk = decoder.decode(value);
+              const lines = chunk.split('\\n');
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.status) {
+                      setEditStatus(data.message || data.status, true);
+                    }
+                    if (data.success !== undefined) {
+                      result = data;
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+            
+            setEditStatus('', false);
+            
+            if (result.success) {
+              addMessage('system', '✓ ' + result.explanation + (result.url ? '\\n' + result.url : ''), 'success');
+            } else {
+              addMessage('system', '✗ ' + (result.error || 'Edit failed'), 'error');
+            }
+          } else {
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            
+            const data = await response.json();
+            addMessage('assistant', data.content || data.error || 'No response');
+          }
+          
+          loadStats();
+        } catch (e) {
+          addMessage('system', 'Error: ' + e.message, 'error');
+        }
+        
+        loading = false;
+        $sendBtn.disabled = false;
+        render();
+      }
+      
+      $sendBtn.onclick = send;
+      $input.onkeydown = function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      };
+      
+      async function loadStats() {
+        try {
+          const data = await fetch('/api/telemetry').then(r => r.json());
+          document.getElementById('statContext').textContent = 'Context: ' + (data.stats?.contextWords || 0) + ' words';
+          document.getElementById('statEdits').textContent = 'Edits: ' + (data.stats?.edit_success || 0);
+        } catch (e) {}
+      }
+      
+      async function loadTelemetry() {
+        try {
+          const data = await fetch('/api/telemetry').then(r => r.json());
+          
+          const grid = document.getElementById('telemetryGrid');
+          const stats = data.stats || {};
+          
+          grid.innerHTML = Object.entries(stats).map(([key, value]) => 
+            '<div class="telemetry-card"><div class="telemetry-value">' + value + '</div><div class="telemetry-label">' + key.replace(/_/g, ' ') + '</div></div>'
+          ).join('');
+          
+          const eventList = document.getElementById('eventList');
+          const events = data.events || [];
+          
+          eventList.innerHTML = events.slice(0, 50).map(e =>
+            '<div class="event-item"><strong>' + e.timestamp + '</strong> - ' + e.event + '</div>'
+          ).join('');
+        } catch (e) {
+          console.error(e);
         }
       }
       
-      initTheme();
+      async function loadContext() {
+        try {
+          const data = await fetch('/api/context').then(r => r.json());
+          document.getElementById('contextData').value = JSON.stringify(data.data || {}, null, 2);
+        } catch (e) {}
+      }
       
-      // Tab switching - inline mode change (no dialog)
-      document.querySelectorAll('.tab').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-          document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-          tab.classList.add('active');
-          mode = tab.dataset.mode;
+      window.saveContext = async function() {
+        try {
+          const value = document.getElementById('contextData').value;
+          JSON.parse(value); // Validate JSON
           
-          // Update UI for mode
-          if (mode === 'edit') {
-            $modeIndicator.classList.add('edit');
-            $input.classList.add
+          await fetch('/api/context', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: value })
+          });
+          
+          closeModal('contextModal');
+          addMessage('system', 'Context saved', 'success');
+        } catch (e) {
+          alert('Invalid JSON: ' + e.message);
+        }
+      };
+      
+      async function loadPrompt() {
+        try {
+          const data = await fetch('/api/context').then(r => r.json());
+          document.getElementById('masterPrompt').value = data.prompt || '';
+        } catch (e) {}
+      }
+      
+      window.savePrompt = async function() {
+        try {
+          const value = document.getElementById('masterPrompt').value;
+          
+          await fetch('/api/prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: value })
+          });
+          
+          closeModal('promptModal');
+          addMessage('system', 'Master prompt saved', 'success');
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+      };
+      
+      render();
+      loadStats();
+    })();
+  </script>
+</body>
+</html>
+`;
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const cors = { 
+      'Access-Control-Allow-Origin': '*', 
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
+      'Access-Control-Allow-Headers': 'Content-Type' 
+    };
+    
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: cors });
+    }
+    
+    // Main UI
+    if (url.pathname === '/' || url.pathname === '/chat') {
+      return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
+    }
+    
+    // Health check
+    if (url.pathname === '/api/health') {
+      return new Response(JSON.stringify({ 
+        ok: true,
+        version: VERSION,
+        creature: 'Dumbo Octopus'
+      }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Verify Google auth
+    if (url.pathname === '/api/verify-auth' && request.method === 'POST') {
+      const { token } = await request.json();
+      const result = await verifyGoogleToken(token, env);
+      return new Response(JSON.stringify(result), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Chat endpoint
+    if (url.pathname === '/api/chat' && request.method === 'POST') {
+      try {
+        const { messages } = await request.json();
+        await logTelemetry('chat', { messageCount: messages.length }, env);
+        const reply = await callGroq('llama', messages, env);
+        return new Response(JSON.stringify({ content: reply }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Self-edit endpoint with streaming
+    if (url.pathname === '/api/self-edit' && request.method === 'POST') {
+      try {
+        const { instruction } = await request.json();
+        const stream = url.searchParams.get('stream') === '1';
+        
+        if (!instruction || instruction.length < 5) {
+          const response = { success: false, error: 'Instruction too short' };
+          return new Response(JSON.stringify(response), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        if (stream) {
+          // Server-sent events for live updates
+          const { readable, writable } = new TransformStream();
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+          
+          (async () => {
+            const sendEvent = (data) => {
+              writer.write(encoder.encode('data: ' + JSON.stringify(data) + '\n\n'));
+            };
+            
+            const result = await selfEdit(instruction, env, sendEvent);
+            sendEvent(result);
+            writer.close();
+          })();
+          
+          return new Response(readable, {
+            headers: {
+              ...cors,
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache'
+            }
+          });
+        } else {
+          const result = await selfEdit(instruction, env);
+          return new Response(JSON.stringify(result), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Context endpoints
+    if (url.pathname === '/api/context') {
+      if (request.method === 'GET') {
+        const context = await getContext(env);
+        return new Response(JSON.stringify(context), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      if (request.method === 'POST') {
+        const { data } = await request.json();
+        await setContext('shared_data', data, env);
+        await logTelemetry('context_update', { size: data.length }, env);
+        return new Response(JSON.stringify({ success: true }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Prompt endpoint
+    if (url.pathname === '/api/prompt' && request.method === 'POST') {
+      const { prompt } = await request.json();
+      await setContext('master_prompt', prompt, env);
+      await logTelemetry('prompt_update', { size: prompt.length }, env);
+      return new Response(JSON.stringify({ success: true }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Telemetry endpoint
+    if (url.pathname === '/api/telemetry') {
+      const context = await getContext(env);
+      return new Response(JSON.stringify(context.telemetry || {}), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Promote endpoint (trigger GitHub Actions)
+    if (url.pathname === '/api/promote' && request.method === 'POST') {
+      try {
+        // Trigger promote-to-production workflow
+        const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/actions/workflows/promote-to-production.yml/dispatches`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'OmniBot'
+          },
+          body: JSON.stringify({
+            ref: 'main',
+            inputs: { confirm: 'promote' }
+          })
+        });
+        
+        if (res.status === 204) {
+          await logTelemetry('promote_triggered', {}, env);
+          return new Response(JSON.stringify({ success: true }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        } else {
+          const error = await res.text();
+          return new Response(JSON.stringify({ success: false, error }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Test endpoint
+    if (url.pathname === '/api/test') {
+      return new Response(JSON.stringify({
+        ok: true,
+        version: VERSION,
+        timestamp: new Date().toISOString()
+      }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    return new Response('OmniBot ' + VERSION, { headers: cors });
+  }
+};
