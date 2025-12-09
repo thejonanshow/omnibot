@@ -309,272 +309,788 @@ async function getGithubDeployLogs(env) {
 }
 
 
+
 const HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OmniBot - Blobfish</title>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OmniBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      margin: 0;
-      padding: 0;
-      background-color: #1a1a1a;
-      color: #fff;
+    :root {
+      --bg: #0d0d0d;
+      --bg-secondary: #171717;
+      --bg-tertiary: #262626;
+      --text: #fafafa;
+      --text-secondary: #a1a1aa;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --user-bubble: #3b82f6;
+      --ai-bubble: #262626;
+      --border: #27272a;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --radius: 16px;
+      --radius-sm: 8px;
     }
-    .container {
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 20px;
-      background-color: #2a2a2a;
-      border: 1px solid #333;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    html, body {
+      height: 100%;
+      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
     }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    .header h1 {
-      font-weight: 600;
-      font-size: 24px;
-    }
-    .header button {
-      background-color: #6495ed;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-    .header button:hover {
-      background-color: #4682b4;
-    }
-    .chat-container {
+    
+    .app {
+      height: 100%;
       display: flex;
       flex-direction: column;
-      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
     }
-    .chat-container .message {
-      margin-bottom: 10px;
-      padding: 10px;
-      border-bottom: 1px solid #333;
+    
+    /* Header */
+    .header {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: relative;
+      z-index: 10;
     }
-    .chat-container .message:last-child {
-      margin-bottom: 0;
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .chat-container .message .user {
+    
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    
+    .logo-text {
       font-weight: 600;
       font-size: 16px;
-      color: #6366f1;
+      letter-spacing: -0.02em;
     }
-    .chat-container .message .content {
-      font-size: 16px;
+    
+    .logo-version {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: 'IBM Plex Mono', monospace;
     }
-    .input-container {
+    
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    
+    .icon-btn:hover { background: var(--bg-tertiary); color: var(--text); }
+    .icon-btn:active { transform: scale(0.95); }
+    
+    /* Mode tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-sm);
+    }
+    
+    .tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    
+    .tab.active {
+      background: var(--bg-tertiary);
+      color: var(--text);
+    }
+    
+    /* Messages */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+    
+    .messages::-webkit-scrollbar { width: 6px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--text-secondary);
+      padding: 40px 20px;
+    }
+    
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.6;
+    }
+    
+    .empty-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    
+    .empty-subtitle {
+      font-size: 14px;
+      max-width: 300px;
+      line-height: 1.5;
+    }
+    
+    .msg {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      animation: fadeIn 0.2s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .msg.user {
+      align-self: flex-end;
+      background: var(--user-bubble);
+      border-radius: var(--radius) var(--radius) 4px var(--radius);
+    }
+    
+    .msg.assistant {
+      align-self: flex-start;
+      background: var(--ai-bubble);
+      border: 1px solid var(--border);
+      border-radius: var(--radius) var(--radius) var(--radius) 4px;
+    }
+    
+    .msg.system {
+      align-self: center;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      max-width: 90%;
+    }
+    
+    .msg.system.success { border-color: var(--success); color: var(--success); }
+    .msg.system.error { border-color: var(--error); color: var(--error); }
+    
+    .msg a { color: #60a5fa; text-decoration: none; }
+    .msg a:hover { text-decoration: underline; }
+    
+    .typing {
+      display: flex;
+      gap: 4px;
+      padding: 16px;
+    }
+    
+    .typing span {
+      width: 8px;
+      height: 8px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite;
+    }
+    
+    .typing span:nth-child(2) { animation-delay: 0.2s; }
+    .typing span:nth-child(3) { animation-delay: 0.4s; }
+    
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-8px); }
+    }
+    
+    /* Input */
+    .input-area {
+      padding: 12px 16px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+    
+    .input-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    
+    .input-field {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text);
+      font-size: 15px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 48px;
+      max-height: 150px;
+      transition: border-color 0.15s;
+    }
+    
+    .input-field::placeholder { color: var(--text-secondary); }
+    .input-field:focus { border-color: var(--accent); }
+    
+    .send-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius);
+      border: none;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    
+    .send-btn:hover { background: var(--accent-hover); }
+    .send-btn:active { transform: scale(0.95); }
+    .send-btn:disabled { background: var(--bg-tertiary); cursor: default; }
+    
+    /* Settings panel */
+    .settings-panel {
+      position: fixed;
+      top: 0;
+      right: -320px;
+      width: 320px;
+      height: 100%;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      z-index: 100;
+      transition: right 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .settings-panel.open { right: 0; }
+    
+    .settings-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px;
-      border-top: 1px solid #333;
     }
-    .input-container textarea {
-      width: 80%;
-      padding: 10px;
+    
+    .settings-title {
+      font-weight: 600;
       font-size: 16px;
-      border: 1px solid #333;
-      resize: vertical;
-      border-radius: 5px;
     }
-    .input-container button {
-      background-color: #6495ed;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      font-size: 16px;
+    
+    .settings-body {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    
+    .setting-group {
+      margin-bottom: 24px;
+    }
+    
+    .setting-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    
+    .theme-btn {
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      border: 2px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
-      border-radius: 5px;
+      transition: all 0.15s;
+      text-align: left;
+      font-family: inherit;
     }
-    .input-container button:hover {
-      background-color: #4682b4;
+    
+    .theme-btn:hover { border-color: var(--text-secondary); }
+    .theme-btn.active { border-color: var(--accent); background: var(--bg-tertiary); }
+    
+    .theme-preview {
+      width: 100%;
+      height: 24px;
+      border-radius: 4px;
+      margin-bottom: 8px;
     }
-    .edit-mode {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background-color: #6495ed;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-    .edit-mode:hover {
-      background-color: #4682b4;
-    }
-    .typing-indicator {
-      font-size: 16px;
-      color: #666;
-    }
-    .code-block {
-      background-color: #333;
-      padding: 10px;
-      border: 1px solid #444;
-    }
-    .code-block pre {
-      font-size: 16px;
-      font-family: monospace;
-    }
-    .self-edit-modal {
+    
+    .overlay {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0, 0, 0, 0.5);
+      background: rgba(0,0,0,0.5);
+      z-index: 99;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+    
+    .overlay.open { opacity: 1; visibility: visible; }
+    
+    /* Themes */
+    .theme-midnight {
+      --bg: #0d0d0d;
+      --bg-secondary: #171717;
+      --bg-tertiary: #262626;
+      --text: #fafafa;
+      --text-secondary: #a1a1aa;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --user-bubble: #3b82f6;
+      --ai-bubble: #262626;
+      --border: #27272a;
+    }
+    
+    .theme-matrix {
+      --bg: #000a00;
+      --bg-secondary: #001400;
+      --bg-tertiary: #002200;
+      --text: #00ff41;
+      --text-secondary: #00aa2a;
+      --accent: #00ff41;
+      --accent-hover: #00dd35;
+      --user-bubble: #004400;
+      --ai-bubble: #001a00;
+      --border: #003300;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    
+    .theme-cyberpunk {
+      --bg: #0a000f;
+      --bg-secondary: #150020;
+      --bg-tertiary: #200030;
+      --text: #ff00ff;
+      --text-secondary: #cc00cc;
+      --accent: #00ffff;
+      --accent-hover: #00dddd;
+      --user-bubble: #ff006688;
+      --ai-bubble: #200030;
+      --border: #400060;
+    }
+    
+    .theme-sunset {
+      --bg: #1a1215;
+      --bg-secondary: #2a1c22;
+      --bg-tertiary: #3d2830;
+      --text: #fef3f2;
+      --text-secondary: #fda4af;
+      --accent: #f97316;
+      --accent-hover: #ea580c;
+      --user-bubble: #c2410c;
+      --ai-bubble: #3d2830;
+      --border: #4a3038;
+    }
+    
+    .theme-ocean {
+      --bg: #0c1929;
+      --bg-secondary: #132337;
+      --bg-tertiary: #1a3045;
+      --text: #e0f2fe;
+      --text-secondary: #7dd3fc;
+      --accent: #0ea5e9;
+      --accent-hover: #0284c7;
+      --user-bubble: #0369a1;
+      --ai-bubble: #1a3045;
+      --border: #1e4057;
+    }
+    
+    .theme-forest {
+      --bg: #0a1410;
+      --bg-secondary: #111f18;
+      --bg-tertiary: #1a2f22;
+      --text: #ecfdf5;
+      --text-secondary: #86efac;
+      --accent: #22c55e;
+      --accent-hover: #16a34a;
+      --user-bubble: #166534;
+      --ai-bubble: #1a2f22;
+      --border: #234d30;
+    }
+    
+    /* Status indicator */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+    }
+    
+    .status-dot.loading {
+      background: var(--warning);
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    
+    /* Warning banner for edit mode */
+    .edit-warning {
+      background: linear-gradient(90deg, var(--warning) 0%, #d97706 100%);
+      color: #000;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
       display: none;
     }
-    .self-edit-modal .modal-content {
-      background-color: #2a2a2a;
-      padding: 20px;
-      border: 1px solid #333;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
-    .self-edit-modal .modal-content textarea {
-      width: 100%;
-      padding: 10px;
-      font-size: 16px;
-      border: 1px solid #333;
-      resize: vertical;
-      border-radius: 5px;
-    }
-    .self-edit-modal .modal-content button {
-      background-color: #6495ed;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-    .self-edit-modal .modal-content button:hover {
-      background-color: #4682b4;
+    
+    .edit-warning.show { display: block; }
+
+    /* Mobile adjustments */
+    @media (max-width: 640px) {
+      .settings-panel { width: 100%; right: -100%; }
+      .msg { max-width: 90%; }
     }
   </style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>OmniBot - Blobfish</h1>
+<body class="theme-midnight">
+  <div class="app">
+    <div class="edit-warning" id="editWarning">
+      ⚠️ Edit Mode: AI will modify its own source code
     </div>
-    <div class="chat-container" id="chat-container">
-      <!-- Messages will be rendered here -->
+    
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">Ω</div>
+        <div>
+          <div class="logo-text">OmniBot</div>
+          <div class="logo-version">Blobfish Edition</div>
+        </div>
+      </div>
+      
+      <div class="header-actions">
+        <div class="tabs">
+          <button class="tab active" data-mode="chat">Chat</button>
+          <button class="tab" data-mode="edit">Edit</button>
+        </div>
+        <button class="icon-btn" id="settingsBtn" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+    
+    <div class="messages" id="messages">
+      <div class="empty-state">
+        <div class="empty-icon">Ω</div>
+        <div class="empty-title">Welcome to OmniBot</div>
+        <div class="empty-subtitle">Self-editing AI assistant. Chat or switch to Edit mode to modify the source code.</div>
+      </div>
     </div>
-    <div class="input-container">
-      <textarea id="input-field" placeholder="Type a message..."></textarea>
-      <button id="send-button">Send</button>
-    </div>
-    <button class="edit-mode" id="edit-button">Edit Mode</button>
-    <div class="self-edit-modal" id="self-edit-modal">
-      <div class="modal-content">
-        <textarea id="self-edit-field" placeholder="Enter your instruction..."></textarea>
-        <button id="self-edit-button">Edit</button>
+    
+    <div class="input-area">
+      <div class="status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+      <div class="input-wrapper">
+        <textarea class="input-field" id="input" placeholder="Send a message..." rows="1"></textarea>
+        <button class="send-btn" id="sendBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
       </div>
     </div>
   </div>
+  
+  <div class="overlay" id="overlay"></div>
+  
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-header">
+      <span class="settings-title">Settings</span>
+      <button class="icon-btn" id="closeSettings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <div class="setting-group">
+        <div class="setting-label">Theme</div>
+        <div class="theme-grid">
+          <button class="theme-btn active" data-theme="midnight">
+            <div class="theme-preview" style="background: linear-gradient(135deg, #171717 0%, #3b82f6 100%)"></div>
+            Midnight
+          </button>
+          <button class="theme-btn" data-theme="matrix">
+            <div class="theme-preview" style="background: linear-gradient(135deg, #001400 0%, #00ff41 100%)"></div>
+            Matrix
+          </button>
+          <button class="theme-btn" data-theme="cyberpunk">
+            <div class="theme-preview" style="background: linear-gradient(135deg, #150020 0%, #ff00ff 50%, #00ffff 100%)"></div>
+            Cyberpunk
+          </button>
+          <button class="theme-btn" data-theme="sunset">
+            <div class="theme-preview" style="background: linear-gradient(135deg, #2a1c22 0%, #f97316 100%)"></div>
+            Sunset
+          </button>
+          <button class="theme-btn" data-theme="ocean">
+            <div class="theme-preview" style="background: linear-gradient(135deg, #132337 0%, #0ea5e9 100%)"></div>
+            Ocean
+          </button>
+          <button class="theme-btn" data-theme="forest">
+            <div class="theme-preview" style="background: linear-gradient(135deg, #111f18 0%, #22c55e 100%)"></div>
+            Forest
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
-    const chatContainer = document.getElementById('chat-container');
-    const inputField = document.getElementById('input-field');
-    const sendButton = document.getElementById('send-button');
-    const editButton = document.getElementById('edit-button');
-    const selfEditModal = document.getElementById('self-edit-modal');
-    const selfEditField = document.getElementById('self-edit-field');
-    const selfEditButton = document.getElementById('self-edit-button');
-
-    let messages = [];
-    let typing = false;
-
-    sendButton.addEventListener('click', async () => {
-      const message = inputField.value.trim();
-      if (message) {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ messages: [{ role: 'user', content: message }] })
+    (function() {
+      var mode = 'chat';
+      var messages = [];
+      var loading = false;
+      
+      var $messages = document.getElementById('messages');
+      var $input = document.getElementById('input');
+      var $sendBtn = document.getElementById('sendBtn');
+      var $statusDot = document.getElementById('statusDot');
+      var $statusText = document.getElementById('statusText');
+      var $editWarning = document.getElementById('editWarning');
+      var $settingsBtn = document.getElementById('settingsBtn');
+      var $settingsPanel = document.getElementById('settingsPanel');
+      var $closeSettings = document.getElementById('closeSettings');
+      var $overlay = document.getElementById('overlay');
+      
+      // Load saved theme
+      var savedTheme = localStorage.getItem('omnibot-theme') || 'midnight';
+      document.body.className = 'theme-' + savedTheme;
+      document.querySelector('[data-theme="' + savedTheme + '"]').classList.add('active');
+      
+      // Tab switching
+      document.querySelectorAll('.tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+          tab.classList.add('active');
+          mode = tab.dataset.mode;
+          $editWarning.classList.toggle('show', mode === 'edit');
+          $input.placeholder = mode === 'edit' ? 'Describe the change...' : 'Send a message...';
         });
-        const data = await response.json();
-        messages.push({ role: 'user', content: message });
-        messages.push({ role: 'assistant', content: data.content });
-        renderMessages();
-        inputField.value = '';
-      }
-    });
-
-    editButton.addEventListener('click', () => {
-      selfEditModal.style.display = 'block';
-    });
-
-    selfEditButton.addEventListener('click', async () => {
-      const instruction = selfEditField.value.trim();
-      if (instruction) {
-        const response = await fetch('/api/self-edit', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ instruction })
-        });
-        const data = await response.json();
-        console.log(data);
-        selfEditModal.style.display = 'none';
-      }
-    });
-
-    function renderMessages() {
-      chatContainer.innerHTML = '';
-      messages.forEach((message) => {
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('message');
-        if (message.role === 'user') {
-          messageElement.innerHTML = '<span class="user">You</span><span class="content">' + message.content + '</span>';
-        } else {
-          messageElement.innerHTML = '<span class="user">Assistant</span><span class="content">' + message.content + '</span>';
-        }
-        chatContainer.appendChild(messageElement);
       });
-    }
-
-    inputField.addEventListener('input', () => {
-      if (inputField.value.trim() !== '') {
-        typing = true;
-      } else {
-        typing = false;
+      
+      // Settings panel
+      function openSettings() {
+        $settingsPanel.classList.add('open');
+        $overlay.classList.add('open');
       }
-    });
-
-    setInterval(() => {
-      if (typing) {
-        const typingIndicator = document.createElement('div');
-        typingIndicator.classList.add('typing-indicator');
-        typingIndicator.textContent = 'Typing...';
-        chatContainer.appendChild(typingIndicator);
-        setTimeout(() => {
-          typingIndicator.remove();
-        }, 1000);
+      
+      function closeSettings() {
+        $settingsPanel.classList.remove('open');
+        $overlay.classList.remove('open');
       }
-    }, 1000);
+      
+      $settingsBtn.addEventListener('click', openSettings);
+      $closeSettings.addEventListener('click', closeSettings);
+      $overlay.addEventListener('click', closeSettings);
+      
+      // Theme switching
+      document.querySelectorAll('.theme-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          var theme = btn.dataset.theme;
+          document.body.className = 'theme-' + theme;
+          localStorage.setItem('omnibot-theme', theme);
+        });
+      });
+      
+      // Auto-resize textarea
+      $input.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+      });
+      
+      function escapeHtml(text) {
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+      }
+      
+      function render() {
+        if (messages.length === 0) {
+          $messages.innerHTML = '<div class="empty-state"><div class="empty-icon">Ω</div><div class="empty-title">Welcome to OmniBot</div><div class="empty-subtitle">Self-editing AI assistant. Chat or switch to Edit mode to modify the source code.</div></div>';
+          return;
+        }
+        
+        var html = messages.map(function(m) {
+          return '<div class="msg ' + m.role + (m.type ? ' ' + m.type : '') + '">' + escapeHtml(m.content) + '</div>';
+        }).join('');
+        
+        if (loading) {
+          html += '<div class="msg assistant"><div class="typing"><span></span><span></span><span></span></div></div>';
+        }
+        
+        $messages.innerHTML = html;
+        $messages.scrollTop = $messages.scrollHeight;
+      }
+      
+      function setStatus(text, isLoading) {
+        $statusText.textContent = text;
+        $statusDot.classList.toggle('loading', isLoading);
+      }
+      
+      async function send() {
+        var text = $input.value.trim();
+        if (!text || loading) return;
+        
+        messages.push({ role: 'user', content: text });
+        $input.value = '';
+        $input.style.height = 'auto';
+        loading = true;
+        $sendBtn.disabled = true;
+        setStatus(mode === 'edit' ? 'Editing...' : 'Thinking...', true);
+        render();
+        
+        try {
+          var endpoint = mode === 'edit' ? '/api/self-edit' : '/api/chat';
+          var body = mode === 'edit' 
+            ? { instruction: text }
+            : { messages: messages.filter(function(m) { return m.role !== 'system'; }).map(function(m) { return { role: m.role, content: m.content }; }) };
+          
+          var response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          
+          var data = await response.json();
+          
+          if (mode === 'edit') {
+            if (data.success) {
+              messages.push({ 
+                role: 'system', 
+                type: 'success',
+                content: '✓ ' + data.explanation + '\n\nCommit: ' + data.url
+              });
+            } else {
+              messages.push({ 
+                role: 'system', 
+                type: 'error',
+                content: '✗ ' + (data.error || 'Edit failed') + (data.explanation ? '\n' + data.explanation : '')
+              });
+            }
+          } else {
+            messages.push({ role: 'assistant', content: data.content || data.error || 'No response' });
+          }
+          
+          setStatus('Ready', false);
+        } catch (e) {
+          messages.push({ role: 'system', type: 'error', content: '✗ Error: ' + e.message });
+          setStatus('Error', false);
+        }
+        
+        loading = false;
+        $sendBtn.disabled = false;
+        render();
+      }
+      
+      $sendBtn.addEventListener('click', send);
+      $input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      });
+      
+      render();
+    })();
   </script>
 </body>
-</html>`;
+</html>
+`;
 
 export default {
   async fetch(request, env) {
