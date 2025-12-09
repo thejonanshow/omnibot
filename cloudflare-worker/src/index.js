@@ -24,8 +24,8 @@ const GROQ_MODELS = {
   llama: 'llama-3.3-70b-versatile',
   // Use smaller Llama for code patches (fits in context)
   coder: 'llama-3.1-8b-instant',
-  // Mixtral as fallback
-  mixtral: 'mixtral-8x7b-32768'
+  // Use Llama as fallback (mixtral-8x7b-32768 is deprecated)
+  mixtral: 'llama-3.3-70b-versatile'
 };
 
 const REQUIRED_FUNCTIONS = [
@@ -380,8 +380,8 @@ ${relevantCode.slice(0, 8000)}
 
 OUTPUT YOUR PATCHES NOW (remember: <<<REPLACE>>> old <<<WITH>>> new <<<END>>>):`;
 
-  // Use mixtral which is better at following strict formats
-  return await callGroq('mixtral', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  // Use llama which is good at following strict formats
+  return await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
 // Extract code sections by name/pattern
@@ -2287,11 +2287,11 @@ export default {
           }
         }
         
-        // Fallback to Groq Mixtral if Gemini failed
+        // Fallback to Groq Llama if Gemini failed
         if (!review) {
           try {
-            const mixtralReview = await callGroq('mixtral', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
-            review = '**Mixtral Review:**\\n' + mixtralReview;
+            const llamaReview = await callGroq('llama', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
+            review = '**Llama Review:**\\n' + llamaReview;
           } catch (e) {
             review = 'Review unavailable: ' + e.message;
           }
