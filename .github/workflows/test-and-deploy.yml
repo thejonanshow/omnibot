@@ -92,26 +92,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Ensure Wrangler is installed (global)
-        run: npm install -g wrangler@4.53.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Wrangler
+        run: npm install -g wrangler
       
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
-          workingDirectory: cloudflare-worker
-      
-      - name: Dump wrangler logs (debug)
-        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          echo "---- Wrangler logs ----"
-          ls -l /home/runner/.config/.wrangler/logs || true
-          for f in /home/runner/.config/.wrangler/logs/*.log; do
-            echo "== $f ==";
-            sed -n '1,400p' "$f" || true;
-          done
+          cd cloudflare-worker
+          wrangler deploy
       
       - name: Wait for deployment
         run: sleep 30
