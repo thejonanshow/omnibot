@@ -204,7 +204,7 @@ async function callGroq(model, messages, env, systemPrompt = null) {
     body: JSON.stringify({ 
       model: GROQ_MODELS[model], 
       messages: fullMessages, 
-      max_tokens: model === 'qwen' ? 16000 : 8000,
+      max_tokens: model === 'qwen' ? 32000 : 16000,
       temperature: 0.3
     })
   });
@@ -238,6 +238,24 @@ function validateCodeStructure(code) {
   
   if (!code.includes('const HTML =') && !code.includes('<html>')) {
     return { valid: false, reason: 'Missing HTML UI - structure destroyed' };
+  }
+  
+  // Check for proper code completion (detect truncation)
+  const trimmedCode = code.trim();
+  if (!trimmedCode.endsWith('};') && !trimmedCode.endsWith('};')) {
+    return { valid: false, reason: 'Code appears truncated - does not end with proper export default closure' };
+  }
+  
+  // Check that export default has a proper fetch handler
+  if (!code.includes('export default {') || !code.includes('async fetch(')) {
+    return { valid: false, reason: 'Missing or malformed export default fetch handler' };
+  }
+  
+  // Check balanced braces (simple heuristic for truncation)
+  const openBraces = (code.match(/{/g) || []).length;
+  const closeBraces = (code.match(/}/g) || []).length;
+  if (Math.abs(openBraces - closeBraces) > 5) {
+    return { valid: false, reason: `Unbalanced braces detected (${openBraces} open, ${closeBraces} close) - possible truncation` };
   }
   
   return { valid: true };
@@ -795,24 +813,226 @@ const HTML = `<!DOCTYPE html>
       font-family: monospace;
     }
     
-    /* Full screen button */
-    .full-screen-btn {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: var(--lcars-orange);
-      border: none;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-family: inherit;
-      font-size: 14px;
-      font-weight: 700;
-      color: #000;
-      cursor: pointer;
+    /* ========================================
+       MOBILE RESPONSIVE STYLES
+       ======================================== */
+    @media (max-width: 768px) {
+      /* Collapse sidebar on mobile */
+      .lcars-frame {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto auto;
+      }
+      
+      .lcars-sidebar {
+        grid-row: auto;
+        flex-direction: row;
+        border-radius: 0;
+        padding: 8px;
+        gap: 4px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      .lcars-sidebar-top {
+        display: none;
+      }
+      
+      .lcars-sidebar-content {
+        flex-direction: row;
+        padding: 0;
+        flex: 1;
+        gap: 4px;
+      }
+      
+      .lcars-btn {
+        padding: 10px 14px;
+        font-size: 10px;
+        border-radius: 15px;
+        margin-right: 0;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      
+      /* Header adjustments */
+      .lcars-header {
+        order: -1;
+      }
+      
+      .lcars-header-curve {
+        width: 40px;
+        border-radius: 0 0 20px 0;
+      }
+      
+      .lcars-header-bar {
+        padding: 0 12px;
+      }
+      
+      .lcars-title {
+        font-size: 18px;
+        letter-spacing: 1px;
+      }
+      
+      .lcars-user {
+        padding: 6px 12px;
+        font-size: 10px;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      .lcars-header-end {
+        width: 24px;
+        border-radius: 15px;
+      }
+      
+      /* Main content */
+      .lcars-main {
+        border-radius: 12px;
+        margin: 0 4px;
+      }
+      
+      .messages {
+        padding: 12px;
+        gap: 8px;
+      }
+      
+      .msg {
+        max-width: 90%;
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+      
+      /* Input bar */
+      .input-bar {
+        padding: 8px;
+        gap: 6px;
+      }
+      
+      .input-bar input {
+        padding: 10px 12px;
+        font-size: 16px; /* Prevent zoom on iOS */
+      }
+      
+      .input-bar button {
+        padding: 10px 16px;
+        font-size: 13px;
+      }
+      
+      /* Footer */
+      .lcars-footer-curve {
+        width: 40px;
+        border-radius: 0 20px 0 0;
+      }
+      
+      .lcars-footer-bar {
+        padding: 0 12px;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      
+      .stat {
+        font-size: 11px;
+      }
+      
+      .edit-status {
+        gap: 6px;
+      }
+      
+      #editStatusText {
+        font-size: 11px;
+      }
+      
+      .lcars-footer-end {
+        width: 30px;
+      }
+      
+      /* Login screen mobile */
+      .login-logo {
+        font-size: 32px;
+      }
+      
+      .login-subtitle {
+        font-size: 14px;
+        letter-spacing: 2px;
+      }
+      
+      .login-btn {
+        padding: 16px 28px;
+        font-size: 16px;
+        gap: 12px;
+      }
+      
+      /* Modals */
+      .modal-content {
+        width: 95%;
+        max-height: 85vh;
+        padding: 16px;
+        border-radius: 12px;
+      }
+      
+      .modal-title {
+        font-size: 16px;
+      }
+      
+      .modal textarea {
+        min-height: 150px;
+        font-size: 14px;
+      }
     }
     
-    .full-screen-btn:hover {
-      background: var(--lcars-gold);
+    /* Extra small screens (phones in portrait) */
+    @media (max-width: 400px) {
+      .lcars-btn {
+        padding: 8px 10px;
+        font-size: 9px;
+      }
+      
+      .lcars-title {
+        font-size: 16px;
+      }
+      
+      .lcars-user {
+        display: none;
+      }
+      
+      .stat:not(:first-child) {
+        display: none;
+      }
+    }
+    
+    /* Safe area support for notched phones */
+    @supports (padding: env(safe-area-inset-bottom)) {
+      .lcars-footer-bar {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      .input-bar {
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      }
+    }
+    
+    /* Landscape mobile */
+    @media (max-height: 500px) and (orientation: landscape) {
+      .lcars-frame {
+        grid-template-rows: 50px 1fr 40px auto;
+      }
+      
+      .lcars-header-bar {
+        padding: 0 8px;
+      }
+      
+      .lcars-title {
+        font-size: 16px;
+      }
+      
+      .messages {
+        padding: 8px;
+      }
+      
+      .msg {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
     }
   </style>
 </head>
@@ -830,7 +1050,6 @@ const HTML = `<!DOCTYPE html>
 
   <!-- Main App (hidden until logged in) -->
   <div id="mainApp" class="lcars-frame hidden">
-    <button class="full-screen-btn" id="fullScreenBtn">Full Screen</button>
     <div class="lcars-sidebar">
       <div class="lcars-sidebar-top"></div>
       <div class="lcars-sidebar-content">
@@ -924,7 +1143,6 @@ const HTML = `<!DOCTYPE html>
       const $userEmail = document.getElementById('userEmail');
       const $editStatus = document.getElementById('editStatus');
       const $editStatusText = document.getElementById('editStatusText');
-      const $fullScreenBtn = document.getElementById('fullScreenBtn');
       
       let mode = 'chat';
       let messages = [];
@@ -1034,4 +1252,412 @@ const HTML = `<!DOCTYPE html>
       function render() {
         let html = '';
         for (const m of messages) {
-          let cls =
+          let cls = 'msg ' + m.role;
+          if (m.type) cls += ' ' + m.type;
+          html += '<div class="' + cls + '">' + escapeHtml(m.content) + '</div>';
+        }
+        if (loading) {
+          html += '<div class="msg assistant">Processing...</div>';
+        }
+        $messages.innerHTML = html;
+        $messages.scrollTop = $messages.scrollHeight;
+      }
+      
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML.replace(/(https?:\\/\\/[^\\s]+)/g, '<a href="$1" target="_blank" style="color: var(--lcars-cyan)">$1</a>');
+      }
+      
+      function setEditStatus(text, active) {
+        $editStatus.classList.toggle('active', active);
+        $editStatusText.textContent = text;
+      }
+      
+      async function send() {
+        const text = $input.value.trim();
+        if (!text || loading) return;
+        
+        addMessage('user', text);
+        $input.value = '';
+        loading = true;
+        $sendBtn.disabled = true;
+        
+        if (mode === 'edit') {
+          setEditStatus('Reading current code...', true);
+        }
+        
+        try {
+          const endpoint = mode === 'edit' ? '/api/self-edit' : '/api/chat';
+          const body = mode === 'edit' 
+            ? { instruction: text }
+            : { messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })) };
+          
+          if (mode === 'edit') {
+            const response = await fetch(endpoint + '?stream=1', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let result = '';
+            
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              const chunk = decoder.decode(value);
+              const lines = chunk.split('\\n');
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.status) {
+                      setEditStatus(data.message || data.status, true);
+                    }
+                    if (data.success !== undefined) {
+                      result = data;
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+            
+            setEditStatus('', false);
+            
+            if (result.success) {
+              addMessage('system', '✓ ' + result.explanation + (result.url ? '\\n' + result.url : ''), 'success');
+            } else {
+              addMessage('system', '✗ ' + (result.error || 'Edit failed'), 'error');
+            }
+          } else {
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            
+            const data = await response.json();
+            addMessage('assistant', data.content || data.error || 'No response');
+          }
+          
+          loadStats();
+        } catch (e) {
+          addMessage('system', 'Error: ' + e.message, 'error');
+        }
+        
+        loading = false;
+        $sendBtn.disabled = false;
+        render();
+      }
+      
+      $sendBtn.onclick = send;
+      $input.onkeydown = function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      };
+      
+      async function loadStats() {
+        try {
+          const data = await fetch('/api/telemetry').then(r => r.json());
+          document.getElementById('statContext').textContent = 'Context: ' + (data.stats?.contextWords || 0) + ' words';
+          document.getElementById('statEdits').textContent = 'Edits: ' + (data.stats?.edit_success || 0);
+        } catch (e) {}
+      }
+      
+      async function loadTelemetry() {
+        try {
+          const data = await fetch('/api/telemetry').then(r => r.json());
+          
+          const grid = document.getElementById('telemetryGrid');
+          const stats = data.stats || {};
+          
+          grid.innerHTML = Object.entries(stats).map(([key, value]) => 
+            '<div class="telemetry-card"><div class="telemetry-value">' + value + '</div><div class="telemetry-label">' + key.replace(/_/g, ' ') + '</div></div>'
+          ).join('');
+          
+          const eventList = document.getElementById('eventList');
+          const events = data.events || [];
+          
+          eventList.innerHTML = events.slice(0, 50).map(e =>
+            '<div class="event-item"><strong>' + e.timestamp + '</strong> - ' + e.event + '</div>'
+          ).join('');
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      
+      async function loadContext() {
+        try {
+          const data = await fetch('/api/context').then(r => r.json());
+          document.getElementById('contextData').value = JSON.stringify(data.data || {}, null, 2);
+        } catch (e) {}
+      }
+      
+      window.saveContext = async function() {
+        try {
+          const value = document.getElementById('contextData').value;
+          JSON.parse(value);
+          
+          await fetch('/api/context', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: value })
+          });
+          
+          closeModal('contextModal');
+          addMessage('system', 'Context saved', 'success');
+        } catch (e) {
+          alert('Invalid JSON: ' + e.message);
+        }
+      };
+      
+      async function loadPrompt() {
+        try {
+          const data = await fetch('/api/context').then(r => r.json());
+          document.getElementById('masterPrompt').value = data.prompt || '';
+        } catch (e) {}
+      }
+      
+      window.savePrompt = async function() {
+        try {
+          const value = document.getElementById('masterPrompt').value;
+          
+          await fetch('/api/prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: value })
+          });
+          
+          closeModal('promptModal');
+          addMessage('system', 'Master prompt saved', 'success');
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+      };
+      
+      render();
+    })();
+  </script>
+</body>
+</html>
+`;
+
+// ============== MAIN HANDLER ==============
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const cors = { 
+      'Access-Control-Allow-Origin': '*', 
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
+      'Access-Control-Allow-Headers': 'Content-Type' 
+    };
+    
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: cors });
+    }
+    
+    const baseUrl = url.origin;
+    const redirectUri = `${baseUrl}/auth/callback`;
+    
+    // ===== OAuth Routes =====
+    
+    // Start Google OAuth
+    if (url.pathname === '/auth/google') {
+      const authUrl = getGoogleAuthUrl(env, redirectUri);
+      return Response.redirect(authUrl, 302);
+    }
+    
+    // OAuth callback
+    if (url.pathname === '/auth/callback') {
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      
+      if (error) {
+        return new Response(`Auth error: ${error}`, { status: 400 });
+      }
+      
+      if (!code) {
+        return new Response('No code provided', { status: 400 });
+      }
+      
+      try {
+        // Exchange code for token
+        const tokenData = await exchangeCodeForToken(code, env, redirectUri);
+        
+        if (tokenData.error) {
+          return new Response(`Token error: ${tokenData.error_description || tokenData.error}`, { status: 400 });
+        }
+        
+        // Get user info
+        const userInfo = await getGoogleUserInfo(tokenData.access_token);
+        
+        if (userInfo.email !== ALLOWED_EMAIL) {
+          return new Response(`Access denied. Only ${ALLOWED_EMAIL} can access this app.`, { 
+            status: 403,
+            headers: { 'Content-Type': 'text/html' }
+          });
+        }
+        
+        // Create session
+        const sessionToken = createSessionToken(userInfo.email);
+        
+        await logTelemetry('login', { email: userInfo.email }, env);
+        
+        // Redirect to app with session
+        return Response.redirect(`${baseUrl}/?session=${encodeURIComponent(sessionToken)}&email=${encodeURIComponent(userInfo.email)}`, 302);
+        
+      } catch (e) {
+        return new Response(`Auth error: ${e.message}`, { status: 500 });
+      }
+    }
+    
+    // Verify session
+    if (url.pathname === '/api/verify-session' && request.method === 'POST') {
+      const { token } = await request.json();
+      const result = validateSession(token);
+      return new Response(JSON.stringify(result), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // ===== Main Routes =====
+    
+    // Main UI
+    if (url.pathname === '/' || url.pathname === '/chat') {
+      return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
+    }
+    
+    // Health check
+    if (url.pathname === '/api/health') {
+      return new Response(JSON.stringify({ 
+        ok: true,
+        version: VERSION,
+        creature: 'Electric Eel'
+      }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Chat endpoint
+    if (url.pathname === '/api/chat' && request.method === 'POST') {
+      try {
+        const { messages } = await request.json();
+        await logTelemetry('chat', { messageCount: messages.length }, env);
+        const reply = await callGroq('llama', messages, env);
+        return new Response(JSON.stringify({ content: reply }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Self-edit endpoint
+    if (url.pathname === '/api/self-edit' && request.method === 'POST') {
+      try {
+        const { instruction } = await request.json();
+        const stream = url.searchParams.get('stream') === '1';
+        
+        if (!instruction || instruction.length < 5) {
+          const response = { success: false, error: 'Instruction too short' };
+          return new Response(JSON.stringify(response), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        if (stream) {
+          const { readable, writable } = new TransformStream();
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+          
+          (async () => {
+            const sendEvent = (data) => {
+              writer.write(encoder.encode('data: ' + JSON.stringify(data) + '\n\n'));
+            };
+            
+            const result = await selfEdit(instruction, env, sendEvent);
+            sendEvent(result);
+            writer.close();
+          })();
+          
+          return new Response(readable, {
+            headers: {
+              ...cors,
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache'
+            }
+          });
+        } else {
+          const result = await selfEdit(instruction, env);
+          return new Response(JSON.stringify(result), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Context endpoints
+    if (url.pathname === '/api/context') {
+      if (request.method === 'GET') {
+        const context = await getContext(env);
+        return new Response(JSON.stringify(context), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      if (request.method === 'POST') {
+        const { data } = await request.json();
+        await setContext('shared_data', data, env);
+        await logTelemetry('context_update', { size: data.length }, env);
+        return new Response(JSON.stringify({ success: true }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Prompt endpoint
+    if (url.pathname === '/api/prompt' && request.method === 'POST') {
+      const { prompt } = await request.json();
+      await setContext('master_prompt', prompt, env);
+      await logTelemetry('prompt_update', { size: prompt.length }, env);
+      return new Response(JSON.stringify({ success: true }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Telemetry endpoint
+    if (url.pathname === '/api/telemetry') {
+      const context = await getContext(env);
+      return new Response(JSON.stringify(context.telemetry || {}), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Test endpoint
+    if (url.pathname === '/api/test') {
+      return new Response(JSON.stringify({
+        ok: true,
+        version: VERSION,
+        timestamp: new Date().toISOString()
+      }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    return new Response('OmniBot ' + VERSION, { headers: cors });
+  }
+};
