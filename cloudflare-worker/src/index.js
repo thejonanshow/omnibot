@@ -41,7 +41,7 @@ const DEFAULT_MASTER_PROMPT = `You are OmniBot, a self-editing AI assistant.
 Project Context:
 - Repository: thejonanshow/omnibot
 - Platform: Cloudflare Workers
-- LLM Provider: Groq (Llama 3.3 70B, Qwen 2.5)
+- LLM Provider: Groq (Llama 3.3 70B, Llama 3.1 8B)
 - Version: ${VERSION}
 
 Capabilities:
