@@ -1048,8 +1048,8 @@ const HTML = `<!DOCTYPE html>
       justify-content: center;
     }
     
-    .approve-btn, .reject-btn {
-      padding: 12px 24px;
+    .approve-btn, .reject-btn, .review-btn {
+      padding: 12px 20px;
       border: none;
       border-radius: 8px;
       font-family: inherit;
@@ -1067,6 +1067,15 @@ const HTML = `<!DOCTYPE html>
     .approve-btn:hover {
       filter: brightness(1.2);
       transform: scale(1.05);
+    }
+    
+    .review-btn {
+      background: var(--lcars-blue);
+      color: #000;
+    }
+    
+    .review-btn:hover {
+      filter: brightness(1.2);
     }
     
     .reject-btn {
@@ -1628,23 +1637,29 @@ const HTML = `<!DOCTYPE html>
         showLogin();
       };
       
-      // Fullscreen toggle
+      // Fullscreen toggle (with iOS fallback message)
       document.getElementById('fullscreenBtn').onclick = function() {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(e => {
-            // iOS Safari uses webkitRequestFullscreen
-            if (document.documentElement.webkitRequestFullscreen) {
-              document.documentElement.webkitRequestFullscreen();
-            }
-          });
-          this.textContent = '⛶';
+        const elem = document.documentElement;
+        
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          // Try standard fullscreen first
+          if (elem.requestFullscreen) {
+            elem.requestFullscreen().catch(e => {
+              // iOS doesn't support fullscreen API - show PWA hint
+              addMessage('system', '📱 **Fullscreen tip:** On iOS, tap Share → Add to Home Screen to use OmniBot as a fullscreen app!', 'info');
+            });
+          } else if (elem.webkitRequestFullscreen) {
+            elem.webkitRequestFullscreen();
+          } else {
+            // No fullscreen support
+            addMessage('system', '📱 **Fullscreen tip:** Add OmniBot to your home screen for a fullscreen experience!', 'info');
+          }
         } else {
           if (document.exitFullscreen) {
             document.exitFullscreen();
           } else if (document.webkitExitFullscreen) {
             document.webkitExitFullscreen();
           }
-          this.textContent = '⛶';
         }
       };
       
@@ -1744,6 +1759,82 @@ const HTML = `<!DOCTYPE html>
         $editStatusText.textContent = text;
       }
       
+      // Show 3-button approval UI: Approve, Deny, Review
+      function showApprovalButtons(editId, patchPreview) {
+        // Remove any existing approval buttons
+        document.querySelectorAll('.approval-buttons').forEach(el => el.remove());
+        
+        const approveDiv = document.createElement('div');
+        approveDiv.className = 'approval-buttons';
+        approveDiv.innerHTML = 
+          '<button class="approve-btn" data-edit-id="' + editId + '">✓ Approve</button>' +
+          '<button class="review-btn" data-edit-id="' + editId + '">🔍 Review</button>' +
+          '<button class="reject-btn" data-edit-id="' + editId + '">✗ Deny</button>';
+        $messages.appendChild(approveDiv);
+        $messages.scrollTop = $messages.scrollHeight;
+        
+        // Approve - deploy the changes
+        approveDiv.querySelector('.approve-btn').onclick = async function() {
+          const id = this.dataset.editId;
+          setEditStatus('Deploying...', true);
+          approveDiv.remove();
+          
+          try {
+            const res = await fetch('/api/approve-edit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ editId: id })
+            });
+            const data = await res.json();
+            setEditStatus('', false);
+            
+            if (data.success) {
+              addMessage('system', '✓ Deployed! ' + (data.url || ''), 'success');
+            } else {
+              addMessage('system', '✗ ' + (data.error || 'Deploy failed'), 'error');
+            }
+          } catch (e) {
+            setEditStatus('', false);
+            addMessage('system', '✗ Error: ' + e.message, 'error');
+          }
+          loadStats();
+        };
+        
+        // Review - send to Claude/Gemini for second opinion
+        approveDiv.querySelector('.review-btn').onclick = async function() {
+          const id = this.dataset.editId;
+          setEditStatus('Getting second opinion...', true);
+          approveDiv.remove();
+          
+          try {
+            const res = await fetch('/api/review-edit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ editId: id })
+            });
+            const data = await res.json();
+            setEditStatus('', false);
+            
+            if (data.review) {
+              addMessage('system', '🔍 **Reviewer says:**\\n\\n' + data.review, 'info');
+              // Show buttons again for this edit
+              showApprovalButtons(id, patchPreview);
+            } else {
+              addMessage('system', '✗ Review failed: ' + (data.error || 'Unknown error'), 'error');
+            }
+          } catch (e) {
+            setEditStatus('', false);
+            addMessage('system', '✗ Error: ' + e.message, 'error');
+          }
+        };
+        
+        // Deny - cancel
+        approveDiv.querySelector('.reject-btn').onclick = function() {
+          approveDiv.remove();
+          addMessage('system', '✗ Edit cancelled', 'info');
+        };
+      }
+      
       async function send() {
         const text = $input.value.trim();
         if (!text || loading) return;
@@ -1802,46 +1893,9 @@ const HTML = `<!DOCTYPE html>
             if (result.awaiting_approval && result.editId) {
               addMessage('system', '📋 **Proposed Changes:**\\n\\n' + (result.message || result.plan), 'info');
               
-              // Show approval buttons
-              const approveDiv = document.createElement('div');
-              approveDiv.className = 'approval-buttons';
-              approveDiv.innerHTML = '<button class="approve-btn" data-edit-id="' + result.editId + '">✓ Approve & Deploy</button>' +
-                '<button class="reject-btn" data-edit-id="' + result.editId + '">✗ Cancel</button>';
-              $messages.appendChild(approveDiv);
+              // Show approval buttons - 3 options
+              showApprovalButtons(result.editId, result.patches_preview || '');
               
-              // Add event listeners
-              approveDiv.querySelector('.approve-btn').onclick = async function() {
-                const editId = this.dataset.editId;
-                setEditStatus('Applying changes...', true);
-                approveDiv.remove();
-                
-                try {
-                  const res = await fetch('/api/approve-edit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ editId })
-                  });
-                  const data = await res.json();
-                  setEditStatus('', false);
-                  
-                  if (data.success) {
-                    addMessage('system', '✓ Changes deployed! Commit: ' + data.commit + (data.url ? '\\n' + data.url : ''), 'success');
-                  } else {
-                    addMessage('system', '✗ ' + (data.error || 'Deploy failed'), 'error');
-                  }
-                } catch (e) {
-                  setEditStatus('', false);
-                  addMessage('system', '✗ Error: ' + e.message, 'error');
-                }
-                loadStats();
-              };
-              
-              approveDiv.querySelector('.reject-btn').onclick = function() {
-                approveDiv.remove();
-                addMessage('system', 'Edit cancelled', 'info');
-              };
-              
-              scrollToBottom();
             } else if (result.success) {
               addMessage('system', '✓ ' + result.explanation + (result.url ? '\\n' + result.url : ''), 'success');
             } else {
@@ -2153,6 +2207,74 @@ export default {
         });
       } catch (e) {
         return new Response(JSON.stringify({ success: false, error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Review edit with external AI (Claude -> Gemini fallback)
+    if (url.pathname === '/api/review-edit' && request.method === 'POST') {
+      try {
+        const { editId } = await request.json();
+        
+        if (!editId || !env.CONTEXT) {
+          return new Response(JSON.stringify({ error: 'Missing editId or context' }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        // Get pending edit
+        const pendingJson = await env.CONTEXT.get('pending_edit_' + editId);
+        if (!pendingJson) {
+          return new Response(JSON.stringify({ error: 'Edit not found or expired' }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        const pending = JSON.parse(pendingJson);
+        const reviewPrompt = 'Review these proposed code changes. Be concise but thorough. Identify any bugs, security issues, or improvements needed:\\n\\nOriginal request: ' + pending.instruction + '\\n\\nProposed patches:\\n' + pending.patches;
+        
+        let review = null;
+        
+        // Try Gemini first (free tier available)
+        if (env.GEMINI_API_KEY) {
+          try {
+            const geminiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + env.GEMINI_API_KEY, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: reviewPrompt }] }],
+                generationConfig: { maxOutputTokens: 1000 }
+              })
+            });
+            const geminiData = await geminiRes.json();
+            review = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (review) {
+              review = '**Gemini Review:**\\n' + review;
+            }
+          } catch (e) {
+            console.log('Gemini failed:', e.message);
+          }
+        }
+        
+        // Fallback to Groq Mixtral if Gemini failed
+        if (!review) {
+          try {
+            const mixtralReview = await callGroq('mixtral', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
+            review = '**Mixtral Review:**\\n' + mixtralReview;
+          } catch (e) {
+            review = 'Review unavailable: ' + e.message;
+          }
+        }
+        
+        await logTelemetry('edit_review', { editId }, env);
+        
+        return new Response(JSON.stringify({ review }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { 
           status: 500,
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
