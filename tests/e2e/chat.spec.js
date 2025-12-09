@@ -3,7 +3,7 @@
  * Tests the main chat interface and LLM provider routing
  */
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('Chat Functionality', () => {
   test.beforeEach(async ({ page }) => {

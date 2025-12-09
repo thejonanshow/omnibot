@@ -4,7 +4,7 @@
  * Fast, reliable tests that verify the UI works correctly
  */
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('UI Functionality Tests', () => {
   test.beforeEach(async ({ page }) => {

@@ -3,7 +3,7 @@
  * Tests response times, load handling, and performance metrics
  */
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('Performance and Load Testing', () => {
   test.beforeEach(async ({ page }) => {

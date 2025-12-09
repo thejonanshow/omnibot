@@ -3,7 +3,7 @@
  * Tests the smart routing and provider selection logic
  */
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('LLM Provider Integration', () => {
   test.beforeEach(async ({ page }) => {

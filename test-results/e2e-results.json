@@ -1,0 +1,277 @@
+{
+  "config": {
+    "configFile": "/home/runner/work/omnibot/omnibot/playwright.config.js",
+    "rootDir": "/home/runner/work/omnibot/omnibot/tests/e2e",
+    "forbidOnly": true,
+    "fullyParallel": true,
+    "globalSetup": "/home/runner/work/omnibot/omnibot/tests/e2e/global-setup.js",
+    "globalTeardown": "/home/runner/work/omnibot/omnibot/tests/e2e/global-teardown.js",
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "ci": {
+        "commitHref": "https://github.com/thejonanshow/omnibot/commit/81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+        "commitHash": "81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+        "buildHref": "https://github.com/thejonanshow/omnibot/actions/runs/20052988303"
+      },
+      "gitCommit": {
+        "shortHash": "e65cc4c",
+        "hash": "e65cc4ce07e2b9231661f6f78270c582ff254a68",
+        "subject": "Add message editing feature with visual distinction in same chat box",
+        "body": "Add message editing feature with visual distinction in same chat box\n\nCo-authored-by: thejonanshow <270746+thejonanshow@users.noreply.github.com>\n",
+        "author": {
+          "name": "copilot-swe-agent[bot]",
+          "email": "198982749+Copilot@users.noreply.github.com",
+          "time": 1765258754000
+        },
+        "committer": {
+          "name": "copilot-swe-agent[bot]",
+          "email": "198982749+Copilot@users.noreply.github.com",
+          "time": 1765258754000
+        },
+        "branch": "copilot/fix-omni-bot-ui-functionality"
+      }
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results/e2e-results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "test-results/e2e-results.xml"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/home/runner/work/omnibot/omnibot/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "ci": {
+            "commitHref": "https://github.com/thejonanshow/omnibot/commit/81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "commitHash": "81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "buildHref": "https://github.com/thejonanshow/omnibot/actions/runs/20052988303"
+          },
+          "gitCommit": {
+            "shortHash": "e65cc4c",
+            "hash": "e65cc4ce07e2b9231661f6f78270c582ff254a68",
+            "subject": "Add message editing feature with visual distinction in same chat box",
+            "body": "Add message editing feature with visual distinction in same chat box\n\nCo-authored-by: thejonanshow <270746+thejonanshow@users.noreply.github.com>\n",
+            "author": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "committer": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "branch": "copilot/fix-omni-bot-ui-functionality"
+          }
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/home/runner/work/omnibot/omnibot/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/runner/work/omnibot/omnibot/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "ci": {
+            "commitHref": "https://github.com/thejonanshow/omnibot/commit/81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "commitHash": "81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "buildHref": "https://github.com/thejonanshow/omnibot/actions/runs/20052988303"
+          },
+          "gitCommit": {
+            "shortHash": "e65cc4c",
+            "hash": "e65cc4ce07e2b9231661f6f78270c582ff254a68",
+            "subject": "Add message editing feature with visual distinction in same chat box",
+            "body": "Add message editing feature with visual distinction in same chat box\n\nCo-authored-by: thejonanshow <270746+thejonanshow@users.noreply.github.com>\n",
+            "author": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "committer": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "branch": "copilot/fix-omni-bot-ui-functionality"
+          }
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/home/runner/work/omnibot/omnibot/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/runner/work/omnibot/omnibot/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "ci": {
+            "commitHref": "https://github.com/thejonanshow/omnibot/commit/81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "commitHash": "81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "buildHref": "https://github.com/thejonanshow/omnibot/actions/runs/20052988303"
+          },
+          "gitCommit": {
+            "shortHash": "e65cc4c",
+            "hash": "e65cc4ce07e2b9231661f6f78270c582ff254a68",
+            "subject": "Add message editing feature with visual distinction in same chat box",
+            "body": "Add message editing feature with visual distinction in same chat box\n\nCo-authored-by: thejonanshow <270746+thejonanshow@users.noreply.github.com>\n",
+            "author": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "committer": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "branch": "copilot/fix-omni-bot-ui-functionality"
+          }
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/home/runner/work/omnibot/omnibot/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/runner/work/omnibot/omnibot/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "ci": {
+            "commitHref": "https://github.com/thejonanshow/omnibot/commit/81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "commitHash": "81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "buildHref": "https://github.com/thejonanshow/omnibot/actions/runs/20052988303"
+          },
+          "gitCommit": {
+            "shortHash": "e65cc4c",
+            "hash": "e65cc4ce07e2b9231661f6f78270c582ff254a68",
+            "subject": "Add message editing feature with visual distinction in same chat box",
+            "body": "Add message editing feature with visual distinction in same chat box\n\nCo-authored-by: thejonanshow <270746+thejonanshow@users.noreply.github.com>\n",
+            "author": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "committer": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "branch": "copilot/fix-omni-bot-ui-functionality"
+          }
+        },
+        "id": "Mobile Chrome",
+        "name": "Mobile Chrome",
+        "testDir": "/home/runner/work/omnibot/omnibot/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      },
+      {
+        "outputDir": "/home/runner/work/omnibot/omnibot/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "ci": {
+            "commitHref": "https://github.com/thejonanshow/omnibot/commit/81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "commitHash": "81c90d82c98a181ea321054ed7d0ac0c33d573b8",
+            "buildHref": "https://github.com/thejonanshow/omnibot/actions/runs/20052988303"
+          },
+          "gitCommit": {
+            "shortHash": "e65cc4c",
+            "hash": "e65cc4ce07e2b9231661f6f78270c582ff254a68",
+            "subject": "Add message editing feature with visual distinction in same chat box",
+            "body": "Add message editing feature with visual distinction in same chat box\n\nCo-authored-by: thejonanshow <270746+thejonanshow@users.noreply.github.com>\n",
+            "author": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "committer": {
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1765258754000
+            },
+            "branch": "copilot/fix-omni-bot-ui-functionality"
+          }
+        },
+        "id": "Mobile Safari",
+        "name": "Mobile Safari",
+        "testDir": "/home/runner/work/omnibot/omnibot/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [],
+  "errors": [
+    {
+      "message": "Error: page.goto: net::ERR_NAME_NOT_RESOLVED at https://ad6fdc76.omnibot-ui-staging.pages.dev/\nCall log:\n  - navigating to \"https://ad6fdc76.omnibot-ui-staging.pages.dev/\", waiting until \"networkidle\"\n",
+      "stack": "Error: page.goto: net::ERR_NAME_NOT_RESOLVED at https://ad6fdc76.omnibot-ui-staging.pages.dev/\nCall log:\n  - navigating to \"https://ad6fdc76.omnibot-ui-staging.pages.dev/\", waiting until \"networkidle\"\n\n    at globalSetup (/home/runner/work/omnibot/omnibot/tests/e2e/global-setup.js:25:41)",
+      "location": {
+        "file": "/home/runner/work/omnibot/omnibot/tests/e2e/global-setup.js",
+        "column": 41,
+        "line": 25
+      },
+      "snippet": "   at global-setup.js:25\n\n\u001b[0m \u001b[90m 23 |\u001b[39m     \u001b[90m// Test frontend connectivity\u001b[39m\n \u001b[90m 24 |\u001b[39m     console\u001b[33m.\u001b[39mlog(\u001b[32m'🔍 Testing frontend connectivity...'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m     \u001b[36mconst\u001b[39m frontendResponse \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(baseURL\u001b[33m,\u001b[39m {\n \u001b[90m    |\u001b[39m                                         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 26 |\u001b[39m       waitUntil\u001b[33m:\u001b[39m \u001b[32m'networkidle'\u001b[39m\u001b[33m,\u001b[39m\n \u001b[90m 27 |\u001b[39m       timeout\u001b[33m:\u001b[39m \u001b[35m30000\u001b[39m\n \u001b[90m 28 |\u001b[39m     })\u001b[33m;\u001b[39m\u001b[0m"
+    }
+  ],
+  "stats": {
+    "startTime": "2025-12-09T05:41:14.375Z",
+    "duration": 150.865,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
