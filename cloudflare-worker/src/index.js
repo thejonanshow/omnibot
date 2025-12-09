@@ -3,8 +3,8 @@
 // Deployment ready - wrangler configured correctly.
 
 // CI test: Fixed browser API detection for HTML templates
- * OmniBot - Axolotl Edition
- * https://en.wikipedia.org/wiki/Axolotl
+ * OmniBot - Blobfish Edition
+ * https://en.wikipedia.org/wiki/Blobfish
  * 
  * Semantic versioning via exotic sea creatures (alphabetical):
  * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus, E: Electric Eel
@@ -15,7 +15,7 @@
  * X: Xiphias (Swordfish), Y: Yeti Crab, Z: Zebrafish
  * Then: Anglerfish, Barreleye, Chimaera, Dragon Moray...
  * 
- * Current: Axolotl (A) - First stable version with safety validation
+ * Current: Blobfish (B) - Second stable version with modern UI
  * 
  * CRITICAL SAFETY FEATURES:
  * - Validates code structure BEFORE committing
@@ -328,9 +328,9 @@ export default {
     if (url.pathname === '/api/health') {
       return new Response(JSON.stringify({ 
         ok: true,
-        version: 'Axolotl',  // For test compatibility
-        creature: 'Axolotl',
-        wikipedia: 'https://en.wikipedia.org/wiki/Axolotl',
+        version: 'Blobfish',  // For test compatibility
+        creature: 'Blobfish',
+        wikipedia: 'https://en.wikipedia.org/wiki/Blobfish',
         safetyFeatures: ['structure-validation', 'no-wholesale-replacement', 'no-extraction'],
         models: GROQ_MODELS
       }), { 
@@ -384,21 +384,22 @@ const HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OmniBot - Axolotl</title>
+  <title>OmniBot - Blobfish</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
   <style>
     body {
       font-family: 'Inter', sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f0f0f0;
+      background-color: #1a1a1a;
+      color: #fff;
     }
     .container {
       max-width: 800px;
       margin: 40px auto;
       padding: 20px;
-      background-color: #fff;
-      border: 1px solid #ddd;
+      background-color: #2a2a2a;
+      border: 1px solid #333;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     }
@@ -431,7 +432,7 @@ const HTML = `<!DOCTYPE html>
     .chat-container .message {
       margin-bottom: 10px;
       padding: 10px;
-      border-bottom: 1px solid #ccc;
+      border-bottom: 1px solid #333;
     }
     .chat-container .message:last-child {
       margin-bottom: 0;
@@ -439,6 +440,7 @@ const HTML = `<!DOCTYPE html>
     .chat-container .message .user {
       font-weight: 600;
       font-size: 16px;
+      color: #6366f1;
     }
     .chat-container .message .content {
       font-size: 16px;
@@ -448,13 +450,14 @@ const HTML = `<!DOCTYPE html>
       justify-content: space-between;
       align-items: center;
       padding: 10px;
-      border-top: 1px solid #ccc;
+      border-top: 1px solid #333;
     }
-    .input-container input {
+    .input-container textarea {
       width: 80%;
       padding: 10px;
       font-size: 16px;
-      border: 1px solid #ccc;
+      border: 1px solid #333;
+      resize: vertical;
     }
     .input-container button {
       background-color: #4CAF50;
@@ -481,29 +484,86 @@ const HTML = `<!DOCTYPE html>
     .edit-mode:hover {
       background-color: #3e8e41;
     }
+    .typing-indicator {
+      font-size: 16px;
+      color: #666;
+    }
+    .code-block {
+      background-color: #333;
+      padding: 10px;
+      border: 1px solid #444;
+    }
+    .code-block pre {
+      font-size: 16px;
+      font-family: monospace;
+    }
+    .self-edit-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: none;
+    }
+    .self-edit-modal .modal-content {
+      background-color: #2a2a2a;
+      padding: 20px;
+      border: 1px solid #333;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    .self-edit-modal .modal-content textarea {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #333;
+      resize: vertical;
+    }
+    .self-edit-modal .modal-content button {
+      background-color: #4CAF50;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .self-edit-modal .modal-content button:hover {
+      background-color: #3e8e41;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>OmniBot - Axolotl</h1>
+      <h1>OmniBot - Blobfish</h1>
     </div>
     <div class="chat-container" id="chat-container">
       <!-- Messages will be rendered here -->
     </div>
     <div class="input-container">
-      <input id="input-field" type="text" placeholder="Type a message...">
+      <textarea id="input-field" placeholder="Type a message..."></textarea>
       <button id="send-button">Send</button>
     </div>
     <button class="edit-mode" id="edit-button">Edit Mode</button>
+    <div class="self-edit-modal" id="self-edit-modal">
+      <div class="modal-content">
+        <textarea id="self-edit-field" placeholder="Enter your instruction..."></textarea>
+        <button id="self-edit-button">Edit</button>
+      </div>
+    </div>
   </div>
   <script>
     const chatContainer = document.getElementById('chat-container');
     const inputField = document.getElementById('input-field');
     const sendButton = document.getElementById('send-button');
     const editButton = document.getElementById('edit-button');
+    const selfEditModal = document.getElementById('self-edit-modal');
+    const selfEditField = document.getElementById('self-edit-field');
+    const selfEditButton = document.getElementById('self-edit-button');
 
     let messages = [];
+    let typing = false;
 
     sendButton.addEventListener('click', async () => {
       const message = inputField.value.trim();
@@ -523,8 +583,12 @@ const HTML = `<!DOCTYPE html>
       }
     });
 
-    editButton.addEventListener('click', async () => {
-      const instruction = prompt('Enter your instruction:');
+    editButton.addEventListener('click', () => {
+      selfEditModal.style.display = 'block';
+    });
+
+    selfEditButton.addEventListener('click', async () => {
+      const instruction = selfEditField.value.trim();
       if (instruction) {
         const response = await fetch('/api/self-edit', {
           method: 'POST',
@@ -535,6 +599,7 @@ const HTML = `<!DOCTYPE html>
         });
         const data = await response.json();
         console.log(data);
+        selfEditModal.style.display = 'none';
       }
     });
 
@@ -544,20 +609,39 @@ const HTML = `<!DOCTYPE html>
         const messageElement = document.createElement('div');
         messageElement.classList.add('message');
         if (message.role === 'user') {
-          messageElement.innerHTML = \`
+          messageElement.innerHTML = `
             <span class="user">You</span>
-            <span class="content">\${message.content}</span>
-          \`;
+            <span class="content">${message.content}</span>
+          `;
         } else {
-          messageElement.innerHTML = \`
+          messageElement.innerHTML = `
             <span class="user">Assistant</span>
-            <span class="content">\${message.content}</span>
-          \`;
+            <span class="content">${message.content}</span>
+          `;
         }
         chatContainer.appendChild(messageElement);
       });
     }
+
+    inputField.addEventListener('input', () => {
+      if (inputField.value.trim() !== '') {
+        typing = true;
+      } else {
+        typing = false;
+      }
+    });
+
+    setInterval(() => {
+      if (typing) {
+        const typingIndicator = document.createElement('div');
+        typingIndicator.classList.add('typing-indicator');
+        typingIndicator.textContent = 'Typing...';
+        chatContainer.appendChild(typingIndicator);
+        setTimeout(() => {
+          typingIndicator.remove();
+        }, 1000);
+      }
+    }, 1000);
   </script>
 </body>
 </html>
-`;
