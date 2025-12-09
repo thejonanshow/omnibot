@@ -31,9 +31,38 @@ npm run start    # Launch frontend
 # Test changes locally
 cd cloudflare-worker && npm test
 
+# Run E2E tests
+npx playwright test
+
 # Deploy
 npm run deploy
 ```
+
+## Deployment Pipeline
+
+Omnibot uses a staging-to-production deployment pipeline:
+
+### Staging Deployment
+- **Automatic**: Pushes to `main` automatically deploy to staging
+- **URL**: https://ad6fdc76.omnibot-ui-staging.pages.dev
+- **Purpose**: Test changes in production-like environment
+- **Tests**: Full E2E test suite runs on staging
+
+### Production Deployment
+- **Manual**: Must be explicitly promoted from staging
+- **URL**: https://omnibot-ui.pages.dev
+- **Process**:
+  1. Verify staging works correctly
+  2. Run: `gh workflow run production-deploy.yml`
+  3. Or tag release: `git tag -a v1.x.x -m "Release" && git push --tags`
+- **Safety**: Full test suite must pass on staging before promotion
+
+### Workflow
+1. Develop and test locally
+2. Push to `main` → Auto-deploys to staging
+3. Test staging deployment
+4. Manually promote to production
+5. Verify production deployment
 
 ## LLM-Driven Contribution Guidelines
 

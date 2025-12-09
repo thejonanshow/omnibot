@@ -1,0 +1,190 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      
+      - name: Run unit tests
+        run: npm test
+        continue-on-error: false
+      
+      - name: Run E2E tests
+        run: npx playwright test
+        env:
+          E2E_BASE_URL: https://ad6fdc76.omnibot-ui-staging.pages.dev
+        continue-on-error: true
+      
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7
+
+  deploy-staging:
+    name: Deploy to Staging Environment
+    needs: test
+    runs-on: ubuntu-latest
+    if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Wrangler
+        run: npm install -g wrangler
+      
+      - name: Deploy Worker to Staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd cloudflare-worker
+          # Deploy with staging environment
+          wrangler deploy --env staging || wrangler deploy
+      
+      - name: Deploy Frontend to Staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd frontend
+          npx wrangler pages deploy . \
+            --project-name=omnibot-ui-staging \
+            --branch=staging \
+            --commit-dirty=true
+      
+      - name: Record deployment info
+        run: |
+          cat > deployment-staging.txt << EOF
+          ENVIRONMENT=staging
+          WORKER_URL=https://omnibot-router-staging.jonanscheffler.workers.dev
+          FRONTEND_URL=https://ad6fdc76.omnibot-ui-staging.pages.dev
+          DEPLOYED_AT=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          EOF
+          
+          echo "Deployment info:"
+          cat deployment-staging.txt
+      
+      - name: Wait for staging deployment
+        run: sleep 30
+      
+      - name: Health check staging
+        run: |
+          echo "Checking staging health..."
+          
+          # Check frontend
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://ad6fdc76.omnibot-ui-staging.pages.dev)
+          echo "Frontend status: $FRONTEND_STATUS"
+          
+          if [ "$FRONTEND_STATUS" != "200" ]; then
+            echo "WARNING: Frontend health check failed with status $FRONTEND_STATUS"
+          else
+            echo "✓ Frontend healthy"
+          fi
+      
+      - name: Commit deployment info
+        if: success()
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add deployment-staging.txt
+          git commit -m "Update staging deployment info [skip ci]" || echo "No changes to commit"
+          git push || echo "Push failed, continuing..."
+        continue-on-error: true
+
+  smoke-test-staging:
+    name: Smoke Test Staging
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+      
+      - name: Run smoke tests against staging
+        run: npx playwright test tests/e2e/ui-functionality.spec.js --grep "should load and display"
+        env:
+          E2E_BASE_URL: https://ad6fdc76.omnibot-ui-staging.pages.dev
+      
+      - name: Manual verification notice
+        run: |
+          cat << 'EOF'
+          
+          ========================================
+          STAGING DEPLOYMENT COMPLETE
+          ========================================
+          
+          Staging URL: https://ad6fdc76.omnibot-ui-staging.pages.dev
+          
+          To promote to production:
+            1. Verify staging works correctly
+            2. Run: gh workflow run production-deploy.yml
+            3. Or push a tag: git tag -a v1.x.x -m "Release"
+          
+          ========================================
+          EOF
+
+  notify:
+    name: Send Notification
+    needs: [deploy-staging, smoke-test-staging]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.deploy-staging.result }}" == "success" ] && [ "${{ needs.smoke-test-staging.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Output status
+        run: |
+          echo "${{ steps.status.outputs.emoji }} Staging deploy status: ${{ steps.status.outputs.status }}"

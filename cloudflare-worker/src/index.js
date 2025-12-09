@@ -1138,6 +1138,78 @@ export default {
       });
     }
     
+    // Logging API for testing
+    if (url.pathname === '/api/log' && request.method === 'POST') {
+      try {
+        const logData = await request.json();
+        const timestamp = new Date().toISOString();
+        const logEntry = {
+          timestamp,
+          level: logData.level || 'info',
+          message: logData.message,
+          data: logData.data,
+          userAgent: request.headers.get('user-agent'),
+          url: logData.url
+        };
+        
+        // Store in KV if available (optional, for persistence)
+        if (env.LOGS) {
+          const logKey = `log:${timestamp}:${Math.random()}`;
+          await env.LOGS.put(logKey, JSON.stringify(logEntry), { expirationTtl: 86400 }); // 24 hour expiration
+        }
+        
+        return new Response(JSON.stringify({ 
+          success: true,
+          logged: logEntry
+        }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: error.message
+        }), { 
+          status: 400,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Get recent logs for testing
+    if (url.pathname === '/api/logs' && request.method === 'GET') {
+      try {
+        const logs = [];
+        
+        if (env.LOGS) {
+          const list = await env.LOGS.list({ prefix: 'log:', limit: 100 });
+          for (const key of list.keys) {
+            const logData = await env.LOGS.get(key.name);
+            if (logData) {
+              logs.push(JSON.parse(logData));
+            }
+          }
+        }
+        
+        // Sort by timestamp descending
+        logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        return new Response(JSON.stringify({ 
+          success: true,
+          logs: logs.slice(0, 50) // Return last 50 logs
+        }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: error.message
+        }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
     return new Response('OmniBot v4.4 - Safe Edition', { headers: cors });
   }
 };
