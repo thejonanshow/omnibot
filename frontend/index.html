@@ -733,6 +733,71 @@
             opacity: 0.5;
             margin-top: var(--spacing-sm);
             text-align: right;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+            justify-content: flex-end;
+        }
+        
+        /* Message edit button */
+        .message-edit-btn {
+            position: absolute;
+            top: var(--spacing-sm);
+            right: var(--spacing-sm);
+            padding: 4px 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius-sm);
+            font-size: 0.875rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: all var(--transition-fast);
+        }
+        
+        .message.user:hover .message-edit-btn {
+            opacity: 1;
+        }
+        
+        .message-edit-btn:hover {
+            background: var(--accent-primary);
+            color: var(--bg-primary);
+            transform: scale(1.1);
+        }
+        
+        /* Editing state */
+        .message.editing {
+            border: 2px solid var(--accent-primary);
+            box-shadow: 0 0 20px var(--accent-primary);
+            animation: editPulse 1.5s infinite;
+        }
+        
+        @keyframes editPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+        
+        /* Edited indicator */
+        .edited-label {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            font-style: italic;
+            color: var(--text-muted);
+        }
+        
+        .message.edited {
+            border-left: 3px solid var(--accent-secondary);
+        }
+        
+        /* Edit mode for input */
+        .input-container.edit-mode {
+            background: linear-gradient(135deg, rgba(74, 158, 255, 0.1) 0%, rgba(74, 158, 255, 0.05) 100%);
+            border-top: 2px solid var(--accent-primary);
+            box-shadow: 0 -4px 20px rgba(74, 158, 255, 0.2);
+        }
+        
+        .input-container.edit-mode textarea {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.2);
         }
         
         /* Loading indicator (typing animation) */
@@ -1413,6 +1478,9 @@
                 <button class="secondary-btn" id="upgrade-mode-btn" title="Upgrade mode" aria-label="Toggle upgrade mode">
                     🔧 Upgrade
                 </button>
+                <button class="secondary-btn" id="cancel-edit-btn" title="Cancel editing" aria-label="Cancel edit" style="display: none;">
+                    ❌ Cancel Edit
+                </button>
             </div>
             
             <!-- Primary Input Row -->
@@ -1605,6 +1673,9 @@
         let codeMode = false;
         let translateMode = false;
         let swarmMode = false;
+        let editMode = false;
+        let editingMessageIndex = null;
+        let editingMessageElement = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -1638,6 +1709,9 @@
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
+                } else if (e.key === 'Escape' && editMode) {
+                    e.preventDefault();
+                    cancelEdit();
                 }
             });
 
@@ -1659,6 +1733,7 @@
             document.getElementById('translate-btn').addEventListener('click', toggleTranslateMode);
             document.getElementById('swarm-btn').addEventListener('click', toggleSwarmMode);
             document.getElementById('upgrade-mode-btn').addEventListener('click', toggleUpgradeMode);
+            document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
             
             // Transcription overlay click to cancel
             document.getElementById('transcription-overlay').addEventListener('click', () => {
@@ -1778,6 +1853,12 @@
             
             if (!text || isLoading) return;
             
+            // Handle edit mode
+            if (editMode) {
+                handleEditSave(text);
+                return;
+            }
+            
             if (!config.routerUrl || !config.secret) {
                 addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first.');
                 openSettings();
@@ -1788,7 +1869,9 @@
             autoResize();
             updateSendButton();
 
-            addMessage('user', text);
+            // Add message with index for edit capability
+            const messageIndex = conversation.length;
+            addMessage('user', text, messageIndex);
             conversation.push({ role: 'user', content: text });
 
             const lowerText = text.toLowerCase();
@@ -2032,10 +2115,15 @@
         }
 
         // Message Display
-        function addMessage(role, content) {
+        function addMessage(role, content, messageIndex = null) {
             const container = document.getElementById('chat-container');
             const msg = document.createElement('div');
             msg.className = `message ${role}`;
+            
+            // Store message index for editing
+            if (role === 'user' && messageIndex !== null) {
+                msg.dataset.messageIndex = messageIndex;
+            }
             
             if (role !== 'system' && role !== 'error') {
                 const roleLabel = document.createElement('div');
@@ -2049,6 +2137,17 @@
             contentDiv.textContent = content;
             msg.appendChild(contentDiv);
             
+            // Add edit button for user messages
+            if (role === 'user' && messageIndex !== null) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'message-edit-btn';
+                editBtn.innerHTML = '✏️';
+                editBtn.title = 'Edit message';
+                editBtn.setAttribute('aria-label', 'Edit this message');
+                editBtn.onclick = () => startEditMessage(messageIndex, content, msg);
+                msg.appendChild(editBtn);
+            }
+            
             // Add timestamp
             if (role !== 'system') {
                 const timestamp = document.createElement('div');
@@ -2059,6 +2158,128 @@
             
             container.appendChild(msg);
             scrollToBottom();
+            
+            return msg;
+        }
+        
+        // Start editing a message
+        function startEditMessage(index, content, messageElement) {
+            if (isLoading) return;
+            
+            editMode = true;
+            editingMessageIndex = index;
+            editingMessageElement = messageElement;
+            
+            // Highlight the message being edited
+            messageElement.classList.add('editing');
+            
+            // Fill input with message content
+            const input = document.getElementById('message-input');
+            input.value = content;
+            input.focus();
+            autoResize();
+            
+            // Change input styling to show edit mode
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.add('edit-mode');
+            
+            // Show cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'inline-flex';
+            
+            // Show edit indicator
+            addMessage('system', '✏️ Editing message - press Send to update or Escape/Cancel to abort');
+            
+            // Change send button text
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '💾';
+            sendBtn.title = 'Save edited message';
+        }
+        
+        // Cancel edit mode
+        function cancelEdit() {
+            if (!editMode) return;
+            
+            editMode = false;
+            
+            // Remove highlighting
+            if (editingMessageElement) {
+                editingMessageElement.classList.remove('editing');
+            }
+            
+            // Reset input
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            // Remove edit mode styling
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            // Reset send button
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            addMessage('system', '❌ Edit cancelled');
+            
+            editingMessageIndex = null;
+            editingMessageElement = null;
+        }
+        
+        // Handle saving edited message
+        async function handleEditSave(newText) {
+            if (editingMessageIndex === null) return;
+            
+            // Update conversation history
+            conversation[editingMessageIndex].content = newText;
+            
+            // Update the message element
+            if (editingMessageElement) {
+                const contentDiv = editingMessageElement.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.textContent = newText;
+                }
+                editingMessageElement.classList.remove('editing');
+                editingMessageElement.classList.add('edited');
+                
+                // Add edited indicator
+                let editedLabel = editingMessageElement.querySelector('.edited-label');
+                if (!editedLabel) {
+                    editedLabel = document.createElement('span');
+                    editedLabel.className = 'edited-label';
+                    editedLabel.textContent = '(edited)';
+                    editedLabel.title = 'This message was edited';
+                    const timestamp = editingMessageElement.querySelector('.message-timestamp');
+                    if (timestamp) {
+                        timestamp.appendChild(document.createTextNode(' '));
+                        timestamp.appendChild(editedLabel);
+                    }
+                }
+            }
+            
+            // Reset edit mode
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            editMode = false;
+            editingMessageIndex = null;
+            editingMessageElement = null;
+            
+            addMessage('system', '✅ Message updated');
         }
 
         // Auto-resize Textarea
