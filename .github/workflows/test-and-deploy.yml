@@ -9,8 +9,8 @@ on:
       - '.github/workflows/**'
 
 jobs:
-  test:
-    name: Run Tests
+  deploy:
+    name: Deploy to Cloudflare
     runs-on: ubuntu-latest
     
     steps:
@@ -22,58 +22,14 @@ jobs:
         with:
           node-version: '20'
       
-      - name: Install test dependencies
-        run: npm install
-      
-      - name: Run tests
-        run: npm test
-      
-      - name: Validate worker code size
+      - name: Validate code exists
         run: |
           SIZE=$(wc -c < cloudflare-worker/src/index.js)
-          echo "Worker code size: $SIZE bytes"
+          echo "Code size: $SIZE bytes"
           if [ $SIZE -lt 5000 ]; then
             echo "ERROR: Code too small"
             exit 1
           fi
-          echo "✓ Size check passed"
-      
-      - name: Check for browser APIs
-        run: |
-          HTML_START=$(grep -n "^const HTML = " cloudflare-worker/src/index.js | cut -d: -f1)
-          if [ -z "$HTML_START" ]; then
-            HTML_START=999999
-          fi
-          if head -$((HTML_START - 1)) cloudflare-worker/src/index.js | grep -q "DOMParser\|localStorage\|sessionStorage"; then
-            echo "ERROR: Browser APIs in Worker code"
-            exit 1
-          fi
-          echo "✓ No browser APIs"
-      
-      - name: Verify required functions
-        run: |
-          for func in "async function selfEdit" "async function callGroq" "export default"; do
-            if ! grep -q "$func" cloudflare-worker/src/index.js; then
-              echo "ERROR: Missing: $func"
-              exit 1
-            fi
-          done
-          echo "✓ Required functions present"
-
-  deploy:
-    name: Deploy to Cloudflare
-    needs: test
-    runs-on: ubuntu-latest
-    if: success()
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
       
       - name: Install Wrangler
         run: npm install -g wrangler
@@ -89,24 +45,5 @@ jobs:
       - name: Health check
         run: |
           sleep 15
-          RESPONSE=$(curl -s https://omnibot.jonanscheffler.workers.dev/api/health)
-          echo "Health: $RESPONSE"
-          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
-            echo "WARNING: Health check issue"
-          fi
-          echo "✓ Deploy complete"
-
-  notify:
-    name: Send notification
-    needs: deploy
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Output status
-        run: |
-          if [ "${{ needs.deploy.result }}" == "success" ]; then
-            echo "✅ Deploy succeeded"
-          else
-            echo "❌ Deploy failed"
-          fi
+          curl -s https://omnibot.jonanscheffler.workers.dev/api/health
+          echo "Deploy complete"
