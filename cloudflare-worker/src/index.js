@@ -273,19 +273,107 @@ function cleanCodeFences(text) {
 }
 
 // ============== SELF EDIT ==============
-async function generateWithLlama(instruction, currentCode, env) {
+
+// Apply a diff-style patch to code
+function applyPatch(originalCode, patch) {
+  let result = originalCode;
+  
+  // Parse REPLACE blocks: <<<REPLACE>>> old <<<WITH>>> new <<<END>>>
+  const replacePattern = /<<<REPLACE>>>\s*([\s\S]*?)\s*<<<WITH>>>\s*([\s\S]*?)\s*<<<END>>>/g;
+  let match;
+  
+  while ((match = replacePattern.exec(patch)) !== null) {
+    const oldText = match[1].trim();
+    const newText = match[2].trim();
+    
+    if (result.includes(oldText)) {
+      result = result.replace(oldText, newText);
+    } else {
+      // Try fuzzy match (ignore whitespace differences)
+      const normalizedOld = oldText.replace(/\s+/g, ' ');
+      const lines = result.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        const windowSize = oldText.split('\n').length;
+        const window = lines.slice(i, i + windowSize).join('\n');
+        if (window.replace(/\s+/g, ' ') === normalizedOld) {
+          lines.splice(i, windowSize, newText);
+          result = lines.join('\n');
+          break;
+        }
+      }
+    }
+  }
+  
+  // Parse INSERT blocks: <<<INSERT_AFTER>>> marker <<<CONTENT>>> new <<<END>>>
+  const insertPattern = /<<<INSERT_AFTER>>>\s*([\s\S]*?)\s*<<<CONTENT>>>\s*([\s\S]*?)\s*<<<END>>>/g;
+  while ((match = insertPattern.exec(patch)) !== null) {
+    const marker = match[1].trim();
+    const content = match[2].trim();
+    if (result.includes(marker)) {
+      result = result.replace(marker, marker + '\n' + content);
+    }
+  }
+  
+  return result;
+}
+
+// Generate a diff-based patch using Qwen (code specialist)
+async function generatePatchWithQwen(instruction, currentCode, env) {
+  const context = await getContext(env);
+  
+  // Extract key sections for context (reduce token usage)
+  const codePreview = currentCode.length > 20000 
+    ? currentCode.slice(0, 10000) + '\n\n... [MIDDLE SECTION OMITTED FOR BREVITY] ...\n\n' + currentCode.slice(-10000)
+    : currentCode;
+  
+  const systemPrompt = `You are a code modification assistant. You output ONLY patches in a specific format.
+
+PATCH FORMAT (use these exact delimiters):
+<<<REPLACE>>>
+old code to find (exact match)
+<<<WITH>>>
+new code to replace it with
+<<<END>>>
+
+<<<INSERT_AFTER>>>
+line to insert after (exact match)
+<<<CONTENT>>>
+new lines to add
+<<<END>>>
+
+RULES:
+- Output ONLY patch blocks, no explanations
+- Use exact code snippets that exist in the source
+- Make minimal, targeted changes
+- Multiple patches allowed
+- Preserve all existing functionality`;
+
+  const userPrompt = `Code to modify (${currentCode.length} chars):
+
+\`\`\`javascript
+${codePreview}
+\`\`\`
+
+Requested change: ${instruction}
+
+Output the patch blocks:`;
+
+  return await callGroq('qwen', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+}
+
+// Fallback: Full code generation with Llama (for small files or when patches fail)
+async function generateFullWithLlama(instruction, currentCode, env) {
   const context = await getContext(env);
   
   const systemPrompt = `You are modifying Cloudflare Worker code.
 
 ${context.prompt}
 
-Shared Context:
-${JSON.stringify(context.data, null, 2)}
+CRITICAL: Output COMPLETE code from start to end.
+The code MUST start with /** and end with };
+NO truncation allowed - include every line.
 
-OUTPUT ONLY THE COMPLETE MODIFIED CODE.
-NO explanations, NO markdown fences, NO "here's the code".
-Just the raw JavaScript code starting with /** and ending with the closing };`;
+NO explanations, NO markdown fences.`;
 
   const userPrompt = `Current code (${currentCode.length} chars):
 
@@ -312,17 +400,47 @@ async function selfEdit(instruction, env, streamCallback = null) {
     }
     
     const currentCode = decodeURIComponent(escape(atob(file.content)));
+    let finalCode;
+    let method = 'patch';
     
-    if (streamCallback) streamCallback({ status: 'generating', message: 'AI is modifying code...' });
+    // Strategy: Try patch-based approach first (faster, no truncation risk)
+    if (streamCallback) streamCallback({ status: 'generating', message: 'Generating patch with Qwen...' });
     
-    const response = await generateWithLlama(instruction, currentCode, env);
-    const finalCode = cleanCodeFences(response);
+    try {
+      const patch = await generatePatchWithQwen(instruction, currentCode, env);
+      
+      // Check if we got valid patch blocks
+      if (patch.includes('<<<REPLACE>>>') || patch.includes('<<<INSERT_AFTER>>>')) {
+        finalCode = applyPatch(currentCode, patch);
+        
+        // Validate the patched result
+        const patchValidation = validateCodeStructure(finalCode);
+        if (!patchValidation.valid) {
+          throw new Error(`Patch produced invalid code: ${patchValidation.reason}`);
+        }
+        
+        // Check something actually changed
+        if (currentCode.replace(/\s/g, '') === finalCode.replace(/\s/g, '')) {
+          throw new Error('Patch made no changes');
+        }
+      } else {
+        throw new Error('No valid patch blocks in response');
+      }
+    } catch (patchError) {
+      // Fallback to full code generation with Llama
+      if (streamCallback) streamCallback({ status: 'generating', message: `Patch failed (${patchError.message}), trying full generation...` });
+      await logTelemetry('patch_fallback', { reason: patchError.message }, env);
+      
+      method = 'full';
+      const response = await generateFullWithLlama(instruction, currentCode, env);
+      finalCode = cleanCodeFences(response);
+    }
     
     if (streamCallback) streamCallback({ status: 'validating', message: 'Validating changes...' });
     
     const validation = validateCodeStructure(finalCode);
     if (!validation.valid) {
-      await logTelemetry('edit_failed', { reason: validation.reason }, env);
+      await logTelemetry('edit_failed', { reason: validation.reason, method }, env);
       return { success: false, error: 'Safety check failed', explanation: validation.reason };
     }
     
@@ -343,15 +461,16 @@ async function selfEdit(instruction, env, streamCallback = null) {
       instruction, 
       commit: result.commit.sha,
       oldSize: currentCode.length,
-      newSize: finalCode.length 
+      newSize: finalCode.length,
+      method
     }, env);
     
     return {
       success: true,
-      explanation: `Modified code based on: ${instruction}`,
+      explanation: `Modified code (via ${method}) based on: ${instruction}`,
       commit: result.commit.sha,
       url: result.commit.html_url,
-      stats: { oldSize: currentCode.length, newSize: finalCode.length }
+      stats: { oldSize: currentCode.length, newSize: finalCode.length, method }
     };
     
   } catch (e) {
