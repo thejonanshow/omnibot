@@ -1,5 +1,5 @@
 ENVIRONMENT=staging
 WORKER_URL=https://omnibot-router-staging.jonanscheffler.workers.dev
 FRONTEND_URL=https://ad6fdc76.omnibot-ui-staging.pages.dev
-DEPLOYED_AT=2025-10-17 06:31:37 UTC
-GIT_COMMIT=ccda61c
+DEPLOYED_AT=2025-12-09 06:05:16 UTC
+GIT_COMMIT=e50063d
