@@ -3,8 +3,8 @@
 // Deployment ready - wrangler configured correctly.
 
 // CI test: Fixed browser API detection for HTML templates
- * OmniBot - Blobfish Edition
- * https://en.wikipedia.org/wiki/Blobfish
+ * OmniBot - Cuttlefish Edition
+ * https://en.wikipedia.org/wiki/Cuttlefish
  * 
  * Semantic versioning via exotic sea creatures (alphabetical):
  * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus, E: Electric Eel
@@ -15,7 +15,7 @@
  * X: Xiphias (Swordfish), Y: Yeti Crab, Z: Zebrafish
  * Then: Anglerfish, Barreleye, Chimaera, Dragon Moray...
  * 
- * Current: Blobfish (B) - Second stable version with modern UI
+ * Current: Cuttlefish (C) - Fixed UI, inline edit mode, working themes
  * 
  * CRITICAL SAFETY FEATURES:
  * - Validates code structure BEFORE committing
@@ -334,7 +334,7 @@ const HTML = `<!DOCTYPE html>
       --warning: #f59e0b;
       --error: #ef4444;
       --glow: transparent;
-      --font-main: 'IBM Plex Sans', sans-serif;
+      --font-main: 'IBM Plex Sans', -apple-system, sans-serif;
       --font-mono: 'IBM Plex Mono', monospace;
     }
     
@@ -349,10 +349,10 @@ const HTML = `<!DOCTYPE html>
       -webkit-font-smoothing: antialiased;
     }
     
-    /* THEMES */
+    /* === THEMES === */
     
     /* Modern Dark (default) */
-    .theme-modern {
+    body.theme-modern {
       --bg: #0d0d0d;
       --bg-secondary: #171717;
       --bg-tertiary: #262626;
@@ -362,10 +362,11 @@ const HTML = `<!DOCTYPE html>
       --user-bubble: #3b82f6;
       --ai-bubble: #262626;
       --border: #27272a;
+      --glow: none;
     }
     
     /* Matrix */
-    .theme-matrix {
+    body.theme-matrix {
       --bg: #000a00;
       --bg-secondary: #001400;
       --bg-tertiary: #002200;
@@ -380,7 +381,7 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* Cyberpunk */
-    .theme-cyberpunk {
+    body.theme-cyberpunk {
       --bg: #0a000f;
       --bg-secondary: #15001f;
       --bg-tertiary: #200030;
@@ -394,7 +395,7 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* HAL 9000 */
-    .theme-hal {
+    body.theme-hal {
       --bg: #0a0000;
       --bg-secondary: #150000;
       --bg-tertiary: #200000;
@@ -408,7 +409,7 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* Tron */
-    .theme-tron {
+    body.theme-tron {
       --bg: #000005;
       --bg-secondary: #000510;
       --bg-tertiary: #000a18;
@@ -423,7 +424,7 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* Neuromancer */
-    .theme-neuromancer {
+    body.theme-neuromancer {
       --bg: #05000a;
       --bg-secondary: #0a0014;
       --bg-tertiary: #10001f;
@@ -437,7 +438,7 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* Borg */
-    .theme-borg {
+    body.theme-borg {
       --bg: #050505;
       --bg-secondary: #0a0a0a;
       --bg-tertiary: #151515;
@@ -452,7 +453,7 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* Dune */
-    .theme-dune {
+    body.theme-dune {
       --bg: #1a1408;
       --bg-secondary: #252010;
       --bg-tertiary: #302a18;
@@ -673,10 +674,18 @@ const HTML = `<!DOCTYPE html>
       outline: none;
       min-height: 48px;
       max-height: 150px;
+      transition: all 0.15s;
     }
     
     .input-field::placeholder { color: var(--text-secondary); }
     .input-field:focus { border-color: var(--accent); box-shadow: var(--glow); }
+    
+    /* Edit mode styling for input */
+    .input-field.edit-mode {
+      background: var(--bg-tertiary);
+      border-color: var(--warning);
+      box-shadow: 0 0 0 1px var(--warning);
+    }
     
     .send-btn {
       width: 48px; height: 48px;
@@ -774,17 +783,23 @@ const HTML = `<!DOCTYPE html>
     
     .overlay.open { opacity: 1; visibility: visible; }
     
-    .edit-warning {
-      background: var(--warning);
-      color: #000;
-      padding: 8px 16px;
+    /* Mode indicator in input area */
+    .mode-indicator {
+      display: none;
+      padding: 6px 12px;
+      margin-bottom: 8px;
       font-size: 12px;
       font-weight: 500;
+      border-radius: 8px;
       text-align: center;
-      display: none;
     }
     
-    .edit-warning.show { display: block; }
+    .mode-indicator.edit {
+      display: block;
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--warning);
+      border: 1px solid var(--warning);
+    }
     
     @media (max-width: 640px) {
       .settings-panel { width: 100%; right: -100%; }
@@ -793,14 +808,12 @@ const HTML = `<!DOCTYPE html>
 </head>
 <body class="theme-modern">
   <div class="app">
-    <div class="edit-warning" id="editWarning">⚠️ Edit Mode: AI will modify its own source code</div>
-    
     <header class="header">
       <div class="logo">
         <div class="logo-icon">Ω</div>
         <div>
           <div class="logo-text">OmniBot</div>
-          <div class="logo-version">Blobfish</div>
+          <div class="logo-version">Cuttlefish</div>
         </div>
       </div>
       <div class="header-actions">
@@ -826,6 +839,7 @@ const HTML = `<!DOCTYPE html>
     </div>
     
     <div class="input-area">
+      <div class="mode-indicator" id="modeIndicator">⚡ EDIT MODE - AI will modify its own source code</div>
       <div class="status">
         <span class="status-dot" id="statusDot"></span>
         <span id="statusText">Ready</span>
@@ -857,7 +871,7 @@ const HTML = `<!DOCTYPE html>
     <div class="settings-body">
       <div class="setting-label">Theme</div>
       <div class="theme-list">
-        <button class="theme-btn" data-theme="modern">
+        <button class="theme-btn active" data-theme="modern">
           <span class="theme-dot" style="background: #3b82f6"></span>Modern Dark
         </button>
         <button class="theme-btn" data-theme="matrix">
@@ -887,80 +901,106 @@ const HTML = `<!DOCTYPE html>
 
   <script>
     (function() {
+      'use strict';
+      
+      // State
       var mode = 'chat';
       var messages = [];
       var loading = false;
       
+      // DOM Elements
       var $messages = document.getElementById('messages');
       var $input = document.getElementById('input');
       var $sendBtn = document.getElementById('sendBtn');
       var $statusDot = document.getElementById('statusDot');
       var $statusText = document.getElementById('statusText');
-      var $editWarning = document.getElementById('editWarning');
+      var $modeIndicator = document.getElementById('modeIndicator');
       var $settingsBtn = document.getElementById('settingsBtn');
       var $settingsPanel = document.getElementById('settingsPanel');
       var $closeSettings = document.getElementById('closeSettings');
       var $overlay = document.getElementById('overlay');
       
-      // Load saved theme safely
-      var savedTheme = localStorage.getItem('omnibot-theme') || 'modern';
-      document.body.className = 'theme-' + savedTheme;
+      // Initialize theme from localStorage
+      function initTheme() {
+        try {
+          var saved = localStorage.getItem('omnibot-theme');
+          if (saved) {
+            document.body.className = 'theme-' + saved;
+            var btn = document.querySelector('[data-theme="' + saved + '"]');
+            if (btn) {
+              document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
+              btn.classList.add('active');
+            }
+          }
+        } catch(e) {
+          console.log('localStorage not available');
+        }
+      }
       
-      // Update active theme button
-      var themeBtn = document.querySelector('[data-theme="' + savedTheme + '"]');
-      if (themeBtn) themeBtn.classList.add('active');
+      initTheme();
       
-      // Tab switching
+      // Tab switching - inline mode change (no dialog)
       document.querySelectorAll('.tab').forEach(function(tab) {
-        tab.onclick = function() {
+        tab.addEventListener('click', function() {
           document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
           tab.classList.add('active');
           mode = tab.dataset.mode;
-          $editWarning.classList.toggle('show', mode === 'edit');
-          $input.placeholder = mode === 'edit' ? 'Describe the change...' : 'Send a message...';
-        };
+          
+          // Update UI for mode
+          if (mode === 'edit') {
+            $modeIndicator.classList.add('edit');
+            $input.classList.add('edit-mode');
+            $input.placeholder = 'Describe the change to make...';
+          } else {
+            $modeIndicator.classList.remove('edit');
+            $input.classList.remove('edit-mode');
+            $input.placeholder = 'Send a message...';
+          }
+        });
       });
       
       // Settings panel
-      $settingsBtn.onclick = function() {
+      $settingsBtn.addEventListener('click', function() {
         $settingsPanel.classList.add('open');
         $overlay.classList.add('open');
-      };
+      });
       
-      $closeSettings.onclick = function() {
+      function closeSettingsPanel() {
         $settingsPanel.classList.remove('open');
         $overlay.classList.remove('open');
-      };
+      }
       
-      $overlay.onclick = function() {
-        $settingsPanel.classList.remove('open');
-        $overlay.classList.remove('open');
-      };
+      $closeSettings.addEventListener('click', closeSettingsPanel);
+      $overlay.addEventListener('click', closeSettingsPanel);
       
       // Theme switching
       document.querySelectorAll('.theme-btn').forEach(function(btn) {
-        btn.onclick = function() {
+        btn.addEventListener('click', function() {
           document.querySelectorAll('.theme-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
           var theme = btn.dataset.theme;
           document.body.className = 'theme-' + theme;
-          localStorage.setItem('omnibot-theme', theme);
-        };
+          try {
+            localStorage.setItem('omnibot-theme', theme);
+          } catch(e) {}
+        });
       });
       
       // Auto-resize textarea
-      $input.oninput = function() {
+      $input.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 150) + 'px';
-      };
+      });
       
+      // HTML escape with link detection
       function escapeHtml(text) {
         var div = document.createElement('div');
         div.textContent = text;
         var escaped = div.innerHTML;
-        return escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+        return escaped.replace(/(https?:\\/\\/[^\\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
       }
       
+      // Render messages
       function render() {
         if (messages.length === 0) {
           $messages.innerHTML = '<div class="empty-state"><div class="empty-icon">Ω</div><div class="empty-title">Welcome to OmniBot</div><div class="empty-subtitle">Self-editing AI. Chat or switch to Edit mode to modify source code.</div></div>';
@@ -983,6 +1023,7 @@ const HTML = `<!DOCTYPE html>
         $messages.scrollTop = $messages.scrollHeight;
       }
       
+      // Status updates
       function setStatus(text, isLoading) {
         $statusText.textContent = text;
         if (isLoading) {
@@ -992,6 +1033,7 @@ const HTML = `<!DOCTYPE html>
         }
       }
       
+      // Send message
       function send() {
         var text = $input.value.trim();
         if (!text || loading) return;
@@ -1001,7 +1043,7 @@ const HTML = `<!DOCTYPE html>
         $input.style.height = 'auto';
         loading = true;
         $sendBtn.disabled = true;
-        setStatus(mode === 'edit' ? 'Editing...' : 'Thinking...', true);
+        setStatus(mode === 'edit' ? 'Modifying code...' : 'Thinking...', true);
         render();
         
         var endpoint = mode === 'edit' ? '/api/self-edit' : '/api/chat';
@@ -1028,16 +1070,15 @@ const HTML = `<!DOCTYPE html>
         .then(function(data) {
           if (mode === 'edit') {
             if (data.success) {
-              messages.push({ 
-                role: 'system', 
-                type: 'success',
-                content: 'Done: ' + data.explanation + '\n\nCommit: ' + data.url
-              });
+              var msg = '✓ ' + data.explanation;
+              if (data.url) msg += '\\n\\nCommit: ' + data.url;
+              if (data.stats) msg += '\\n\\n+' + data.stats.added + ' / -' + data.stats.removed + ' lines';
+              messages.push({ role: 'system', type: 'success', content: msg });
             } else {
               messages.push({ 
                 role: 'system', 
                 type: 'error',
-                content: 'Error: ' + (data.error || 'Edit failed') + (data.explanation ? '\n' + data.explanation : '')
+                content: '✗ ' + (data.error || 'Edit failed') + (data.explanation ? '\\n' + data.explanation : '')
               });
             }
           } else {
@@ -1046,7 +1087,7 @@ const HTML = `<!DOCTYPE html>
           setStatus('Ready', false);
         })
         .catch(function(e) {
-          messages.push({ role: 'system', type: 'error', content: 'Error: ' + e.message });
+          messages.push({ role: 'system', type: 'error', content: '✗ Network error: ' + e.message });
           setStatus('Error', false);
         })
         .finally(function() {
@@ -1056,15 +1097,20 @@ const HTML = `<!DOCTYPE html>
         });
       }
       
-      $sendBtn.onclick = send;
-      $input.onkeydown = function(e) {
+      // Event listeners
+      $sendBtn.addEventListener('click', send);
+      $input.addEventListener('keydown', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           send();
         }
-      };
+      });
       
+      // Initial render
       render();
+      
+      // Log startup for testing
+      console.log('OmniBot UI initialized - Cuttlefish edition');
     })();
   </script>
 </body>
@@ -1091,9 +1137,9 @@ export default {
     if (url.pathname === '/api/health') {
       return new Response(JSON.stringify({ 
         ok: true,
-        version: 'Blobfish',  // For test compatibility
-        creature: 'Blobfish',
-        wikipedia: 'https://en.wikipedia.org/wiki/Blobfish',
+        version: 'Cuttlefish',
+        creature: 'Cuttlefish',
+        wikipedia: 'https://en.wikipedia.org/wiki/Cuttlefish',
         safetyFeatures: ['structure-validation', 'no-wholesale-replacement', 'no-extraction'],
         models: GROQ_MODELS
       }), { 
@@ -1102,40 +1148,57 @@ export default {
     }
     
     if (url.pathname === '/api/chat' && request.method === 'POST') {
-      const { messages } = await request.json();
-      const reply = await callGroq('llama', messages, env);
-      return new Response(JSON.stringify({ content: reply }), { 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
-      });
+      try {
+        const { messages } = await request.json();
+        const reply = await callGroq('llama', messages, env);
+        return new Response(JSON.stringify({ content: reply }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
     }
     
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
-      const { instruction } = await request.json();
-      
-      if (!instruction || instruction.length < 5) {
+      try {
+        const { instruction } = await request.json();
+        
+        if (!instruction || instruction.length < 5) {
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: 'Instruction too short',
+            explanation: 'Provide clear instruction (5+ chars)' 
+          }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        if (instruction.includes('access GitHub logs')) {
+          const logs = await getGithubDeployLogs(env);
+          return new Response(JSON.stringify({ 
+            success: true, 
+            logs: logs 
+          }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        const result = await selfEdit(instruction, env);
+        return new Response(JSON.stringify(result), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      } catch (e) {
         return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Instruction too short',
-          explanation: 'Provide clear instruction (5+ chars)' 
+          success: false,
+          error: e.message 
         }), { 
+          status: 500,
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
       }
-      
-      if (instruction.includes('access GitHub logs')) {
-        const logs = await getGithubDeployLogs(env);
-        return new Response(JSON.stringify({ 
-          success: true, 
-          logs: logs 
-        }), { 
-          headers: { ...cors, 'Content-Type': 'application/json' } 
-        });
-      }
-      
-      const result = await selfEdit(instruction, env);
-      return new Response(JSON.stringify(result), { 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
-      });
     }
     
     // Logging API for testing
@@ -1152,10 +1215,10 @@ export default {
           url: logData.url
         };
         
-        // Store in KV if available (optional, for persistence)
+        // Store in KV if available
         if (env.LOGS) {
-          const logKey = `log:${timestamp}:${Math.random()}`;
-          await env.LOGS.put(logKey, JSON.stringify(logEntry), { expirationTtl: 86400 }); // 24 hour expiration
+          const logKey = `log:${timestamp}:${Math.random().toString(36).substr(2, 9)}`;
+          await env.LOGS.put(logKey, JSON.stringify(logEntry), { expirationTtl: 86400 });
         }
         
         return new Response(JSON.stringify({ 
@@ -1175,7 +1238,7 @@ export default {
       }
     }
     
-    // Get recent logs for testing
+    // Get recent logs
     if (url.pathname === '/api/logs' && request.method === 'GET') {
       try {
         const logs = [];
@@ -1190,12 +1253,11 @@ export default {
           }
         }
         
-        // Sort by timestamp descending
         logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         
         return new Response(JSON.stringify({ 
           success: true,
-          logs: logs.slice(0, 50) // Return last 50 logs
+          logs: logs.slice(0, 50)
         }), { 
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
@@ -1210,6 +1272,18 @@ export default {
       }
     }
     
-    return new Response('OmniBot v4.4 - Safe Edition', { headers: cors });
+    // Test endpoint for automated testing
+    if (url.pathname === '/api/test') {
+      return new Response(JSON.stringify({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        endpoints: ['/api/health', '/api/chat', '/api/self-edit', '/api/log', '/api/logs'],
+        themes: ['modern', 'matrix', 'cyberpunk', 'hal', 'tron', 'neuromancer', 'borg', 'dune']
+      }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    return new Response('OmniBot Cuttlefish - Self-Editing AI', { headers: cors });
   }
 };
