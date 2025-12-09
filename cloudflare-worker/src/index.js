@@ -936,92 +936,116 @@ const HTML = `<!DOCTYPE html>
        MOBILE RESPONSIVE STYLES
        ======================================== */
     @media (max-width: 768px) {
-      /* Collapse sidebar on mobile */
+      /* Complete restructure for mobile */
       .lcars-frame {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto 1fr auto auto;
+        display: flex !important;
+        flex-direction: column !important;
+        grid-template-columns: unset !important;
+        grid-template-rows: unset !important;
       }
       
+      /* Header first */
+      .lcars-header {
+        order: 1;
+        height: 50px;
+        flex-shrink: 0;
+      }
+      
+      /* Sidebar becomes horizontal button bar */
       .lcars-sidebar {
-        grid-row: auto;
-        flex-direction: row;
-        border-radius: 0;
-        padding: 8px;
-        gap: 4px;
-        overflow-x: auto;
+        order: 2;
+        display: flex !important;
+        flex-direction: row !important;
+        height: auto !important;
+        min-height: unset !important;
+        max-height: 60px !important;
+        border-radius: 0 !important;
+        padding: 8px !important;
+        gap: 6px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
         -webkit-overflow-scrolling: touch;
       }
       
       .lcars-sidebar-top {
-        display: none;
+        display: none !important;
       }
       
       .lcars-sidebar-content {
-        flex-direction: row;
-        padding: 0;
-        flex: 1;
-        gap: 4px;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        padding: 0 !important;
+        gap: 6px !important;
+        height: auto !important;
+        align-items: center !important;
       }
       
       .lcars-btn {
-        padding: 10px 14px;
-        font-size: 10px;
-        border-radius: 15px;
-        margin-right: 0;
-        white-space: nowrap;
+        padding: 8px 12px !important;
+        font-size: 11px !important;
+        border-radius: 12px !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        height: auto !important;
+        min-height: unset !important;
+      }
+      
+      /* Main content area */
+      .lcars-main {
+        order: 3;
+        flex: 1;
+        min-height: 0;
+        margin: 4px;
+        border-radius: 8px;
+      }
+      
+      /* Footer */
+      .lcars-footer {
+        order: 4;
+        height: 50px;
         flex-shrink: 0;
       }
       
-      /* Header adjustments */
-      .lcars-header {
-        order: -1;
-      }
-      
       .lcars-header-curve {
-        width: 40px;
-        border-radius: 0 0 20px 0;
+        width: 30px;
+        border-radius: 0 0 15px 0;
       }
       
       .lcars-header-bar {
-        padding: 0 12px;
+        padding: 0 10px;
       }
       
       .lcars-title {
-        font-size: 18px;
+        font-size: 16px;
         letter-spacing: 1px;
       }
       
       .lcars-user {
-        padding: 6px 12px;
-        font-size: 10px;
-        max-width: 120px;
+        padding: 4px 10px;
+        font-size: 9px;
+        max-width: 100px;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       
       .lcars-header-end {
-        width: 24px;
-        border-radius: 15px;
-      }
-      
-      /* Main content */
-      .lcars-main {
-        border-radius: 12px;
-        margin: 0 4px;
+        width: 20px;
+        border-radius: 10px;
       }
       
       .messages {
-        padding: 12px;
+        padding: 10px;
         gap: 8px;
       }
       
       .msg {
-        max-width: 90%;
+        max-width: 92%;
         padding: 10px 12px;
         font-size: 13px;
       }
       
-      /* Input bar */
       .input-bar {
         padding: 8px;
         gap: 6px;
@@ -1029,85 +1053,75 @@ const HTML = `<!DOCTYPE html>
       
       .input-bar input {
         padding: 10px 12px;
-        font-size: 16px; /* Prevent zoom on iOS */
+        font-size: 16px; /* Prevent iOS zoom */
       }
       
       .input-bar button {
-        padding: 10px 16px;
+        padding: 10px 14px;
         font-size: 13px;
       }
       
-      /* Footer */
       .lcars-footer-curve {
-        width: 40px;
-        border-radius: 0 20px 0 0;
+        width: 30px;
+        border-radius: 0 15px 0 0;
       }
       
       .lcars-footer-bar {
-        padding: 0 12px;
-        gap: 10px;
-        flex-wrap: wrap;
+        padding: 0 10px;
+        gap: 8px;
       }
       
       .stat {
-        font-size: 11px;
-      }
-      
-      .edit-status {
-        gap: 6px;
-      }
-      
-      #editStatusText {
-        font-size: 11px;
+        font-size: 10px;
       }
       
       .lcars-footer-end {
-        width: 30px;
+        width: 25px;
       }
       
-      /* Login screen mobile */
+      /* Login screen */
       .login-logo {
-        font-size: 32px;
+        font-size: 28px;
       }
       
       .login-subtitle {
-        font-size: 14px;
+        font-size: 12px;
         letter-spacing: 2px;
       }
       
       .login-btn {
-        padding: 16px 28px;
-        font-size: 16px;
-        gap: 12px;
+        padding: 14px 24px;
+        font-size: 14px;
+        gap: 10px;
       }
       
       /* Modals */
       .modal-content {
         width: 95%;
         max-height: 85vh;
-        padding: 16px;
-        border-radius: 12px;
+        padding: 14px;
+        border-radius: 10px;
       }
       
       .modal-title {
-        font-size: 16px;
+        font-size: 15px;
       }
       
       .modal textarea {
-        min-height: 150px;
+        min-height: 120px;
         font-size: 14px;
       }
     }
     
-    /* Extra small screens (phones in portrait) */
+    /* Extra small screens */
     @media (max-width: 400px) {
       .lcars-btn {
-        padding: 8px 10px;
-        font-size: 9px;
+        padding: 6px 10px !important;
+        font-size: 9px !important;
       }
       
       .lcars-title {
-        font-size: 16px;
+        font-size: 14px;
       }
       
       .lcars-user {
@@ -1119,7 +1133,7 @@ const HTML = `<!DOCTYPE html>
       }
     }
     
-    /* Safe area support for notched phones */
+    /* Safe area for notched phones */
     @supports (padding: env(safe-area-inset-bottom)) {
       .lcars-footer-bar {
         padding-bottom: env(safe-area-inset-bottom);
@@ -1130,26 +1144,26 @@ const HTML = `<!DOCTYPE html>
       }
     }
     
-    /* Landscape mobile */
+    /* Landscape */
     @media (max-height: 500px) and (orientation: landscape) {
-      .lcars-frame {
-        grid-template-rows: 50px 1fr 40px auto;
+      .lcars-header {
+        height: 40px;
       }
       
-      .lcars-header-bar {
-        padding: 0 8px;
+      .lcars-sidebar {
+        max-height: 45px !important;
       }
       
-      .lcars-title {
-        font-size: 16px;
+      .lcars-footer {
+        height: 35px;
       }
       
       .messages {
-        padding: 8px;
+        padding: 6px;
       }
       
       .msg {
-        padding: 8px 10px;
+        padding: 6px 10px;
         font-size: 12px;
       }
     }
