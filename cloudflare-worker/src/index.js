@@ -344,15 +344,16 @@ const HTML = `<!DOCTYPE html>
       font-size: 24px;
     }
     .header button {
-      background-color: #4CAF50;
+      background-color: #6495ED;
       color: #fff;
       border: none;
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
+      border-radius: 5px;
     }
     .header button:hover {
-      background-color: #3e8e41;
+      background-color: #4682B4;
     }
     .chat-container {
       display: flex;
@@ -388,31 +389,34 @@ const HTML = `<!DOCTYPE html>
       font-size: 16px;
       border: 1px solid #333;
       resize: vertical;
+      border-radius: 5px;
     }
     .input-container button {
-      background-color: #4CAF50;
+      background-color: #6495ED;
       color: #fff;
       border: none;
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
+      border-radius: 5px;
     }
     .input-container button:hover {
-      background-color: #3e8e41;
+      background-color: #4682B4;
     }
     .edit-mode {
       position: fixed;
       top: 10px;
       right: 10px;
-      background-color: #4CAF50;
+      background-color: #6495ED;
       color: #fff;
       border: none;
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
+      border-radius: 5px;
     }
     .edit-mode:hover {
-      background-color: #3e8e41;
+      background-color: #4682B4;
     }
     .typing-indicator {
       font-size: 16px;
@@ -422,6 +426,7 @@ const HTML = `<!DOCTYPE html>
       background-color: #333;
       padding: 10px;
       border: 1px solid #444;
+      border-radius: 5px;
     }
     .code-block pre {
       font-size: 16px;
@@ -449,17 +454,19 @@ const HTML = `<!DOCTYPE html>
       font-size: 16px;
       border: 1px solid #333;
       resize: vertical;
+      border-radius: 5px;
     }
     .self-edit-modal .modal-content button {
-      background-color: #4CAF50;
+      background-color: #6495ED;
       color: #fff;
       border: none;
       padding: 10px 20px;
       font-size: 16px;
       cursor: pointer;
+      border-radius: 5px;
     }
     .self-edit-modal .modal-content button:hover {
-      background-color: #3e8e41;
+      background-color: #4682B4;
     }
   </style>
 </head>
@@ -640,4 +647,3 @@ export default {
     return new Response('OmniBot v4.4 - Safe Edition', { headers: cors });
   }
 };
-
