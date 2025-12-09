@@ -1,0 +1,6 @@
+name = "omnibot-staging"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Staging environment
+# Deploy with: wrangler deploy --config wrangler.staging.toml
