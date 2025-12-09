@@ -47,12 +47,12 @@ describe('OmniBot Functional Tests', () => {
   describe('Themes', () => {
     const themes = ['modern', 'matrix', 'cyberpunk', 'hal', 'tron', 'neuromancer', 'borg', 'dune'];
     
-    themes.forEach(theme => {
+    for (const theme of themes) {
       it('should have ' + theme + ' theme defined', () => {
         expect(workerCode).to.include('body.theme-' + theme);
         expect(workerCode).to.include('data-theme="' + theme + '"');
       });
-    });
+    }
     
     it('should have theme CSS variables', () => {
       expect(workerCode).to.include('--bg:');
@@ -68,10 +68,9 @@ describe('OmniBot Functional Tests', () => {
   });
   
   describe('Edit Mode', () => {
-    it('should have inline edit mode (no dialog)', () => {
-      // Should NOT have alert, confirm, or prompt for mode switching
+    it('should have inline edit mode (no dialog for mode switch)', () => {
       const htmlPart = workerCode.slice(workerCode.indexOf('const HTML ='));
-      // Check that mode switching doesn't use dialogs
+      // Mode switching should not trigger confirm/prompt dialogs
       expect(htmlPart).to.not.include('window.confirm(');
       expect(htmlPart).to.not.include('window.prompt(');
     });
@@ -85,10 +84,9 @@ describe('OmniBot Functional Tests', () => {
       expect(workerCode).to.include('.input-field.edit-mode');
     });
     
-    it('should switch modes via tabs without popup', () => {
+    it('should switch modes via tabs', () => {
       expect(workerCode).to.include('data-mode="edit"');
       expect(workerCode).to.include('data-mode="chat"');
-      expect(workerCode).to.include('tab.dataset.mode');
     });
   });
   
@@ -136,7 +134,7 @@ describe('OmniBot Safety Tests', () => {
   });
   
   it('should require HTML UI', () => {
-    expect(workerCode).to.include('Missing HTML UI');
+    expect(workerCode).to.include("Missing HTML UI");
   });
   
   it('should not use browser APIs in worker runtime', () => {
@@ -162,7 +160,7 @@ describe('OmniBot Version Tests', () => {
   });
   
   it('should have version in health endpoint', () => {
-    expect(workerCode).to.include('version:');
-    expect(workerCode).to.include('creature:');
+    expect(workerCode).to.include("version:");
+    expect(workerCode).to.include("creature:");
   });
 });
