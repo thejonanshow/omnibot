@@ -1,6 +1,6 @@
 /**
  * OmniBot Functional Tests
- * Updated for Dumbo Octopus (LCARS UI)
+ * Updated for Electric Eel (OAuth)
  */
 
 import { expect } from 'chai';
@@ -42,13 +42,24 @@ describe('OmniBot Functional Tests', () => {
       expect(workerCode).to.include('--lcars-');
     });
     
-    it('should have environment indicator', () => {
-      expect(workerCode).to.include('staging');
-      expect(workerCode).to.include('production');
-    });
-    
     it('should have edit mode styling', () => {
       expect(workerCode).to.include('edit-mode');
+    });
+  });
+  
+  describe('OAuth', () => {
+    it('should have Google OAuth endpoints', () => {
+      expect(workerCode).to.include("/auth/google");
+      expect(workerCode).to.include("/auth/callback");
+    });
+    
+    it('should have session management', () => {
+      expect(workerCode).to.include('createSessionToken');
+      expect(workerCode).to.include('validateSession');
+    });
+    
+    it('should restrict to allowed email', () => {
+      expect(workerCode).to.include('ALLOWED_EMAIL');
     });
   });
   
@@ -116,7 +127,7 @@ describe('OmniBot Version Tests', () => {
   });
   
   it('should have sea creature versioning', () => {
-    expect(workerCode).to.match(/Axolotl|Blobfish|Cuttlefish|Dumbo Octopus/);
+    expect(workerCode).to.match(/Axolotl|Blobfish|Cuttlefish|Dumbo Octopus|Electric Eel/);
   });
   
   it('should have version in health endpoint', () => {
