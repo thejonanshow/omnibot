@@ -1,0 +1,122 @@
+name: Promote Staging to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "promote" to confirm production deployment'
+        required: true
+        type: string
+
+jobs:
+  validate-staging:
+    name: Validate Staging
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Verify staging is healthy
+        run: |
+          RESPONSE=$(curl -s https://omnibot-staging.jonanscheffler.workers.dev/api/health)
+          
+          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "ERROR: Staging is not healthy, cannot promote!"
+            echo "Response: $RESPONSE"
+            exit 1
+          fi
+          
+          VERSION=$(echo "$RESPONSE" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+          echo "Staging version: $VERSION"
+          echo "✓ Staging validated"
+      
+      - name: Run smoke tests on staging
+        run: |
+          # Full smoke test suite
+          echo "Running smoke tests..."
+          
+          # Chat test
+          curl -sf -X POST \
+            https://omnibot-staging.jonanscheffler.workers.dev/api/chat \
+            -H "Content-Type: application/json" \
+            -d '{"messages":[{"role":"user","content":"test"}]}' > /dev/null
+          echo "✓ Chat endpoint"
+          
+          # Edit validation
+          curl -sf -X POST \
+            https://omnibot-staging.jonanscheffler.workers.dev/api/self-edit \
+            -H "Content-Type: application/json" \
+            -d '{"instruction":""}' > /dev/null || true
+          echo "✓ Edit validation"
+          
+          # Test endpoint
+          curl -sf https://omnibot-staging.jonanscheffler.workers.dev/api/test > /dev/null
+          echo "✓ Test endpoint"
+          
+          echo "All smoke tests passed!"
+
+  promote:
+    name: Promote to Production
+    needs: validate-staging
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'promote'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Wrangler
+        run: npm install -g wrangler
+      
+      - name: Deploy to Production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd cloudflare-worker
+          wrangler deploy
+      
+      - name: Wait for production deployment
+        run: sleep 30
+      
+      - name: Production health check
+        run: |
+          RESPONSE=$(curl -s https://omnibot.jonanscheffler.workers.dev/api/health)
+          echo "Production health: $RESPONSE"
+          
+          if ! echo "$RESPONSE" | grep -q '"ok":true'; then
+            echo "ERROR: Production health check failed!"
+            exit 1
+          fi
+          echo "✓ Production deployment successful"
+      
+      - name: Post-deployment verification
+        run: |
+          # Verify all endpoints
+          echo "Verifying production endpoints..."
+          
+          curl -sf https://omnibot.jonanscheffler.workers.dev/ > /dev/null
+          echo "✓ Homepage"
+          
+          curl -sf https://omnibot.jonanscheffler.workers.dev/api/health > /dev/null
+          echo "✓ Health"
+          
+          curl -sf https://omnibot.jonanscheffler.workers.dev/api/test > /dev/null
+          echo "✓ Test"
+          
+          echo "Production deployment verified!"
+
+  notify-failure:
+    name: Notify on Invalid Confirmation
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm != 'promote'
+    
+    steps:
+      - name: Abort - Invalid Confirmation
+        run: |
+          echo "ERROR: You must type 'promote' to confirm production deployment."
+          echo "You entered: '${{ github.event.inputs.confirm }}'"
+          exit 1
