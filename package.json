@@ -9,7 +9,10 @@
     "test:safety": "mocha test/omnibot.test.js --grep 'Safety' --timeout 5000"
   },
   "devDependencies": {
-    "mocha": "^10.2.0",
-    "chai": "^4.3.10"
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.57.0"
   }
 }

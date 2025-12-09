@@ -3,7 +3,7 @@
  * Tests the HMAC challenge-response authentication system
  */
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {

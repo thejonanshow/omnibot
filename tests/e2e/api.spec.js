@@ -3,7 +3,7 @@
  * Tests the worker API endpoints and responses
  */
 
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('API Endpoints', () => {
   test.beforeEach(async ({ page }) => {

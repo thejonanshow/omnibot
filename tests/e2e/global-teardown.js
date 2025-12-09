@@ -23,4 +23,4 @@ async function globalTeardown(config) {
   console.log('✅ Global teardown completed');
 }
 
-module.exports = globalTeardown;
+export default globalTeardown;
