@@ -308,76 +308,6 @@ async function getGithubDeployLogs(env) {
   return logs;
 }
 
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const cors = { 
-      'Access-Control-Allow-Origin': '*', 
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
-      'Access-Control-Allow-Headers': 'Content-Type' 
-    };
-    
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: cors });
-    }
-    
-    if (url.pathname === '/' || url.pathname === '/chat') {
-      return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
-    }
-    
-    if (url.pathname === '/api/health') {
-      return new Response(JSON.stringify({ 
-        ok: true,
-        version: 'Blobfish',  // For test compatibility
-        creature: 'Blobfish',
-        wikipedia: 'https://en.wikipedia.org/wiki/Blobfish',
-        safetyFeatures: ['structure-validation', 'no-wholesale-replacement', 'no-extraction'],
-        models: GROQ_MODELS
-      }), { 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
-      });
-    }
-    
-    if (url.pathname === '/api/chat' && request.method === 'POST') {
-      const { messages } = await request.json();
-      const reply = await callGroq('llama', messages, env);
-      return new Response(JSON.stringify({ content: reply }), { 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
-      });
-    }
-    
-    if (url.pathname === '/api/self-edit' && request.method === 'POST') {
-      const { instruction } = await request.json();
-      
-      if (!instruction || instruction.length < 5) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Instruction too short',
-          explanation: 'Provide clear instruction (5+ chars)' 
-        }), { 
-          headers: { ...cors, 'Content-Type': 'application/json' } 
-        });
-      }
-      
-      if (instruction.includes('access GitHub logs')) {
-        const logs = await getGithubDeployLogs(env);
-        return new Response(JSON.stringify({ 
-          success: true, 
-          logs: logs 
-        }), { 
-          headers: { ...cors, 'Content-Type': 'application/json' } 
-        });
-      }
-      
-      const result = await selfEdit(instruction, env);
-      return new Response(JSON.stringify(result), { 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
-      });
-    }
-    
-    return new Response('OmniBot v4.4 - Safe Edition', { headers: cors });
-  }
-};
 
 const HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -644,4 +574,76 @@ const HTML = `<!DOCTYPE html>
     }, 1000);
   </script>
 </body>
-</html>
+</html>`;
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const cors = { 
+      'Access-Control-Allow-Origin': '*', 
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
+      'Access-Control-Allow-Headers': 'Content-Type' 
+    };
+    
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: cors });
+    }
+    
+    if (url.pathname === '/' || url.pathname === '/chat') {
+      return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
+    }
+    
+    if (url.pathname === '/api/health') {
+      return new Response(JSON.stringify({ 
+        ok: true,
+        version: 'Blobfish',  // For test compatibility
+        creature: 'Blobfish',
+        wikipedia: 'https://en.wikipedia.org/wiki/Blobfish',
+        safetyFeatures: ['structure-validation', 'no-wholesale-replacement', 'no-extraction'],
+        models: GROQ_MODELS
+      }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    if (url.pathname === '/api/chat' && request.method === 'POST') {
+      const { messages } = await request.json();
+      const reply = await callGroq('llama', messages, env);
+      return new Response(JSON.stringify({ content: reply }), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    if (url.pathname === '/api/self-edit' && request.method === 'POST') {
+      const { instruction } = await request.json();
+      
+      if (!instruction || instruction.length < 5) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Instruction too short',
+          explanation: 'Provide clear instruction (5+ chars)' 
+        }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      if (instruction.includes('access GitHub logs')) {
+        const logs = await getGithubDeployLogs(env);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          logs: logs 
+        }), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      const result = await selfEdit(instruction, env);
+      return new Response(JSON.stringify(result), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    return new Response('OmniBot v4.4 - Safe Edition', { headers: cors });
+  }
+};
+
