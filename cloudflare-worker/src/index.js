@@ -358,29 +358,30 @@ async function generatePatches(plan, currentCode, env) {
   // Extract only relevant code sections based on plan
   const relevantCode = extractRelevantSections(currentCode, plan.sections_to_modify);
   
-  const systemPrompt = `You are a precise code editor. Generate patches in this EXACT format:
+  const systemPrompt = `You are a code patch generator. Your ONLY job is to output patches in this EXACT format. No other text.
 
+FORMAT (copy exactly):
 <<<REPLACE>>>
-exact old code to find
+[paste the exact old code here]
 <<<WITH>>>
-new replacement code  
+[paste the new replacement code here]
 <<<END>>>
 
-RULES:
-- Use EXACT code from the source (whitespace matters)
-- Make minimal targeted changes
-- Output ONLY patch blocks, no explanations`;
+CRITICAL RULES:
+1. Output ONLY patch blocks - no explanations, no markdown, no other text
+2. Copy the old code EXACTLY from the source including whitespace
+3. You MUST include <<<REPLACE>>> <<<WITH>>> and <<<END>>> delimiters
+4. Multiple patches are OK - just put one after another`;
 
-  const userPrompt = `Task: ${plan.qwen_prompt}
+  const userPrompt = `TASK: ${plan.qwen_prompt || plan.summary}
 
-Relevant code sections:
-\`\`\`javascript
-${relevantCode}
-\`\`\`
+SOURCE CODE TO MODIFY:
+${relevantCode.slice(0, 8000)}
 
-Generate the patches:`;
+OUTPUT YOUR PATCHES NOW (remember: <<<REPLACE>>> old <<<WITH>>> new <<<END>>>):`;
 
-  return await callGroq('coder', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  // Use mixtral which is better at following strict formats
+  return await callGroq('mixtral', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
 // Extract code sections by name/pattern
@@ -825,6 +826,23 @@ const HTML = `<!DOCTYPE html>
       text-transform: uppercase;
       letter-spacing: 3px;
       color: #000;
+    }
+    
+    .version-link {
+      background: var(--lcars-purple);
+      padding: 6px 14px;
+      border-radius: 15px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #000;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+    
+    .version-link:hover {
+      filter: brightness(1.2);
+      transform: scale(1.05);
     }
     
     .lcars-user {
@@ -1311,6 +1329,11 @@ const HTML = `<!DOCTYPE html>
         letter-spacing: 1px;
       }
       
+      .version-link {
+        padding: 4px 8px;
+        font-size: 9px;
+      }
+      
       .lcars-user {
         padding: 4px 10px;
         font-size: 9px;
@@ -1413,6 +1436,11 @@ const HTML = `<!DOCTYPE html>
         font-size: 14px;
       }
       
+      .version-link {
+        padding: 3px 6px;
+        font-size: 8px;
+      }
+      
       .lcars-user {
         display: none;
       }
@@ -1489,6 +1517,7 @@ const HTML = `<!DOCTYPE html>
       <div class="lcars-header-curve"></div>
       <div class="lcars-header-bar">
         <span class="lcars-title">OmniBot</span>
+        <a href="https://en.wikipedia.org/wiki/Electric_eel" target="_blank" class="version-link">⚡ Electric Eel</a>
         <span id="userEmail" class="lcars-user">...</span>
       </div>
       <div class="lcars-header-end"></div>
