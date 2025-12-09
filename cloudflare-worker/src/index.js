@@ -212,10 +212,16 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   const data = await res.json();
   
   if (data.error) {
-    return `ERROR: ${data.error.message || JSON.stringify(data.error)}`;
+    // THROW instead of returning error string - prevents writing errors as code
+    throw new Error(`Groq API error: ${data.error.message || JSON.stringify(data.error)}`);
   }
   
-  return data.choices?.[0]?.message?.content || 'No response';
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('No response from Groq API');
+  }
+  
+  return content;
 }
 
 // ============== CODE VALIDATION ==============
@@ -406,6 +412,19 @@ async function selfEdit(instruction, env, streamCallback = null) {
     }
     
     if (streamCallback) streamCallback({ status: 'validating', message: 'Validating changes...' });
+    
+    // CRITICAL: Never commit if it doesn't look like code
+    if (finalCode.startsWith('ERROR') || finalCode.includes('Groq API error') || finalCode.includes('rate limit')) {
+      return { success: false, error: 'API returned error instead of code', explanation: finalCode.slice(0, 200) };
+    }
+    
+    if (finalCode.length < 1000) {
+      return { success: false, error: 'Generated code too short', explanation: `Only ${finalCode.length} chars - refusing to commit` };
+    }
+    
+    if (!finalCode.includes('export default')) {
+      return { success: false, error: 'Missing export default', explanation: 'Generated code missing critical structure' };
+    }
     
     const validation = validateCodeStructure(finalCode);
     // Log warnings but don't block
