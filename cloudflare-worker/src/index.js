@@ -20,8 +20,12 @@ const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
 const VERSION = 'Electric Eel';
 
 const GROQ_MODELS = {
-  qwen: 'qwen2.5-coder-32k-instruct',
-  llama: 'llama-3.3-70b-versatile'
+  // Use Llama for planning/review (good at reasoning)
+  llama: 'llama-3.3-70b-versatile',
+  // Use smaller Llama for code patches (fits in context)
+  coder: 'llama-3.1-8b-instant',
+  // Mixtral as fallback
+  mixtral: 'mixtral-8x7b-32768'
 };
 
 const REQUIRED_FUNCTIONS = [
@@ -203,9 +207,9 @@ async function callGroq(model, messages, env, systemPrompt = null) {
       'Content-Type': 'application/json' 
     },
     body: JSON.stringify({ 
-      model: GROQ_MODELS[model], 
+      model: GROQ_MODELS[model] || GROQ_MODELS.mixtral, 
       messages: fullMessages, 
-      max_tokens: model === 'qwen' ? 32000 : 16000,
+      max_tokens: 4000, // Keep responses short to avoid rate limits
       temperature: 0.3
     })
   });
@@ -376,7 +380,7 @@ ${relevantCode}
 
 Generate the patches:`;
 
-  return await callGroq('qwen', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  return await callGroq('coder', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
 // Extract code sections by name/pattern
@@ -885,6 +889,72 @@ const HTML = `<!DOCTYPE html>
     
     .msg.success { border-color: var(--lcars-cyan); color: var(--lcars-cyan); }
     .msg.error { border-color: var(--lcars-red); color: var(--lcars-red); }
+    .msg.info { border-color: var(--lcars-blue); color: var(--lcars-text); }
+    
+    /* Code blocks */
+    .code-block {
+      position: relative;
+      background: #0d0d0d;
+      border-radius: 6px;
+      margin: 8px 0;
+      overflow: hidden;
+    }
+    
+    .code-block pre {
+      margin: 0;
+      padding: 12px;
+      overflow-x: auto;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    
+    .code-block code {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      color: var(--lcars-cyan);
+    }
+    
+    .copy-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: var(--lcars-orange);
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    
+    .copy-btn:hover { opacity: 1; }
+    
+    code.inline {
+      background: #1a1a1a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 0.9em;
+      color: var(--lcars-cyan);
+    }
+    
+    .msg a {
+      color: var(--lcars-cyan);
+      text-decoration: underline;
+    }
+    
+    .msg strong {
+      color: var(--lcars-orange);
+    }
+    
+    .typing {
+      animation: blink 1s infinite;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.5; }
+    }
     
     .input-bar {
       display: flex;
@@ -1401,6 +1471,7 @@ const HTML = `<!DOCTYPE html>
         <button class="lcars-btn" data-view="telemetry">Stats</button>
         <button class="lcars-btn" data-view="context">Context</button>
         <button class="lcars-btn" data-view="prompt">Prompt</button>
+        <button class="lcars-btn" id="fullscreenBtn">⛶</button>
         <button class="lcars-btn danger" id="logoutBtn">Logout</button>
       </div>
     </div>
@@ -1557,6 +1628,26 @@ const HTML = `<!DOCTYPE html>
         showLogin();
       };
       
+      // Fullscreen toggle
+      document.getElementById('fullscreenBtn').onclick = function() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(e => {
+            // iOS Safari uses webkitRequestFullscreen
+            if (document.documentElement.webkitRequestFullscreen) {
+              document.documentElement.webkitRequestFullscreen();
+            }
+          });
+          this.textContent = '⛶';
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
+          this.textContent = '⛶';
+        }
+      };
+      
       // Mode switching
       document.querySelectorAll('[data-mode]').forEach(btn => {
         btn.onclick = function() {
@@ -1597,13 +1688,49 @@ const HTML = `<!DOCTYPE html>
         for (const m of messages) {
           let cls = 'msg ' + m.role;
           if (m.type) cls += ' ' + m.type;
-          html += '<div class="' + cls + '">' + escapeHtml(m.content) + '</div>';
+          const formatted = formatMessage(m.content);
+          html += '<div class="' + cls + '">' + formatted + '</div>';
         }
         if (loading) {
-          html += '<div class="msg assistant">Processing...</div>';
+          html += '<div class="msg assistant"><span class="typing">Processing...</span></div>';
         }
         $messages.innerHTML = html;
         $messages.scrollTop = $messages.scrollHeight;
+        
+        // Add copy handlers
+        document.querySelectorAll('.copy-btn').forEach(btn => {
+          btn.onclick = function() {
+            const code = this.parentElement.querySelector('code').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+              this.textContent = '✓';
+              setTimeout(() => this.textContent = '📋', 1500);
+            });
+          };
+        });
+      }
+      
+      function formatMessage(text) {
+        // Escape HTML first
+        let safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        // Code blocks with copy button
+        safe = safe.replace(/\`\`\`(\\w*)\\n?([\\s\\S]*?)\`\`\`/g, function(m, lang, code) {
+          return '<div class="code-block"><button class="copy-btn">📋</button><pre><code>' + code.trim() + '</code></pre></div>';
+        });
+        
+        // Inline code
+        safe = safe.replace(/\`([^\`]+)\`/g, '<code class="inline">$1</code>');
+        
+        // Bold
+        safe = safe.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+        
+        // Links
+        safe = safe.replace(/(https?:\\/\\/[^\\s]+)/g, '<a href="$1" target="_blank">$1</a>');
+        
+        // Line breaks
+        safe = safe.replace(/\\n/g, '<br>');
+        
+        return safe;
       }
       
       function escapeHtml(text) {
@@ -1936,7 +2063,19 @@ export default {
       try {
         const { messages } = await request.json();
         await logTelemetry('chat', { messageCount: messages.length }, env);
-        const reply = await callGroq('llama', messages, env);
+        
+        // Check if user is trying to edit in chat mode
+        const lastMsg = messages[messages.length - 1]?.content?.toLowerCase() || '';
+        const editKeywords = ['add ', 'change ', 'modify ', 'fix ', 'update ', 'edit ', 'make ', 'create '];
+        const looksLikeEdit = editKeywords.some(k => lastMsg.startsWith(k)) && 
+          (lastMsg.includes('button') || lastMsg.includes('code') || lastMsg.includes('css') || lastMsg.includes('feature'));
+        
+        // Add context about mode
+        const systemAddendum = looksLikeEdit 
+          ? '\n\nIMPORTANT: The user seems to want code changes but they are in CHAT mode. Remind them to switch to EDIT mode (tap the EDIT button) to make actual code changes. In chat mode you can only discuss and explain - you cannot modify OmniBot\'s code.'
+          : '';
+        
+        const reply = await callGroq('llama', messages, env, systemAddendum);
         return new Response(JSON.stringify({ content: reply }), { 
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
