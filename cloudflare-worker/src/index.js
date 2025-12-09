@@ -254,13 +254,213 @@ function cleanCodeFences(text) {
   return cleaned;
 }
 
-// ============== SELF EDIT ==============
+// ============== SELF EDIT - MULTI-STAGE PIPELINE ==============
 
-// Apply a diff-style patch to code
+// Stage 1: Groq analyzes the request and creates a focused plan
+async function planEdit(instruction, currentCode, env) {
+  // Create a summary of the code structure (not full code - too many tokens)
+  const codeStructure = extractCodeStructure(currentCode);
+  
+  const systemPrompt = `You are a code change planner. Analyze the user's request and create a focused plan.
+
+OUTPUT FORMAT (JSON):
+{
+  "summary": "Brief description of what will change",
+  "sections_to_modify": ["list of function/section names"],
+  "risk_level": "low|medium|high",
+  "qwen_prompt": "A focused prompt for Qwen Coder to generate the patch"
+}
+
+The qwen_prompt should:
+- Be specific about what code to find and replace
+- Reference exact function names or CSS selectors
+- NOT include the full codebase (Qwen will receive relevant sections only)`;
+
+  const userPrompt = `User request: "${instruction}"
+
+Code structure (${currentCode.length} chars total):
+${codeStructure}
+
+Create a plan for this change:`;
+
+  const response = await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  
+  try {
+    // Extract JSON from response
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch (e) {
+    // Fallback plan
+    return {
+      summary: instruction,
+      sections_to_modify: ['unknown'],
+      risk_level: 'medium',
+      qwen_prompt: instruction
+    };
+  }
+  
+  return {
+    summary: instruction,
+    sections_to_modify: ['unknown'],
+    risk_level: 'medium', 
+    qwen_prompt: instruction
+  };
+}
+
+// Extract code structure without full content
+function extractCodeStructure(code) {
+  const lines = code.split('\n');
+  const structure = [];
+  
+  // Find functions
+  const funcRegex = /^(async\s+)?function\s+(\w+)|^const\s+(\w+)\s*=\s*(async\s*)?\(/;
+  // Find major sections
+  const sectionRegex = /^\/\/\s*=+\s*(.+?)\s*=+/;
+  // Find CSS classes in HTML
+  const cssRegex = /^\s*\.([\w-]+)\s*\{/;
+  
+  let inHTML = false;
+  let lineNum = 0;
+  
+  for (const line of lines) {
+    lineNum++;
+    if (line.includes('const HTML =')) inHTML = true;
+    
+    const funcMatch = line.match(funcRegex);
+    const sectionMatch = line.match(sectionRegex);
+    
+    if (sectionMatch) {
+      structure.push(`[Section: ${sectionMatch[1]}] (line ${lineNum})`);
+    } else if (funcMatch && !inHTML) {
+      const name = funcMatch[2] || funcMatch[3];
+      structure.push(`Function: ${name}() (line ${lineNum})`);
+    }
+    
+    if (inHTML && cssRegex.test(line)) {
+      const cssMatch = line.match(cssRegex);
+      if (cssMatch && !structure.includes(`CSS: .${cssMatch[1]}`)) {
+        structure.push(`CSS: .${cssMatch[1]} (line ${lineNum})`);
+      }
+    }
+  }
+  
+  return structure.slice(0, 50).join('\n'); // Limit to 50 items
+}
+
+// Stage 2: Generate patches with Qwen (using focused prompt from plan)
+async function generatePatches(plan, currentCode, env) {
+  // Extract only relevant code sections based on plan
+  const relevantCode = extractRelevantSections(currentCode, plan.sections_to_modify);
+  
+  const systemPrompt = `You are a precise code editor. Generate patches in this EXACT format:
+
+<<<REPLACE>>>
+exact old code to find
+<<<WITH>>>
+new replacement code  
+<<<END>>>
+
+RULES:
+- Use EXACT code from the source (whitespace matters)
+- Make minimal targeted changes
+- Output ONLY patch blocks, no explanations`;
+
+  const userPrompt = `Task: ${plan.qwen_prompt}
+
+Relevant code sections:
+\`\`\`javascript
+${relevantCode}
+\`\`\`
+
+Generate the patches:`;
+
+  return await callGroq('qwen', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+}
+
+// Extract code sections by name/pattern
+function extractRelevantSections(code, sections) {
+  if (!sections || sections.length === 0 || sections[0] === 'unknown') {
+    // Return condensed version
+    const lines = code.split('\n');
+    if (lines.length > 500) {
+      return lines.slice(0, 200).join('\n') + '\n\n...[middle omitted]...\n\n' + lines.slice(-200).join('\n');
+    }
+    return code;
+  }
+  
+  const lines = code.split('\n');
+  const extracted = [];
+  let capturing = false;
+  let braceDepth = 0;
+  let captureStart = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Check if this line starts a section we want
+    const shouldCapture = sections.some(s => 
+      line.includes(`function ${s}`) || 
+      line.includes(`${s} =`) ||
+      line.includes(`.${s}`) ||
+      line.toLowerCase().includes(s.toLowerCase())
+    );
+    
+    if (shouldCapture && !capturing) {
+      capturing = true;
+      captureStart = Math.max(0, i - 2);
+      braceDepth = 0;
+    }
+    
+    if (capturing) {
+      braceDepth += (line.match(/{/g) || []).length;
+      braceDepth -= (line.match(/}/g) || []).length;
+      
+      // Stop after function/block ends
+      if (braceDepth <= 0 && i > captureStart + 5) {
+        extracted.push(`// Lines ${captureStart + 1}-${i + 1}:`);
+        extracted.push(...lines.slice(captureStart, i + 1));
+        extracted.push('');
+        capturing = false;
+      }
+    }
+  }
+  
+  // If we captured nothing, return condensed full code
+  if (extracted.length === 0) {
+    const lines = code.split('\n');
+    return lines.slice(0, 150).join('\n') + '\n...\n' + lines.slice(-150).join('\n');
+  }
+  
+  return extracted.join('\n');
+}
+
+// Stage 3: Review patches with Groq and format for user
+async function reviewPatches(patches, plan, env) {
+  const systemPrompt = `You are a code review assistant. Analyze these patches and provide a clear summary for the user.
+
+OUTPUT FORMAT:
+1. What changes will be made (bullet points)
+2. Any potential risks or issues
+3. Recommendation: APPROVE or NEEDS_REVIEW
+
+Be concise. The user needs to approve before changes are applied.`;
+
+  const userPrompt = `Original request: ${plan.summary}
+
+Patches to apply:
+${patches}
+
+Review these changes:`;
+
+  return await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+}
+
+// Apply a diff-style patch to code  
 function applyPatch(originalCode, patch) {
   let result = originalCode;
   
-  // Parse REPLACE blocks: <<<REPLACE>>> old <<<WITH>>> new <<<END>>>
   const replacePattern = /<<<REPLACE>>>\s*([\s\S]*?)\s*<<<WITH>>>\s*([\s\S]*?)\s*<<<END>>>/g;
   let match;
   
@@ -271,7 +471,7 @@ function applyPatch(originalCode, patch) {
     if (result.includes(oldText)) {
       result = result.replace(oldText, newText);
     } else {
-      // Try fuzzy match (ignore whitespace differences)
+      // Try fuzzy match
       const normalizedOld = oldText.replace(/\s+/g, ' ');
       const lines = result.split('\n');
       for (let i = 0; i < lines.length; i++) {
@@ -286,7 +486,6 @@ function applyPatch(originalCode, patch) {
     }
   }
   
-  // Parse INSERT blocks: <<<INSERT_AFTER>>> marker <<<CONTENT>>> new <<<END>>>
   const insertPattern = /<<<INSERT_AFTER>>>\s*([\s\S]*?)\s*<<<CONTENT>>>\s*([\s\S]*?)\s*<<<END>>>/g;
   while ((match = insertPattern.exec(patch)) !== null) {
     const marker = match[1].trim();
@@ -299,75 +498,152 @@ function applyPatch(originalCode, patch) {
   return result;
 }
 
-// Generate a diff-based patch using Qwen (code specialist)
-async function generatePatchWithQwen(instruction, currentCode, env) {
-  const context = await getContext(env);
-  
-  // Extract key sections for context (reduce token usage)
-  const codePreview = currentCode.length > 20000 
-    ? currentCode.slice(0, 10000) + '\n\n... [MIDDLE SECTION OMITTED FOR BREVITY] ...\n\n' + currentCode.slice(-10000)
-    : currentCode;
-  
-  const systemPrompt = `You are a code modification assistant. You output ONLY patches in a specific format.
-
-PATCH FORMAT (use these exact delimiters):
-<<<REPLACE>>>
-old code to find (exact match)
-<<<WITH>>>
-new code to replace it with
-<<<END>>>
-
-<<<INSERT_AFTER>>>
-line to insert after (exact match)
-<<<CONTENT>>>
-new lines to add
-<<<END>>>
-
-RULES:
-- Output ONLY patch blocks, no explanations
-- Use exact code snippets that exist in the source
-- Make minimal, targeted changes
-- Multiple patches allowed
-- Preserve all existing functionality`;
-
-  const userPrompt = `Code to modify (${currentCode.length} chars):
-
-\`\`\`javascript
-${codePreview}
-\`\`\`
-
-Requested change: ${instruction}
-
-Output the patch blocks:`;
-
-  return await callGroq('qwen', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+// Main edit orchestrator - now returns plan for approval
+async function prepareEdit(instruction, env) {
+  try {
+    await logTelemetry('edit_prepare_start', { instruction }, env);
+    
+    // Get current code
+    const file = await githubGet('cloudflare-worker/src/index.js', env);
+    if (!file.content) {
+      return { success: false, error: 'Could not read code' };
+    }
+    const currentCode = decodeURIComponent(escape(atob(file.content)));
+    
+    // Stage 1: Plan with Groq
+    const plan = await planEdit(instruction, currentCode, env);
+    
+    // Stage 2: Generate patches with Qwen
+    const patches = await generatePatches(plan, currentCode, env);
+    
+    // Check if patches are valid
+    if (!patches.includes('<<<REPLACE>>>') && !patches.includes('<<<INSERT_AFTER>>>')) {
+      return { 
+        success: false, 
+        error: 'Could not generate valid patches',
+        details: patches.slice(0, 500)
+      };
+    }
+    
+    // Stage 3: Review with Groq
+    const review = await reviewPatches(patches, plan, env);
+    
+    // Store pending edit for approval
+    const editId = Date.now().toString(36);
+    if (env.CONTEXT) {
+      await env.CONTEXT.put(`pending_edit_${editId}`, JSON.stringify({
+        instruction,
+        plan,
+        patches,
+        timestamp: Date.now()
+      }), { expirationTtl: 3600 }); // 1 hour expiry
+    }
+    
+    return {
+      success: true,
+      editId,
+      plan: plan.summary,
+      review,
+      patches_preview: patches.slice(0, 1000),
+      awaiting_approval: true
+    };
+    
+  } catch (e) {
+    await logTelemetry('edit_prepare_error', { error: e.message }, env);
+    return { success: false, error: e.message };
+  }
 }
 
-// Fallback: Full code generation with Llama (for small files or when patches fail)
-async function generateFullWithLlama(instruction, currentCode, env) {
-  const context = await getContext(env);
+// Execute approved edit
+async function executeEdit(editId, env) {
+  try {
+    // Retrieve pending edit
+    if (!env.CONTEXT) {
+      return { success: false, error: 'Context storage not available' };
+    }
+    
+    const pendingJson = await env.CONTEXT.get(`pending_edit_${editId}`);
+    if (!pendingJson) {
+      return { success: false, error: 'Edit not found or expired' };
+    }
+    
+    const pending = JSON.parse(pendingJson);
+    
+    // Get fresh code
+    const file = await githubGet('cloudflare-worker/src/index.js', env);
+    if (!file.content) {
+      return { success: false, error: 'Could not read code' };
+    }
+    const currentCode = decodeURIComponent(escape(atob(file.content)));
+    
+    // Apply patches
+    const finalCode = applyPatch(currentCode, pending.patches);
+    
+    // Safety checks
+    if (finalCode.startsWith('ERROR') || finalCode.length < 1000) {
+      return { success: false, error: 'Invalid code generated' };
+    }
+    
+    if (!finalCode.includes('export default')) {
+      return { success: false, error: 'Missing export default' };
+    }
+    
+    if (currentCode === finalCode) {
+      return { success: false, error: 'No changes were made' };
+    }
+    
+    // Commit
+    const commitMessage = `[OmniBot] ${pending.instruction.slice(0, 60)}`;
+    const result = await githubPut('cloudflare-worker/src/index.js', finalCode, commitMessage, env);
+    
+    if (!result.commit) {
+      return { success: false, error: 'Commit failed' };
+    }
+    
+    // Cleanup
+    await env.CONTEXT.delete(`pending_edit_${editId}`);
+    
+    await logTelemetry('edit_execute_success', {
+      editId,
+      instruction: pending.instruction,
+      commit: result.commit.sha
+    }, env);
+    
+    return {
+      success: true,
+      commit: result.commit.sha,
+      url: result.commit.html_url
+    };
+    
+  } catch (e) {
+    await logTelemetry('edit_execute_error', { error: e.message }, env);
+    return { success: false, error: e.message };
+  }
+}
+
+// Legacy selfEdit - now just calls prepareEdit (for backwards compat)
+async function selfEdit(instruction, env, streamCallback = null) {
+  // For streaming mode, show progress
+  if (streamCallback) {
+    streamCallback({ status: 'planning', message: 'Analyzing your request...' });
+  }
   
-  const systemPrompt = `You are modifying Cloudflare Worker code.
-
-${context.prompt}
-
-CRITICAL: Output COMPLETE code from start to end.
-The code MUST start with /** and end with };
-NO truncation allowed - include every line.
-
-NO explanations, NO markdown fences.`;
-
-  const userPrompt = `Current code (${currentCode.length} chars):
-
-\`\`\`javascript
-${currentCode}
-\`\`\`
-
-Change: ${instruction}
-
-Output the COMPLETE modified code:`;
-
-  return await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  const result = await prepareEdit(instruction, env);
+  
+  if (!result.success) {
+    return result;
+  }
+  
+  // Return with approval prompt
+  return {
+    success: true,
+    awaiting_approval: true,
+    editId: result.editId,
+    message: result.review,
+    plan: result.plan,
+    patches_preview: result.patches_preview
+  };
+}
 }
 
 async function selfEdit(instruction, env, streamCallback = null) {
@@ -787,6 +1063,50 @@ const HTML = `<!DOCTYPE html>
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.3; }
+    }
+    
+    /* Approval buttons */
+    .approval-buttons {
+      display: flex;
+      gap: 12px;
+      margin: 16px 0;
+      justify-content: center;
+    }
+    
+    .approve-btn, .reject-btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .approve-btn {
+      background: var(--lcars-cyan);
+      color: #000;
+    }
+    
+    .approve-btn:hover {
+      filter: brightness(1.2);
+      transform: scale(1.05);
+    }
+    
+    .reject-btn {
+      background: var(--lcars-red);
+      color: #000;
+    }
+    
+    .reject-btn:hover {
+      filter: brightness(1.2);
+    }
+    
+    .msg.info {
+      border-color: var(--lcars-blue);
+      color: var(--lcars-text);
+      white-space: pre-wrap;
     }
     
     .lcars-footer-end {
@@ -1436,7 +1756,7 @@ const HTML = `<!DOCTYPE html>
                     if (data.status) {
                       setEditStatus(data.message || data.status, true);
                     }
-                    if (data.success !== undefined) {
+                    if (data.success !== undefined || data.awaiting_approval) {
                       result = data;
                     }
                   } catch (e) {}
@@ -1446,10 +1766,54 @@ const HTML = `<!DOCTYPE html>
             
             setEditStatus('', false);
             
-            if (result.success) {
+            // Handle approval flow
+            if (result.awaiting_approval && result.editId) {
+              addMessage('system', '📋 **Proposed Changes:**\\n\\n' + (result.message || result.plan), 'info');
+              
+              // Show approval buttons
+              const approveDiv = document.createElement('div');
+              approveDiv.className = 'approval-buttons';
+              approveDiv.innerHTML = '<button class="approve-btn" data-edit-id="' + result.editId + '">✓ Approve & Deploy</button>' +
+                '<button class="reject-btn" data-edit-id="' + result.editId + '">✗ Cancel</button>';
+              $messages.appendChild(approveDiv);
+              
+              // Add event listeners
+              approveDiv.querySelector('.approve-btn').onclick = async function() {
+                const editId = this.dataset.editId;
+                setEditStatus('Applying changes...', true);
+                approveDiv.remove();
+                
+                try {
+                  const res = await fetch('/api/approve-edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                  });
+                  const data = await res.json();
+                  setEditStatus('', false);
+                  
+                  if (data.success) {
+                    addMessage('system', '✓ Changes deployed! Commit: ' + data.commit + (data.url ? '\\n' + data.url : ''), 'success');
+                  } else {
+                    addMessage('system', '✗ ' + (data.error || 'Deploy failed'), 'error');
+                  }
+                } catch (e) {
+                  setEditStatus('', false);
+                  addMessage('system', '✗ Error: ' + e.message, 'error');
+                }
+                loadStats();
+              };
+              
+              approveDiv.querySelector('.reject-btn').onclick = function() {
+                approveDiv.remove();
+                addMessage('system', 'Edit cancelled', 'info');
+              };
+              
+              scrollToBottom();
+            } else if (result.success) {
               addMessage('system', '✓ ' + result.explanation + (result.url ? '\\n' + result.url : ''), 'success');
             } else {
-              addMessage('system', '✗ ' + (result.error || 'Edit failed'), 'error');
+              addMessage('system', '✗ ' + (result.error || 'Edit failed') + (result.details ? '\\n' + result.details : ''), 'error');
             }
           } else {
             const response = await fetch(endpoint, {
@@ -1679,7 +2043,7 @@ export default {
       }
     }
     
-    // Self-edit endpoint
+    // Self-edit endpoint - now returns plan for approval
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
       try {
         const { instruction } = await request.json();
@@ -1720,6 +2084,29 @@ export default {
             headers: { ...cors, 'Content-Type': 'application/json' } 
           });
         }
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Approve and execute edit
+    if (url.pathname === '/api/approve-edit' && request.method === 'POST') {
+      try {
+        const { editId } = await request.json();
+        
+        if (!editId) {
+          return new Response(JSON.stringify({ success: false, error: 'Missing editId' }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        const result = await executeEdit(editId, env);
+        return new Response(JSON.stringify(result), { 
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
       } catch (e) {
         return new Response(JSON.stringify({ success: false, error: e.message }), { 
           status: 500,
