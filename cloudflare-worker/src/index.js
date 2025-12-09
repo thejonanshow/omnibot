@@ -1,27 +1,22 @@
 /**
- * OmniBot - Dumbo Octopus Edition
- * https://en.wikipedia.org/wiki/Grimpoteuthis
+ * OmniBot - Electric Eel Edition
+ * https://en.wikipedia.org/wiki/Electric_eel
  * 
  * Semantic versioning via exotic sea creatures (alphabetical):
- * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus...
+ * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus, E: Electric Eel
  * 
- * Current: Dumbo Octopus (D) - Star Trek LCARS UI, Google Auth, Live Updates
+ * Current: Electric Eel (E) - Simple Google OAuth Redirect Login
  * 
- * Features:
- * - LCARS-style Star Trek TNG interface
- * - Google OAuth for jonanscheffler@gmail.com
- * - Live streaming edit updates
- * - Staging/Production visual indicators
- * - Full telemetry dashboard
- * - KV context viewer & editor
- * - Master prompt configuration
- * - All AIs get full context from KV
+ * NEW: Proper OAuth 2.0 redirect flow
+ * - /auth/google → redirects to Google
+ * - /auth/callback → handles response, sets cookie
+ * - Cookie-based session (24hr)
  */
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
 const GITHUB_API_URL = 'https://api.github.com';
 const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
-const VERSION = 'Dumbo Octopus';
+const VERSION = 'Electric Eel';
 
 const GROQ_MODELS = {
   qwen: 'qwen2.5-coder-32k-instruct',
@@ -36,7 +31,6 @@ const REQUIRED_FUNCTIONS = [
   'export default'
 ];
 
-// Default master prompt for all AI operations
 const DEFAULT_MASTER_PROMPT = `You are OmniBot, a self-editing AI assistant.
 
 Project Context:
@@ -57,6 +51,59 @@ Rules:
 - Code must work in Cloudflare Workers (no browser APIs in runtime)
 - Validate all changes before committing`;
 
+// ============== GOOGLE OAUTH ==============
+function getGoogleAuthUrl(env, redirectUri) {
+  const params = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'email profile',
+    access_type: 'online',
+    prompt: 'select_account'
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+async function exchangeCodeForToken(code, env, redirectUri) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    })
+  });
+  return res.json();
+}
+
+async function getGoogleUserInfo(accessToken) {
+  const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  return res.json();
+}
+
+function createSessionToken(email) {
+  // Simple session: base64 of email + timestamp + expiry
+  const expiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+  const payload = JSON.stringify({ email, expiry });
+  return btoa(payload);
+}
+
+function validateSession(token) {
+  try {
+    const payload = JSON.parse(atob(token));
+    if (payload.expiry > Date.now() && payload.email === ALLOWED_EMAIL) {
+      return { valid: true, email: payload.email };
+    }
+  } catch (e) {}
+  return { valid: false };
+}
+
+// ============== KV CONTEXT ==============
 async function getContext(env) {
   if (!env.CONTEXT) return { prompt: DEFAULT_MASTER_PROMPT, data: {} };
   
@@ -89,14 +136,12 @@ async function logTelemetry(event, data, env) {
     
     if (!telemetry.events) telemetry.events = [];
     telemetry.events.unshift({ timestamp: now, event, data });
-    telemetry.events = telemetry.events.slice(0, 100); // Keep last 100 events
+    telemetry.events = telemetry.events.slice(0, 100);
     
-    // Update stats
     if (!telemetry.stats) telemetry.stats = {};
     telemetry.stats[event] = (telemetry.stats[event] || 0) + 1;
     telemetry.stats.lastActivity = now;
     
-    // Track context size
     const context = await env.CONTEXT.get('shared_data') || '';
     telemetry.stats.contextSize = context.length;
     telemetry.stats.contextWords = context.split(/\s+/).filter(w => w).length;
@@ -107,6 +152,7 @@ async function logTelemetry(event, data, env) {
   }
 }
 
+// ============== GITHUB ==============
 async function githubGet(path, env) {
   const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}?ref=main`, {
     headers: { 
@@ -137,8 +183,8 @@ async function githubPut(path, content, message, env) {
   return res.json();
 }
 
+// ============== GROQ ==============
 async function callGroq(model, messages, env, systemPrompt = null) {
-  // Get master prompt from context
   const context = await getContext(env);
   const fullSystemPrompt = systemPrompt 
     ? `${context.prompt}\n\n${systemPrompt}`
@@ -172,6 +218,7 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   return data.choices?.[0]?.message?.content || 'No response';
 }
 
+// ============== CODE VALIDATION ==============
 function validateCodeStructure(code) {
   const missing = [];
   
@@ -182,24 +229,15 @@ function validateCodeStructure(code) {
   }
   
   if (missing.length > 0) {
-    return {
-      valid: false,
-      reason: `Missing required functions: ${missing.join(', ')}`
-    };
+    return { valid: false, reason: `Missing required functions: ${missing.join(', ')}` };
   }
   
   if (code.length < 5000) {
-    return {
-      valid: false,
-      reason: `Code too short (${code.length} chars) - appears to be partial or replacement`
-    };
+    return { valid: false, reason: `Code too short (${code.length} chars) - appears to be partial` };
   }
   
   if (!code.includes('const HTML =') && !code.includes('<html>')) {
-    return {
-      valid: false,
-      reason: 'Missing HTML UI - structure destroyed'
-    };
+    return { valid: false, reason: 'Missing HTML UI - structure destroyed' };
   }
   
   return { valid: true };
@@ -216,6 +254,7 @@ function cleanCodeFences(text) {
   return cleaned;
 }
 
+// ============== SELF EDIT ==============
 async function generateWithLlama(instruction, currentCode, env) {
   const context = await getContext(env);
   
@@ -266,11 +305,7 @@ async function selfEdit(instruction, env, streamCallback = null) {
     const validation = validateCodeStructure(finalCode);
     if (!validation.valid) {
       await logTelemetry('edit_failed', { reason: validation.reason }, env);
-      return {
-        success: false,
-        error: 'Safety check failed',
-        explanation: validation.reason
-      };
+      return { success: false, error: 'Safety check failed', explanation: validation.reason };
     }
     
     if (currentCode.replace(/\s/g, '') === finalCode.replace(/\s/g, '')) {
@@ -298,10 +333,7 @@ async function selfEdit(instruction, env, streamCallback = null) {
       explanation: `Modified code based on: ${instruction}`,
       commit: result.commit.sha,
       url: result.commit.html_url,
-      stats: {
-        oldSize: currentCode.length,
-        newSize: finalCode.length
-      }
+      stats: { oldSize: currentCode.length, newSize: finalCode.length }
     };
     
   } catch (e) {
@@ -310,26 +342,13 @@ async function selfEdit(instruction, env, streamCallback = null) {
   }
 }
 
-async function verifyGoogleToken(token, env) {
-  try {
-    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
-    const data = await res.json();
-    
-    if (data.email === ALLOWED_EMAIL && data.email_verified === 'true') {
-      return { valid: true, email: data.email };
-    }
-    return { valid: false, reason: 'Unauthorized email' };
-  } catch (e) {
-    return { valid: false, reason: e.message };
-  }
-}
-
+// ============== HTML UI ==============
 const HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OmniBot - LCARS Interface</title>
+  <title>OmniBot - Electric Eel</title>
   <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -341,11 +360,8 @@ const HTML = `<!DOCTYPE html>
       --lcars-gold: #ffcc00;
       --lcars-bg: #000000;
       --lcars-text: #ff9900;
-      --env-color: #ff9900;
+      --lcars-cyan: #00ccff;
     }
-    
-    body.staging { --env-color: #ffcc00; }
-    body.production { --env-color: #cc6666; }
     
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -357,6 +373,73 @@ const HTML = `<!DOCTYPE html>
       overflow: hidden;
     }
     
+    .login-screen {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 40px;
+    }
+    
+    .login-logo {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--lcars-cyan);
+      text-shadow: 0 0 20px var(--lcars-cyan);
+      animation: glow 2s ease-in-out infinite;
+    }
+    
+    @keyframes glow {
+      0%, 100% { text-shadow: 0 0 20px var(--lcars-cyan); }
+      50% { text-shadow: 0 0 40px var(--lcars-cyan), 0 0 60px var(--lcars-cyan); }
+    }
+    
+    .login-subtitle {
+      font-size: 18px;
+      color: var(--lcars-orange);
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    
+    .login-btn {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: linear-gradient(135deg, var(--lcars-blue), var(--lcars-cyan));
+      border: none;
+      padding: 20px 40px;
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 20px;
+      font-weight: 700;
+      color: #000;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.3s;
+      box-shadow: 0 4px 20px rgba(0, 204, 255, 0.3);
+    }
+    
+    .login-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 30px rgba(0, 204, 255, 0.5);
+    }
+    
+    .login-btn svg {
+      width: 24px;
+      height: 24px;
+    }
+    
+    .version-tag {
+      position: fixed;
+      bottom: 20px;
+      font-size: 12px;
+      color: var(--lcars-purple);
+      letter-spacing: 2px;
+    }
+    
+    /* Main app styles */
     .lcars-frame {
       height: 100%;
       display: grid;
@@ -437,20 +520,13 @@ const HTML = `<!DOCTYPE html>
       color: #000;
     }
     
-    .lcars-env {
-      background: var(--env-color);
+    .lcars-user {
+      background: var(--lcars-cyan);
       padding: 8px 20px;
       border-radius: 20px;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 700;
-      text-transform: uppercase;
       color: #000;
-      animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
     }
     
     .lcars-header-end {
@@ -483,12 +559,6 @@ const HTML = `<!DOCTYPE html>
       border-radius: 4px;
       font-size: 14px;
       line-height: 1.5;
-      animation: fadeIn 0.2s;
-    }
-    
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
     }
     
     .msg.user {
@@ -500,90 +570,58 @@ const HTML = `<!DOCTYPE html>
     .msg.assistant {
       align-self: flex-start;
       background: #222;
-      border: 1px solid var(--lcars-orange);
+      border-left: 3px solid var(--lcars-orange);
     }
     
     .msg.system {
       align-self: center;
-      background: var(--lcars-purple);
-      color: #000;
+      background: #1a1a1a;
+      border: 1px solid var(--lcars-purple);
       font-size: 12px;
     }
     
-    .msg.success { border-color: #0f0; background: #001100; }
-    .msg.error { border-color: var(--lcars-red); background: #110000; }
+    .msg.success { border-color: var(--lcars-cyan); color: var(--lcars-cyan); }
+    .msg.error { border-color: var(--lcars-red); color: var(--lcars-red); }
     
-    .edit-status {
-      padding: 8px 20px;
-      background: #222;
+    .input-bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      background: #0a0a0a;
       border-top: 2px solid var(--lcars-orange);
-      font-size: 12px;
-      display: none;
     }
     
-    .edit-status.active {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    
-    .edit-status-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--lcars-gold);
-      border-radius: 50%;
-      animation: blink 0.5s infinite;
-    }
-    
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-    
-    .input-area {
-      padding: 12px 20px;
-      background: #111;
-      border-top: 3px solid var(--lcars-orange);
-      display: flex;
-      gap: 12px;
-    }
-    
-    .input-field {
+    .input-bar input {
       flex: 1;
-      background: #000;
+      background: #111;
       border: 2px solid var(--lcars-blue);
-      border-radius: 4px;
+      border-radius: 8px;
       padding: 12px 16px;
       font-family: inherit;
       font-size: 14px;
       color: var(--lcars-text);
-      outline: none;
-      resize: none;
     }
     
-    .input-field:focus {
+    .input-bar input:focus {
+      outline: none;
+      border-color: var(--lcars-cyan);
+    }
+    
+    .input-bar input.edit-mode {
       border-color: var(--lcars-gold);
     }
     
-    .input-field.edit-mode {
-      border-color: var(--lcars-red);
-    }
-    
-    .send-btn {
+    .input-bar button {
       background: var(--lcars-orange);
       border: none;
-      border-radius: 4px;
       padding: 12px 24px;
+      border-radius: 8px;
       font-family: inherit;
       font-size: 14px;
       font-weight: 700;
-      text-transform: uppercase;
       color: #000;
       cursor: pointer;
     }
-    
-    .send-btn:hover { filter: brightness(1.2); }
-    .send-btn:disabled { opacity: 0.5; }
     
     .lcars-footer {
       display: flex;
@@ -593,44 +631,59 @@ const HTML = `<!DOCTYPE html>
     
     .lcars-footer-curve {
       width: 80px;
-      background: var(--lcars-blue);
+      background: var(--lcars-purple);
       border-radius: 0 40px 0 0;
     }
     
     .lcars-footer-bar {
       flex: 1;
-      background: var(--lcars-purple);
+      background: var(--lcars-tan);
       display: flex;
       align-items: center;
       padding: 0 20px;
       gap: 20px;
     }
     
-    .lcars-stat {
-      font-size: 12px;
-      color: #000;
-      font-weight: 700;
-      text-transform: uppercase;
+    .stat { font-size: 14px; font-weight: 700; color: #000; }
+    
+    .edit-status {
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .edit-status.active { display: flex; }
+    
+    .edit-status-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--lcars-cyan);
+      border-radius: 50%;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
     }
     
     .lcars-footer-end {
-      width: 40px;
-      background: var(--lcars-tan);
+      width: 60px;
+      background: var(--lcars-orange);
       border-radius: 20px 0 0 0;
     }
     
-    /* Modal styles */
+    .hidden { display: none !important; }
+    
+    /* Modal */
     .modal {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      inset: 0;
       background: rgba(0,0,0,0.9);
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 100;
+      z-index: 1000;
     }
     
     .modal.open { display: flex; }
@@ -639,77 +692,80 @@ const HTML = `<!DOCTYPE html>
       background: #111;
       border: 3px solid var(--lcars-orange);
       border-radius: 20px;
+      padding: 24px;
+      max-width: 600px;
       width: 90%;
-      max-width: 800px;
       max-height: 80vh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
+      overflow-y: auto;
     }
     
     .modal-header {
-      background: var(--lcars-orange);
-      padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 20px;
     }
     
     .modal-title {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 700;
-      text-transform: uppercase;
-      color: #000;
+      color: var(--lcars-orange);
     }
     
     .modal-close {
       background: var(--lcars-red);
       border: none;
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
       font-size: 18px;
-      color: #000;
       cursor: pointer;
+      color: #000;
     }
     
-    .modal-body {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-    }
-    
-    .modal-textarea {
+    .modal textarea {
       width: 100%;
-      min-height: 300px;
-      background: #000;
+      min-height: 200px;
+      background: #0a0a0a;
       border: 2px solid var(--lcars-blue);
-      border-radius: 4px;
+      border-radius: 8px;
       padding: 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 13px;
+      font-family: monospace;
+      font-size: 12px;
       color: var(--lcars-text);
       resize: vertical;
     }
     
-    .modal-footer {
-      padding: 16px 20px;
-      background: #222;
+    .modal-actions {
       display: flex;
-      justify-content: flex-end;
       gap: 12px;
+      margin-top: 16px;
     }
+    
+    .modal-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    
+    .modal-btn.primary { background: var(--lcars-cyan); color: #000; }
+    .modal-btn.secondary { background: var(--lcars-purple); color: #000; }
     
     .telemetry-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 12px;
       margin-bottom: 20px;
     }
     
     .telemetry-card {
-      background: #222;
-      border: 2px solid var(--lcars-blue);
+      background: #1a1a1a;
+      border: 1px solid var(--lcars-blue);
       border-radius: 8px;
       padding: 12px;
       text-align: center;
@@ -718,254 +774,205 @@ const HTML = `<!DOCTYPE html>
     .telemetry-value {
       font-size: 24px;
       font-weight: 700;
-      color: var(--lcars-gold);
+      color: var(--lcars-cyan);
     }
     
     .telemetry-label {
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      color: var(--lcars-blue);
-      margin-top: 4px;
+      color: var(--lcars-purple);
     }
     
     .event-list {
-      max-height: 300px;
+      max-height: 200px;
       overflow-y: auto;
     }
     
     .event-item {
-      padding: 8px 12px;
+      padding: 8px;
       border-bottom: 1px solid #333;
-      font-size: 12px;
+      font-size: 11px;
       font-family: monospace;
     }
-    
-    /* Auth overlay */
-    .auth-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #000;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 200;
-    }
-    
-    .auth-overlay.hidden { display: none; }
-    
-    .auth-title {
-      font-size: 48px;
-      font-weight: 700;
-      color: var(--lcars-orange);
-      margin-bottom: 40px;
-      text-transform: uppercase;
-      letter-spacing: 8px;
-    }
-    
-    .google-btn {
-      background: var(--lcars-blue);
-      border: none;
-      padding: 16px 40px;
-      font-family: inherit;
-      font-size: 16px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #000;
-      cursor: pointer;
-      border-radius: 8px;
-    }
-    
-    .google-btn:hover { filter: brightness(1.2); }
-    
-    @media (max-width: 768px) {
-      .lcars-frame {
-        grid-template-columns: 80px 1fr;
-        grid-template-rows: 60px 1fr 50px;
-      }
-      
-      .lcars-title { font-size: 18px; }
-      .lcars-btn { font-size: 9px; padding: 8px 4px; }
-    }
   </style>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body class="staging">
-  <div class="auth-overlay" id="authOverlay">
-    <div class="auth-title">OmniBot</div>
-    <div id="googleSignIn"></div>
+<body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-logo">OMNIBOT</div>
+    <div class="login-subtitle">Electric Eel Edition</div>
+    <a href="/auth/google" class="login-btn">
+      <svg viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Sign in with Google
+    </a>
+    <div class="version-tag">v5.0 ELECTRIC EEL</div>
   </div>
 
-  <div class="lcars-frame">
+  <!-- Main App (hidden until logged in) -->
+  <div id="mainApp" class="lcars-frame hidden">
     <div class="lcars-sidebar">
       <div class="lcars-sidebar-top"></div>
       <div class="lcars-sidebar-content">
         <button class="lcars-btn active" data-mode="chat">Chat</button>
         <button class="lcars-btn" data-mode="edit">Edit</button>
+        <button class="lcars-btn" data-view="telemetry">Stats</button>
         <button class="lcars-btn" data-view="context">Context</button>
-        <button class="lcars-btn" data-view="telemetry">Telemetry</button>
         <button class="lcars-btn" data-view="prompt">Prompt</button>
-        <button class="lcars-btn danger" id="promoteBtn">Promote</button>
+        <button class="lcars-btn danger" id="logoutBtn">Logout</button>
       </div>
     </div>
     
     <div class="lcars-header">
       <div class="lcars-header-curve"></div>
       <div class="lcars-header-bar">
-        <div class="lcars-title">OmniBot</div>
-        <div class="lcars-env" id="envBadge">STAGING</div>
+        <span class="lcars-title">OmniBot</span>
+        <span id="userEmail" class="lcars-user">...</span>
       </div>
       <div class="lcars-header-end"></div>
     </div>
     
     <div class="lcars-main">
-      <div class="messages" id="messages">
-        <div class="msg system">Welcome to OmniBot - LCARS Interface. Authorized: jonanscheffler@gmail.com</div>
-      </div>
-      <div class="edit-status" id="editStatus">
-        <div class="edit-status-dot"></div>
-        <span id="editStatusText">Processing...</span>
-      </div>
-      <div class="input-area">
-        <textarea class="input-field" id="input" placeholder="Enter command..." rows="1"></textarea>
-        <button class="send-btn" id="sendBtn">ENGAGE</button>
+      <div id="messages" class="messages"></div>
+      <div class="input-bar">
+        <input type="text" id="input" placeholder="Enter command...">
+        <button id="sendBtn">Send</button>
       </div>
     </div>
     
     <div class="lcars-footer">
       <div class="lcars-footer-curve"></div>
       <div class="lcars-footer-bar">
-        <span class="lcars-stat" id="statVersion">Version: Dumbo Octopus</span>
-        <span class="lcars-stat" id="statContext">Context: 0 words</span>
-        <span class="lcars-stat" id="statEdits">Edits: 0</span>
+        <span id="statContext" class="stat">Context: 0 words</span>
+        <span id="statEdits" class="stat">Edits: 0</span>
+        <div id="editStatus" class="edit-status">
+          <div class="edit-status-dot"></div>
+          <span id="editStatusText">Processing...</span>
+        </div>
       </div>
       <div class="lcars-footer-end"></div>
     </div>
   </div>
-  
-  <!-- Context Modal -->
-  <div class="modal" id="contextModal">
+
+  <!-- Modals -->
+  <div id="telemetryModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Telemetry</span>
+        <button class="modal-close" onclick="closeModal('telemetryModal')">×</button>
+      </div>
+      <div id="telemetryGrid" class="telemetry-grid"></div>
+      <div id="eventList" class="event-list"></div>
+    </div>
+  </div>
+
+  <div id="contextModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <span class="modal-title">Shared Context</span>
         <button class="modal-close" onclick="closeModal('contextModal')">×</button>
       </div>
-      <div class="modal-body">
-        <textarea class="modal-textarea" id="contextData" placeholder="Enter shared context data (JSON)..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button class="lcars-btn" onclick="saveContext()">Save Context</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Telemetry Modal -->
-  <div class="modal" id="telemetryModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title">Telemetry Dashboard</span>
-        <button class="modal-close" onclick="closeModal('telemetryModal')">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="telemetry-grid" id="telemetryGrid"></div>
-        <h3 style="margin: 20px 0 10px; color: var(--lcars-orange);">Recent Events</h3>
-        <div class="event-list" id="eventList"></div>
+      <textarea id="contextData"></textarea>
+      <div class="modal-actions">
+        <button class="modal-btn secondary" onclick="closeModal('contextModal')">Cancel</button>
+        <button class="modal-btn primary" onclick="saveContext()">Save</button>
       </div>
     </div>
   </div>
-  
-  <!-- Prompt Modal -->
-  <div class="modal" id="promptModal">
+
+  <div id="promptModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
         <span class="modal-title">Master Prompt</span>
         <button class="modal-close" onclick="closeModal('promptModal')">×</button>
       </div>
-      <div class="modal-body">
-        <textarea class="modal-textarea" id="masterPrompt" placeholder="Enter master prompt for all AI operations..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button class="lcars-btn" onclick="savePrompt()">Save Prompt</button>
+      <textarea id="masterPrompt"></textarea>
+      <div class="modal-actions">
+        <button class="modal-btn secondary" onclick="closeModal('promptModal')">Cancel</button>
+        <button class="modal-btn primary" onclick="savePrompt()">Save</button>
       </div>
     </div>
   </div>
 
   <script>
     (function() {
-      'use strict';
+      const $loginScreen = document.getElementById('loginScreen');
+      const $mainApp = document.getElementById('mainApp');
+      const $messages = document.getElementById('messages');
+      const $input = document.getElementById('input');
+      const $sendBtn = document.getElementById('sendBtn');
+      const $userEmail = document.getElementById('userEmail');
+      const $editStatus = document.getElementById('editStatus');
+      const $editStatusText = document.getElementById('editStatusText');
       
       let mode = 'chat';
       let messages = [];
       let loading = false;
-      let authToken = null;
-      let isProduction = window.location.hostname.includes('omnibot.') && !window.location.hostname.includes('staging');
       
-      const $messages = document.getElementById('messages');
-      const $input = document.getElementById('input');
-      const $sendBtn = document.getElementById('sendBtn');
-      const $editStatus = document.getElementById('editStatus');
-      const $editStatusText = document.getElementById('editStatusText');
-      const $envBadge = document.getElementById('envBadge');
-      const $authOverlay = document.getElementById('authOverlay');
-      const $promoteBtn = document.getElementById('promoteBtn');
-      
-      // Set environment
-      if (isProduction) {
-        document.body.classList.remove('staging');
-        document.body.classList.add('production');
-        $envBadge.textContent = 'PRODUCTION';
-        $envBadge.style.background = 'var(--lcars-red)';
-        $promoteBtn.style.display = 'none';
+      // Check for session cookie
+      function getSession() {
+        const match = document.cookie.match(/omnibot_session=([^;]+)/);
+        return match ? match[1] : null;
       }
       
-      // Google Sign-In
-      function initGoogleAuth() {
-        if (typeof google === 'undefined') {
-          setTimeout(initGoogleAuth, 100);
-          return;
-        }
-        
-        google.accounts.id.initialize({
-          client_id: '107783640386-ja8kfg90o5hfkgdbbv1pg3s753r24mf7.apps.googleusercontent.com',
-          callback: handleCredentialResponse
-        });
-        
-        google.accounts.id.renderButton(
-          document.getElementById('googleSignIn'),
-          { theme: 'filled_black', size: 'large', text: 'signin_with' }
-        );
+      function setSession(token) {
+        document.cookie = 'omnibot_session=' + token + '; path=/; max-age=' + (24*60*60) + '; SameSite=Lax';
       }
       
-      function handleCredentialResponse(response) {
-        authToken = response.credential;
-        
-        // Verify with backend
-        fetch('/api/verify-auth', {
+      function clearSession() {
+        document.cookie = 'omnibot_session=; path=/; max-age=0';
+      }
+      
+      // Check URL for auth callback
+      const urlParams = new URLSearchParams(window.location.search);
+      const sessionToken = urlParams.get('session');
+      const userEmail = urlParams.get('email');
+      
+      if (sessionToken && userEmail) {
+        // Coming back from OAuth
+        setSession(sessionToken);
+        window.history.replaceState({}, '', '/');
+        showApp(userEmail);
+      } else if (getSession()) {
+        // Already have session - verify it
+        fetch('/api/verify-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: authToken })
+          body: JSON.stringify({ token: getSession() })
         })
         .then(r => r.json())
         .then(data => {
           if (data.valid) {
-            $authOverlay.classList.add('hidden');
-            loadStats();
+            showApp(data.email);
           } else {
-            alert('Unauthorized: ' + (data.reason || 'Access denied'));
+            clearSession();
+            showLogin();
           }
+        })
+        .catch(() => {
+          clearSession();
+          showLogin();
         });
+      } else {
+        showLogin();
       }
       
-      // Check if already authed (for dev/testing)
-      const skipAuth = window.location.search.includes('skipauth=1');
-      if (skipAuth) {
-        $authOverlay.classList.add('hidden');
-      } else {
-        initGoogleAuth();
+      function showLogin() {
+        $loginScreen.classList.remove('hidden');
+        $mainApp.classList.add('hidden');
       }
+      
+      function showApp(email) {
+        $loginScreen.classList.add('hidden');
+        $mainApp.classList.remove('hidden');
+        $userEmail.textContent = email;
+        loadStats();
+      }
+      
+      // Logout
+      document.getElementById('logoutBtn').onclick = function() {
+        clearSession();
+        showLogin();
+      };
       
       // Mode switching
       document.querySelectorAll('[data-mode]').forEach(btn => {
@@ -997,21 +1004,6 @@ const HTML = `<!DOCTYPE html>
         document.getElementById(id).classList.remove('open');
       };
       
-      // Promote button
-      $promoteBtn.onclick = function() {
-        if (confirm('Promote staging to production?')) {
-          fetch('/api/promote', { method: 'POST' })
-            .then(r => r.json())
-            .then(data => {
-              if (data.success) {
-                addMessage('system', 'Promotion triggered! CI/CD will deploy to production.', 'success');
-              } else {
-                addMessage('system', 'Promotion failed: ' + data.error, 'error');
-              }
-            });
-        }
-      };
-      
       function addMessage(role, content, type) {
         messages.push({ role, content, type });
         render();
@@ -1034,7 +1026,7 @@ const HTML = `<!DOCTYPE html>
       function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
-        return div.innerHTML.replace(/(https?:\\/\\/[^\\s]+)/g, '<a href="$1" target="_blank" style="color: var(--lcars-blue)">$1</a>');
+        return div.innerHTML.replace(/(https?:\\/\\/[^\\s]+)/g, '<a href="$1" target="_blank" style="color: var(--lcars-cyan)">$1</a>');
       }
       
       function setEditStatus(text, active) {
@@ -1061,7 +1053,6 @@ const HTML = `<!DOCTYPE html>
             ? { instruction: text }
             : { messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })) };
           
-          // For edit mode, use event stream for live updates
           if (mode === 'edit') {
             const response = await fetch(endpoint + '?stream=1', {
               method: 'POST',
@@ -1171,7 +1162,7 @@ const HTML = `<!DOCTYPE html>
       window.saveContext = async function() {
         try {
           const value = document.getElementById('contextData').value;
-          JSON.parse(value); // Validate JSON
+          JSON.parse(value);
           
           await fetch('/api/context', {
             method: 'POST',
@@ -1211,13 +1202,13 @@ const HTML = `<!DOCTYPE html>
       };
       
       render();
-      loadStats();
     })();
   </script>
 </body>
 </html>
 `;
 
+// ============== MAIN HANDLER ==============
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1231,6 +1222,72 @@ export default {
       return new Response(null, { headers: cors });
     }
     
+    const baseUrl = url.origin;
+    const redirectUri = `${baseUrl}/auth/callback`;
+    
+    // ===== OAuth Routes =====
+    
+    // Start Google OAuth
+    if (url.pathname === '/auth/google') {
+      const authUrl = getGoogleAuthUrl(env, redirectUri);
+      return Response.redirect(authUrl, 302);
+    }
+    
+    // OAuth callback
+    if (url.pathname === '/auth/callback') {
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+      
+      if (error) {
+        return new Response(`Auth error: ${error}`, { status: 400 });
+      }
+      
+      if (!code) {
+        return new Response('No code provided', { status: 400 });
+      }
+      
+      try {
+        // Exchange code for token
+        const tokenData = await exchangeCodeForToken(code, env, redirectUri);
+        
+        if (tokenData.error) {
+          return new Response(`Token error: ${tokenData.error_description || tokenData.error}`, { status: 400 });
+        }
+        
+        // Get user info
+        const userInfo = await getGoogleUserInfo(tokenData.access_token);
+        
+        if (userInfo.email !== ALLOWED_EMAIL) {
+          return new Response(`Access denied. Only ${ALLOWED_EMAIL} can access this app.`, { 
+            status: 403,
+            headers: { 'Content-Type': 'text/html' }
+          });
+        }
+        
+        // Create session
+        const sessionToken = createSessionToken(userInfo.email);
+        
+        await logTelemetry('login', { email: userInfo.email }, env);
+        
+        // Redirect to app with session
+        return Response.redirect(`${baseUrl}/?session=${encodeURIComponent(sessionToken)}&email=${encodeURIComponent(userInfo.email)}`, 302);
+        
+      } catch (e) {
+        return new Response(`Auth error: ${e.message}`, { status: 500 });
+      }
+    }
+    
+    // Verify session
+    if (url.pathname === '/api/verify-session' && request.method === 'POST') {
+      const { token } = await request.json();
+      const result = validateSession(token);
+      return new Response(JSON.stringify(result), { 
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // ===== Main Routes =====
+    
     // Main UI
     if (url.pathname === '/' || url.pathname === '/chat') {
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
@@ -1241,17 +1298,8 @@ export default {
       return new Response(JSON.stringify({ 
         ok: true,
         version: VERSION,
-        creature: 'Dumbo Octopus'
+        creature: 'Electric Eel'
       }), { 
-        headers: { ...cors, 'Content-Type': 'application/json' } 
-      });
-    }
-    
-    // Verify Google auth
-    if (url.pathname === '/api/verify-auth' && request.method === 'POST') {
-      const { token } = await request.json();
-      const result = await verifyGoogleToken(token, env);
-      return new Response(JSON.stringify(result), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
       });
     }
@@ -1273,7 +1321,7 @@ export default {
       }
     }
     
-    // Self-edit endpoint with streaming
+    // Self-edit endpoint
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
       try {
         const { instruction } = await request.json();
@@ -1287,7 +1335,6 @@ export default {
         }
         
         if (stream) {
-          // Server-sent events for live updates
           const { readable, writable } = new TransformStream();
           const writer = writable.getWriter();
           const encoder = new TextEncoder();
@@ -1358,42 +1405,6 @@ export default {
       return new Response(JSON.stringify(context.telemetry || {}), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
       });
-    }
-    
-    // Promote endpoint (trigger GitHub Actions)
-    if (url.pathname === '/api/promote' && request.method === 'POST') {
-      try {
-        // Trigger promote-to-production workflow
-        const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/actions/workflows/promote-to-production.yml/dispatches`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.GITHUB_TOKEN}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'OmniBot'
-          },
-          body: JSON.stringify({
-            ref: 'main',
-            inputs: { confirm: 'promote' }
-          })
-        });
-        
-        if (res.status === 204) {
-          await logTelemetry('promote_triggered', {}, env);
-          return new Response(JSON.stringify({ success: true }), { 
-            headers: { ...cors, 'Content-Type': 'application/json' } 
-          });
-        } else {
-          const error = await res.text();
-          return new Response(JSON.stringify({ success: false, error }), { 
-            headers: { ...cors, 'Content-Type': 'application/json' } 
-          });
-        }
-      } catch (e) {
-        return new Response(JSON.stringify({ success: false, error: e.message }), { 
-          status: 500,
-          headers: { ...cors, 'Content-Type': 'application/json' } 
-        });
-      }
     }
     
     // Test endpoint
