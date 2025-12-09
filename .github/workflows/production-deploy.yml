@@ -18,6 +18,8 @@ jobs:
   validate:
     name: Validate Deployment
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -56,6 +58,8 @@ jobs:
     name: Test Staging Before Production
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -90,6 +94,8 @@ jobs:
     needs: test-staging
     runs-on: ubuntu-latest
     if: success()
+    permissions:
+      contents: write
     
     environment:
       name: production
@@ -195,6 +201,8 @@ jobs:
     needs: deploy-production
     runs-on: ubuntu-latest
     if: success()
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout code
@@ -246,6 +254,8 @@ jobs:
     needs: [deploy-production, verify-production]
     runs-on: ubuntu-latest
     if: failure()
+    permissions:
+      contents: none
     
     steps:
       - name: Notify rollback needed
@@ -270,6 +280,8 @@ jobs:
     needs: [deploy-production, verify-production]
     runs-on: ubuntu-latest
     if: always()
+    permissions:
+      contents: none
     
     steps:
       - name: Determine status

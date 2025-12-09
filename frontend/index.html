@@ -1587,24 +1587,61 @@
     <script>
     // ==================== ERROR LOGGING SYSTEM ====================
 (function() {
+    // Throttle API logging to prevent excessive network calls
+    let logBuffer = [];
+    let logTimer = null;
+    const LOG_BATCH_DELAY = 2000; // Send logs every 2 seconds
+    const MAX_BUFFER_SIZE = 10;
+    
     // Send logs to API for remote testing/debugging
     async function sendLogToAPI(level, message, data) {
         try {
             const routerUrl = localStorage.getItem('routerUrl');
             if (!routerUrl) return; // Skip if no router configured
             
-            await fetch(`${routerUrl}/api/log`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    level,
-                    message,
-                    data,
-                    url: window.location.href
-                })
-            }).catch(() => {}); // Silently fail to avoid recursion
+            // Add to buffer instead of sending immediately
+            logBuffer.push({ level, message, data, url: window.location.href });
+            
+            // Send immediately if buffer is full, otherwise wait for batch
+            if (logBuffer.length >= MAX_BUFFER_SIZE) {
+                flushLogBuffer();
+            } else {
+                // Schedule batch send
+                if (!logTimer) {
+                    logTimer = setTimeout(flushLogBuffer, LOG_BATCH_DELAY);
+                }
+            }
         } catch (e) {
             // Silently fail to prevent infinite loops
+        }
+    }
+    
+    // Flush log buffer to API
+    async function flushLogBuffer() {
+        if (logBuffer.length === 0) return;
+        
+        const routerUrl = localStorage.getItem('routerUrl');
+        if (!routerUrl) return;
+        
+        const logsToSend = [...logBuffer];
+        logBuffer = [];
+        
+        if (logTimer) {
+            clearTimeout(logTimer);
+            logTimer = null;
+        }
+        
+        try {
+            // Send batch of logs
+            for (const log of logsToSend) {
+                await fetch(`${routerUrl}/api/log`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(log)
+                }).catch(() => {});
+            }
+        } catch (e) {
+            // Silently fail
         }
     }
     
@@ -1869,10 +1906,12 @@
             autoResize();
             updateSendButton();
 
-            // Add message with index for edit capability
-            const messageIndex = conversation.length;
-            addMessage('user', text, messageIndex);
+            // Add to conversation first to get correct index
             conversation.push({ role: 'user', content: text });
+            const messageIndex = conversation.length - 1;
+            
+            // Add message with correct index for edit capability
+            addMessage('user', text, messageIndex);
 
             const lowerText = text.toLowerCase();
             if (lowerText.includes('upgrade mode')) {
