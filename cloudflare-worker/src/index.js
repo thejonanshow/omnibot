@@ -294,8 +294,8 @@ function applyPatch(originalCode, patch) {
       const lines = result.split('\n');
       for (let i = 0; i < lines.length; i++) {
         const windowSize = oldText.split('\n').length;
-        const window = lines.slice(i, i + windowSize).join('\n');
-        if (window.replace(/\s+/g, ' ') === normalizedOld) {
+        const textWindow = lines.slice(i, i + windowSize).join('\n');
+        if (textWindow.replace(/\s+/g, ' ') === normalizedOld) {
           lines.splice(i, windowSize, newText);
           result = lines.join('\n');
           break;
