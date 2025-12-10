@@ -575,6 +575,7 @@
         
         button:active:not(:disabled) {
             transform: translateY(0);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
         
         button:disabled {
@@ -583,8 +584,9 @@
         }
         
         button:focus-visible {
-            outline: 2px solid var(--accent-primary);
+            outline: 3px solid var(--accent-primary);
             outline-offset: 2px;
+            box-shadow: 0 0 0 6px rgba(var(--accent-primary-rgb), 0.15);
         }
         
         /* Theme Toggle Button - Special styling */
@@ -978,6 +980,11 @@
             font-weight: 600;
         }
         
+        .secondary-btn:active:not(:disabled):not(.active) {
+            transform: translateY(0);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
         .secondary-btn:disabled {
             opacity: 0.4;
             cursor: not-allowed;
@@ -1366,7 +1373,9 @@
             
             .message {
                 max-width: 100%;
-                padding: var(--spacing-sm) var(--spacing-md);
+                padding: var(--spacing-md);
+                font-size: 0.938rem;
+                line-height: 1.65;
             }
             
             .input-container {
