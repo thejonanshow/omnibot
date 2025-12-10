@@ -23,7 +23,7 @@ const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
 const VERSION = {
   major: 1,
   minor: 1,
-  patch: 0,
+  patch: 1,
   codename: 'Electric Eel',
   emoji: '⚡',
   wiki: 'https://en.wikipedia.org/wiki/Electric_eel'
@@ -1145,55 +1145,60 @@ const HTML = `<!DOCTYPE html>
     
     .msg {
       max-width: 85%;
-      padding: 12px 16px;
-      border-radius: 4px;
-      font-size: 14px;
-      line-height: 1.5;
+      padding: 14px 18px;
+      border-radius: 6px;
+      font-size: 15px;
+      line-height: 1.6;
+      font-weight: 450;
     }
     
     .msg.user {
       align-self: flex-end;
       background: var(--lcars-blue);
       color: #000;
+      font-weight: 600;
     }
     
     .msg.assistant {
       align-self: flex-start;
-      background: #222;
-      border-left: 3px solid var(--lcars-orange);
+      background: #1a1a1a;
+      border-left: 4px solid var(--lcars-orange);
+      color: #f0f0f0;
     }
     
     .msg.system {
       align-self: center;
-      background: #1a1a1a;
+      background: #151515;
       border: 1px solid var(--lcars-purple);
-      font-size: 12px;
+      font-size: 14px;
+      color: #e0e0e0;
     }
     
-    .msg.success { border-color: var(--lcars-cyan); color: var(--lcars-cyan); }
-    .msg.error { border-color: var(--lcars-red); color: var(--lcars-red); }
-    .msg.info { border-color: var(--lcars-blue); color: var(--lcars-text); }
+    .msg.success { border-color: var(--lcars-cyan); color: #5fffff; font-weight: 600; }
+    .msg.error { border-color: var(--lcars-red); color: #ff6b6b; font-weight: 600; }
+    .msg.info { border-color: var(--lcars-blue); color: #e0e0e0; }
     
     /* Code blocks */
     .code-block {
       position: relative;
-      background: #0d0d0d;
+      background: #0a0a0a;
       border-radius: 6px;
       margin: 8px 0;
       overflow: hidden;
+      border: 1px solid #333;
     }
     
     .code-block pre {
       margin: 0;
       padding: 12px;
       overflow-x: auto;
-      font-size: 12px;
-      line-height: 1.4;
+      font-size: 13px;
+      line-height: 1.5;
     }
     
     .code-block code {
       font-family: 'SF Mono', Monaco, Consolas, monospace;
-      color: var(--lcars-cyan);
+      color: #5fffff;
     }
     
     .copy-btn {
@@ -1203,10 +1208,10 @@ const HTML = `<!DOCTYPE html>
       background: var(--lcars-orange);
       border: none;
       border-radius: 4px;
-      padding: 4px 8px;
-      font-size: 12px;
+      padding: 6px 10px;
+      font-size: 14px;
       cursor: pointer;
-      opacity: 0.7;
+      opacity: 0.8;
       transition: opacity 0.2s;
     }
     
@@ -1214,20 +1219,23 @@ const HTML = `<!DOCTYPE html>
     
     code.inline {
       background: #1a1a1a;
-      padding: 2px 6px;
+      padding: 3px 8px;
       border-radius: 4px;
       font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 0.9em;
-      color: var(--lcars-cyan);
+      font-size: 0.95em;
+      color: #5fffff;
+      border: 1px solid #333;
     }
     
     .msg a {
-      color: var(--lcars-cyan);
+      color: #5fffff;
       text-decoration: underline;
+      font-weight: 600;
     }
     
     .msg strong {
       color: var(--lcars-orange);
+      font-weight: 700;
     }
     
     .typing {
@@ -1628,14 +1636,44 @@ const HTML = `<!DOCTYPE html>
       }
       
       .messages {
-        padding: 10px;
-        gap: 8px;
+        padding: 8px;
+        gap: 10px;
       }
       
       .msg {
-        max-width: 92%;
-        padding: 10px 12px;
-        font-size: 13px;
+        max-width: 95%;
+        padding: 12px 14px;
+        font-size: 15px;
+        font-weight: 500;
+        line-height: 1.5;
+      }
+      
+      .msg.user {
+        background: var(--lcars-blue);
+        color: #000;
+        font-weight: 600;
+      }
+      
+      .msg.assistant {
+        background: #1a1a1a;
+        color: #f5f5f5;
+        border-left: 4px solid var(--lcars-orange);
+      }
+      
+      .msg.system {
+        font-size: 14px;
+        font-weight: 500;
+        color: #e0e0e0;
+      }
+      
+      .msg.error {
+        color: #ff6b6b;
+        font-weight: 600;
+      }
+      
+      .msg.success {
+        color: #5fffff;
+        font-weight: 600;
       }
       
       .input-bar {
@@ -1644,13 +1682,15 @@ const HTML = `<!DOCTYPE html>
       }
       
       .input-bar input {
-        padding: 10px 12px;
+        padding: 12px 14px;
         font-size: 16px; /* Prevent iOS zoom */
+        font-weight: 500;
       }
       
       .input-bar button {
-        padding: 10px 14px;
-        font-size: 13px;
+        padding: 12px 16px;
+        font-size: 14px;
+        font-weight: 700;
       }
       
       .lcars-footer-curve {
