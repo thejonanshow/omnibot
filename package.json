@@ -8,10 +8,16 @@
     "test:structure": "mocha tests/structure-basic.test.js --grep 'Structure' --timeout 5000",
     "test:safety": "mocha tests/structure-basic.test.js --grep 'Safety' --timeout 5000",
     "test:e2e": "playwright test",
-    "test:unit": "node --test tests/*.test.js --exclude tests/structure-*.test.js"
+    "test:unit": "node --test tests/*.test.js --exclude tests/structure-*.test.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:worker": "eslint cloudflare-worker/src/",
+    "complexity": "node scripts/analyze-complexity.js",
+    "complexity:worker": "node scripts/analyze-complexity.js cloudflare-worker/src"
   },
   "devDependencies": {
     "chai": "^4.3.10",
+    "eslint": "^8.57.1",
     "mocha": "^10.2.0"
   },
   "dependencies": {
