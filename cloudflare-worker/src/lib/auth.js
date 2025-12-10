@@ -1,7 +1,16 @@
 /**
- * Authentication utilities
+ * Authentication utilities for HMAC-based request verification
+ * 
+ * Provides challenge-response authentication to prevent replay attacks.
+ * Challenges are stored in KV with 60-second TTL.
  */
 
+/**
+ * Generate a unique authentication challenge
+ * 
+ * @param {KVNamespace} challengeStore - Cloudflare KV namespace for storing challenges
+ * @returns {Promise<{challenge: string, timestamp: number, expires_in: number}>} Challenge object
+ */
 export async function generateChallenge(challengeStore) {
   const challenge = crypto.randomUUID();
   const timestamp = Date.now();
@@ -17,6 +26,18 @@ export async function generateChallenge(challengeStore) {
   };
 }
 
+/**
+ * Verify an authenticated request
+ * 
+ * Validates HMAC signature and ensures challenge hasn't been used before.
+ * Challenges are deleted after use to prevent replay attacks.
+ * 
+ * @param {Request} request - HTTP request with auth headers
+ * @param {KVNamespace} challengeStore - KV namespace for challenges
+ * @param {string} secret - HMAC secret for signature verification
+ * @returns {Promise<boolean>} True if request is valid
+ * @throws {Error} If authentication fails
+ */
 export async function verifyRequest(request, challengeStore, secret) {
   const challenge = request.headers.get('X-Challenge');
   const signature = request.headers.get('X-Signature');

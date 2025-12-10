@@ -8,7 +8,7 @@ echo ""
 # Create .env if doesn't exist
 if [ ! -f .env ]; then
     echo "📝 Creating .env from template..."
-    cp .env.template .env
+    cp .env.example .env
 fi
 
 # Source the .env file to check what we have

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.wrangler/
+*.min.js
+scripts/experimental/
+playwright-report/
+test-results/
