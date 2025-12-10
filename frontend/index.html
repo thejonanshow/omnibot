@@ -843,6 +843,78 @@
         }
         
         /* ========================================
+           APPROVAL BUTTONS (for proposed changes)
+           ======================================== */
+        .approval-buttons {
+            display: flex;
+            gap: var(--spacing-md);
+            justify-content: center;
+            margin: var(--spacing-lg) auto;
+            padding: var(--spacing-md);
+            max-width: 700px;
+            animation: messageSlideIn 0.3s ease-out;
+        }
+        
+        .approve-btn,
+        .review-btn,
+        .deny-btn {
+            flex: 1;
+            padding: var(--spacing-md) var(--spacing-lg);
+            font-size: 1rem;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--border-radius-md);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .approve-btn {
+            background: linear-gradient(135deg, #00d084 0%, #00b871 100%);
+            color: #000;
+        }
+        
+        .approve-btn:hover {
+            background: linear-gradient(135deg, #00e594 0%, #00d084 100%);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 20px rgba(0, 208, 132, 0.4);
+        }
+        
+        .review-btn {
+            background: linear-gradient(135deg, #4a9eff 0%, #3b82f6 100%);
+            color: #fff;
+        }
+        
+        .review-btn:hover {
+            background: linear-gradient(135deg, #5bacff 0%, #4a9eff 100%);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 20px rgba(74, 158, 255, 0.4);
+        }
+        
+        .deny-btn {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5555 100%);
+            color: #fff;
+        }
+        
+        .deny-btn:hover {
+            background: linear-gradient(135deg, #ff7c7c 0%, #ff6b6b 100%);
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+        }
+        
+        .approve-btn:active,
+        .review-btn:active,
+        .deny-btn:active {
+            transform: translateY(0) scale(1);
+        }
+        
+        /* ========================================
            INPUT AREA (Enhanced with Secondary Buttons)
            ======================================== */
         .input-container {
@@ -2053,6 +2125,18 @@
         }
 
         function handleUpgradeResponse(response) {
+            // Handle approval flow for proposed changes
+            if (response.awaiting_approval && response.editId) {
+                // Show the proposed changes
+                const message = response.message || response.review || response.plan || 'Changes proposed';
+                addMessage('system', `📋 **Proposed Changes:**\n\n${message}`);
+                
+                // Show approval buttons
+                showApprovalButtons(response.editId, response.patches_preview || '');
+                return;
+            }
+            
+            // Handle completed upgrade
             if (response.success) {
                 addMessage('system', '✅ Upgrade Successful!');
                 if (response.changes) {
@@ -2063,6 +2147,12 @@
                 if (response.deployment_triggered) {
                     addMessage('system', '🚀 Deployment initiated. Changes will be live in ~60 seconds.');
                 }
+                if (response.commit) {
+                    addMessage('system', `✓ Committed: ${response.commit}`);
+                }
+                if (response.url) {
+                    addMessage('system', `🔗 ${response.url}`);
+                }
             } else {
                 addMessage('error', `❌ Upgrade Failed: ${response.error || 'Unknown error'}`);
             }
@@ -2070,6 +2160,106 @@
             if (upgradeMode) {
                 toggleUpgradeMode();
             }
+        }
+        
+        // Show approval buttons for proposed changes
+        function showApprovalButtons(editId, patchPreview) {
+            // Remove any existing approval buttons
+            const existingButtons = document.querySelectorAll('.approval-buttons');
+            existingButtons.forEach(el => el.remove());
+            
+            const container = document.getElementById('chat-container');
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'approval-buttons';
+            buttonsDiv.innerHTML = `
+                <button class="approve-btn" data-edit-id="${editId}">
+                    ✓ Approve
+                </button>
+                <button class="review-btn" data-edit-id="${editId}">
+                    🔍 Review
+                </button>
+                <button class="deny-btn" data-edit-id="${editId}">
+                    ✗ Deny
+                </button>
+            `;
+            
+            container.appendChild(buttonsDiv);
+            scrollToBottom();
+            
+            // Attach event handlers
+            const approveBtn = buttonsDiv.querySelector('.approve-btn');
+            const reviewBtn = buttonsDiv.querySelector('.review-btn');
+            const denyBtn = buttonsDiv.querySelector('.deny-btn');
+            
+            approveBtn.onclick = () => approveEdit(editId, buttonsDiv);
+            reviewBtn.onclick = () => reviewEdit(editId, patchPreview, buttonsDiv);
+            denyBtn.onclick = () => denyEdit(buttonsDiv);
+        }
+        
+        // Approve and execute the proposed changes
+        async function approveEdit(editId, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '⏳ Deploying changes...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/approve-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addMessage('system', `✅ Changes deployed successfully!`);
+                    if (data.commit) {
+                        addMessage('system', `📝 Commit: ${data.commit}`);
+                    }
+                    if (data.url) {
+                        addMessage('system', `🔗 ${data.url}`);
+                    }
+                } else {
+                    addMessage('error', `❌ Deployment failed: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Request review of proposed changes using Qwen
+        async function reviewEdit(editId, patchPreview, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '🔍 Requesting Qwen review...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/review-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.review) {
+                    addMessage('system', `🔍 **Review Results:**\n\n${data.review}`);
+                    // Show buttons again after review
+                    showApprovalButtons(editId, patchPreview);
+                } else {
+                    addMessage('error', `❌ Review failed: ${data.error || 'Unknown error'}`);
+                    // Show buttons again even if review failed
+                    showApprovalButtons(editId, patchPreview);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+                // Show buttons again even if there was an error
+                showApprovalButtons(editId, patchPreview);
+            }
+        }
+        
+        // Deny/cancel the proposed changes
+        function denyEdit(buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '❌ Changes rejected');
         }
 
         // Upgrade Mode

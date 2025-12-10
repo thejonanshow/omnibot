@@ -229,6 +229,60 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   return content;
 }
 
+// ============== QWEN (ALIBABA CLOUD) ==============
+async function callQwen(messages, env, systemPrompt = null) {
+  if (!env.QWEN_API_KEY && !env.DASHSCOPE_API_KEY) {
+    throw new Error('Qwen API key not configured');
+  }
+  
+  const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
+  
+  // Build full messages array
+  const fullMessages = [];
+  if (systemPrompt) {
+    fullMessages.push({ role: 'system', content: systemPrompt });
+  }
+  fullMessages.push(...messages);
+  
+  const res = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'qwen-max',
+      input: { messages: fullMessages },
+      parameters: {
+        result_format: 'message',
+        max_tokens: 4096,
+        temperature: 0.7
+      }
+    })
+  });
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Qwen API error: ${res.status} - ${errorText}`);
+  }
+  
+  const data = await res.json();
+  
+  // Check for API-level errors
+  if (data.code && data.code !== '200' && data.code !== 'Success') {
+    throw new Error(`Qwen error: ${data.message || data.code}`);
+  }
+  
+  const content = data.output?.choices?.[0]?.message?.content 
+               || data.output?.text;
+  
+  if (!content) {
+    throw new Error('No response from Qwen API');
+  }
+  
+  return content;
+}
+
 // ============== CODE VALIDATION ==============
 function validateCodeStructure(code) {
   // Simple validation - just check it's not obviously broken
@@ -2266,8 +2320,22 @@ export default {
         
         let review = null;
         
-        // Try Gemini first (free tier available)
-        if (env.GEMINI_API_KEY) {
+        // Try Qwen first (specialized in code review)
+        if (env.QWEN_API_KEY || env.DASHSCOPE_API_KEY) {
+          try {
+            const qwenReview = await callQwen(
+              [{ role: 'user', content: reviewPrompt }],
+              env,
+              'You are an expert code reviewer specializing in security, correctness, and best practices. Analyze the proposed changes carefully and provide actionable feedback.'
+            );
+            review = '**Qwen Code Review:**\\n\\n' + qwenReview;
+          } catch (e) {
+            console.log('Qwen review failed:', e.message);
+          }
+        }
+        
+        // Fallback to Gemini if Qwen not available or failed
+        if (!review && env.GEMINI_API_KEY) {
           try {
             const geminiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + env.GEMINI_API_KEY, {
               method: 'POST',
@@ -2278,20 +2346,20 @@ export default {
               })
             });
             const geminiData = await geminiRes.json();
-            review = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (review) {
-              review = '**Gemini Review:**\\n' + review;
+            const geminiReview = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (geminiReview) {
+              review = '**Gemini Review:**\\n\\n' + geminiReview;
             }
           } catch (e) {
-            console.log('Gemini failed:', e.message);
+            console.log('Gemini review failed:', e.message);
           }
         }
         
-        // Fallback to Groq Llama if Gemini failed
+        // Final fallback to Groq Llama if both Qwen and Gemini failed
         if (!review) {
           try {
             const llamaReview = await callGroq('llama', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
-            review = '**Llama Review:**\\n' + llamaReview;
+            review = '**Llama Review:**\\n\\n' + llamaReview;
           } catch (e) {
             review = 'Review unavailable: ' + e.message;
           }
