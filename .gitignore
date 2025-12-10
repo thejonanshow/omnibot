@@ -46,8 +46,17 @@ credentials.json
 # Testing
 coverage/
 .nyc_output/
+playwright-report/
+test-results/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 
 # Temporary
 tmp/
 temp/
 *.tmp
+.migrate/
+deployment-*.txt
