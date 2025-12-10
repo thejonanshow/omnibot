@@ -553,7 +553,7 @@
             padding: 10px 18px;
             background: var(--button-bg);
             color: var(--text-primary);
-            border: 1px solid var(--border-color);
+            border: 2px solid var(--border-color);
             border-radius: var(--border-radius-sm);
             cursor: pointer;
             font-size: 0.875rem;
@@ -920,7 +920,7 @@
         .input-container {
             padding: var(--spacing-lg);
             background: var(--bg-secondary);
-            border-top: 1px solid var(--border-color);
+            border-top: 2px solid var(--border-color);
             box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
         }
         
@@ -949,7 +949,7 @@
             padding: 8px 16px;
             background: var(--bg-tertiary);
             color: var(--text-secondary);
-            border: 1px solid var(--border-color);
+            border: 2px solid var(--border-color);
             border-radius: var(--border-radius-sm);
             cursor: pointer;
             font-size: 0.875rem;
@@ -1301,9 +1301,10 @@
             }
             
             .header {
-                padding: var(--spacing-md);
+                padding: var(--spacing-sm) var(--spacing-md);
                 flex-direction: column;
                 align-items: flex-start;
+                gap: var(--spacing-sm);
             }
             
             .header-left {
@@ -1312,28 +1313,51 @@
             }
             
             h1 {
-                font-size: 1.25rem;
+                font-size: 1.5rem;
+                font-weight: 700;
+                letter-spacing: -0.3px;
             }
             
             .status-bar {
                 width: 100%;
-                justify-content: space-between;
-                gap: var(--spacing-sm);
+                justify-content: flex-start;
+                gap: var(--spacing-xs);
+                flex-wrap: wrap;
             }
             
             .status-item {
-                padding: 4px 10px;
+                padding: 6px 10px;
                 font-size: 0.75rem;
+                min-height: 32px;
+                border-width: 1.5px;
+            }
+            
+            .status-label {
+                font-weight: 600;
+            }
+            
+            .status-value {
+                font-weight: 700;
             }
             
             .controls {
                 width: 100%;
                 justify-content: space-between;
+                gap: var(--spacing-xs);
             }
             
             button {
-                padding: 8px 14px;
-                font-size: 0.813rem;
+                padding: 10px 16px;
+                font-size: 0.9rem;
+                font-weight: 600;
+                border-width: 2px;
+                min-height: 44px;
+            }
+            
+            .theme-toggle-btn {
+                min-width: 44px;
+                min-height: 44px;
+                font-size: 1.125rem;
             }
             
             .chat-container {
@@ -1354,9 +1378,11 @@
             }
             
             textarea {
-                padding: 12px 14px;
+                padding: 14px 16px;
                 font-size: 1rem;
                 border-radius: var(--border-radius-sm);
+                border-width: 2px;
+                min-height: 56px;
             }
             
             #voice-btn {
@@ -1369,6 +1395,20 @@
                 min-width: 48px;
                 min-height: 48px;
                 padding: 8px 12px;
+            }
+            
+            .secondary-actions {
+                gap: var(--spacing-xs);
+                padding: var(--spacing-xs) 0;
+            }
+            
+            .secondary-btn {
+                padding: 10px 14px;
+                font-size: 0.875rem;
+                font-weight: 600;
+                min-height: 44px;
+                border-width: 2px;
+                flex: 1 1 auto;
             }
             
             .settings-panel {
