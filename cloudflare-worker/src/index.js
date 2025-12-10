@@ -22,7 +22,7 @@ const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
 // Semantic version
 const VERSION = {
   major: 1,
-  minor: 0,
+  minor: 1,
   patch: 0,
   codename: 'Electric Eel',
   emoji: '⚡',
@@ -31,18 +31,37 @@ const VERSION = {
 const VERSION_STRING = `v${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
 const VERSION_FULL = `${VERSION.emoji} ${VERSION.codename} ${VERSION_STRING}`;
 
-const GROQ_MODELS = {
-  // Use Llama 3.3 for planning/review (good at reasoning)
-  llama: 'llama-3.3-70b-versatile',
-  // Use smaller Llama for code patches (fast)
-  coder: 'llama-3.1-8b-instant',
-  // Gemma as fallback (replaces deprecated mixtral)
-  gemma: 'gemma2-9b-it'
+// ============== MULTI-PROVIDER AI CONFIG ==============
+// Fallback chain: try each provider/model in order until one works
+const AI_PROVIDERS = {
+  // Purpose-based model chains (will try in order)
+  planning: [
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+    { provider: 'groq', model: 'openai/gpt-oss-120b' },
+    { provider: 'gemini', model: 'gemini-2.0-flash' },
+    { provider: 'groq', model: 'llama-3.1-8b-instant' }
+  ],
+  coding: [
+    { provider: 'groq', model: 'llama-3.1-8b-instant' },
+    { provider: 'groq', model: 'openai/gpt-oss-20b' },
+    { provider: 'gemini', model: 'gemini-2.0-flash' },
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' }
+  ],
+  review: [
+    { provider: 'gemini', model: 'gemini-2.0-flash' },
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+    { provider: 'groq', model: 'openai/gpt-oss-120b' }
+  ],
+  chat: [
+    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
+    { provider: 'groq', model: 'openai/gpt-oss-20b' },
+    { provider: 'gemini', model: 'gemini-2.0-flash' }
+  ]
 };
 
 const REQUIRED_FUNCTIONS = [
   'async function selfEdit',
-  'async function callGroq',
+  'async function callAI',
   'async function githubGet',
   'async function githubPut',
   'export default'
@@ -269,8 +288,78 @@ async function mergePullRequest(prNumber, env) {
   return res.json();
 }
 
-// ============== GROQ ==============
-async function callGroq(model, messages, env, systemPrompt = null) {
+// ============== MULTI-PROVIDER AI SYSTEM ==============
+
+// Provider-specific API calls
+async function callGroqDirect(model, messages, env, maxTokens = 4000) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${env.GROQ_API_KEY}`, 
+      'Content-Type': 'application/json' 
+    },
+    body: JSON.stringify({ 
+      model,
+      messages, 
+      max_tokens: maxTokens,
+      temperature: 0.3
+    })
+  });
+  
+  const data = await res.json();
+  
+  if (data.error) {
+    throw new Error(`Groq [${model}]: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+  
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error(`Groq [${model}]: No response`);
+  }
+  
+  return { content, provider: 'groq', model };
+}
+
+async function callGeminiDirect(model, messages, env, maxTokens = 4000) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error('Gemini: No API key configured');
+  }
+  
+  // Convert messages to Gemini format
+  const contents = messages.filter(m => m.role !== 'system').map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }]
+  }));
+  
+  // Add system instruction if present
+  const systemMsg = messages.find(m => m.role === 'system');
+  
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      systemInstruction: systemMsg ? { parts: [{ text: systemMsg.content }] } : undefined,
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 }
+    })
+  });
+  
+  const data = await res.json();
+  
+  if (data.error) {
+    throw new Error(`Gemini [${model}]: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+  
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!content) {
+    throw new Error(`Gemini [${model}]: No response`);
+  }
+  
+  return { content, provider: 'gemini', model };
+}
+
+// Main AI call function with automatic fallback
+async function callAI(purpose, messages, env, systemPrompt = null, maxTokens = 4000) {
   const context = await getContext(env);
   const fullSystemPrompt = systemPrompt 
     ? `${context.prompt}\n\n${systemPrompt}`
@@ -280,34 +369,55 @@ async function callGroq(model, messages, env, systemPrompt = null) {
     { role: 'system', content: fullSystemPrompt },
     ...messages
   ];
-    
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 
-      'Authorization': `Bearer ${env.GROQ_API_KEY}`, 
-      'Content-Type': 'application/json' 
-    },
-    body: JSON.stringify({ 
-      model: GROQ_MODELS[model] || GROQ_MODELS.gemma, 
-      messages: fullMessages, 
-      max_tokens: 4000, // Keep responses short to avoid rate limits
-      temperature: 0.3
-    })
-  });
   
-  const data = await res.json();
+  const chain = AI_PROVIDERS[purpose] || AI_PROVIDERS.chat;
+  const errors = [];
   
-  if (data.error) {
-    // THROW instead of returning error string - prevents writing errors as code
-    throw new Error(`Groq API error: ${data.error.message || JSON.stringify(data.error)}`);
+  for (const { provider, model } of chain) {
+    try {
+      let result;
+      
+      if (provider === 'groq' && env.GROQ_API_KEY) {
+        result = await callGroqDirect(model, fullMessages, env, maxTokens);
+      } else if (provider === 'gemini' && env.GEMINI_API_KEY) {
+        result = await callGeminiDirect(model, fullMessages, env, maxTokens);
+      } else {
+        continue; // Skip if no API key for this provider
+      }
+      
+      // Log successful provider for telemetry
+      await logTelemetry('ai_call_success', { 
+        purpose, 
+        provider: result.provider, 
+        model: result.model 
+      }, env);
+      
+      return result.content;
+      
+    } catch (e) {
+      errors.push(`${provider}/${model}: ${e.message}`);
+      // Continue to next provider
+    }
   }
   
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('No response from Groq API');
-  }
-  
-  return content;
+  // All providers failed
+  const errorMsg = `All AI providers failed for ${purpose}:\n${errors.join('\n')}`;
+  await logTelemetry('ai_call_all_failed', { purpose, errors }, env);
+  throw new Error(errorMsg);
+}
+
+// Legacy wrapper for backwards compatibility
+async function callGroq(model, messages, env, systemPrompt = null) {
+  // Map old model names to purposes
+  const purposeMap = {
+    'llama': 'planning',
+    'coder': 'coding', 
+    'gemma': 'chat',
+    'fallback': 'chat',
+    'mixtral': 'chat'
+  };
+  const purpose = purposeMap[model] || 'chat';
+  return await callAI(purpose, messages, env, systemPrompt);
 }
 
 // ============== CODE VALIDATION ==============
@@ -462,7 +572,7 @@ ${relevantCode.slice(0, 8000)}
 OUTPUT YOUR PATCHES NOW (remember: <<<REPLACE>>> old <<<WITH>>> new <<<END>>>):`;
 
   // Use gemma which is good at following strict formats
-  return await callGroq('gemma', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  return await callAI('coding', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
 // Extract code sections by name/pattern
@@ -2579,39 +2689,14 @@ export default {
         }
         
         const pending = JSON.parse(pendingJson);
-        const reviewPrompt = 'Review these proposed code changes. Be concise but thorough. Identify any bugs, security issues, or improvements needed:\\n\\nOriginal request: ' + pending.instruction + '\\n\\nProposed patches:\\n' + pending.patches;
+        const reviewPrompt = 'Review these proposed code changes. Be concise but thorough. Identify any bugs, security issues, or improvements needed:\n\nOriginal request: ' + pending.instruction + '\n\nProposed patches:\n' + pending.patches;
         
-        let review = null;
-        
-        // Try Gemini first (free tier available)
-        if (env.GEMINI_API_KEY) {
-          try {
-            const geminiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + env.GEMINI_API_KEY, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: reviewPrompt }] }],
-                generationConfig: { maxOutputTokens: 1000 }
-              })
-            });
-            const geminiData = await geminiRes.json();
-            review = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (review) {
-              review = '**Gemini Review:**\\n' + review;
-            }
-          } catch (e) {
-            console.log('Gemini failed:', e.message);
-          }
-        }
-        
-        // Fallback to Groq Mixtral if Gemini failed
-        if (!review) {
-          try {
-            const gemmaReview = await callGroq('gemma', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
-            review = '**Gemma Review:**\\n' + gemmaReview;
-          } catch (e) {
-            review = 'Review unavailable: ' + e.message;
-          }
+        let review;
+        try {
+          // Uses the review chain: Gemini -> Groq Llama -> GPT-OSS
+          review = await callAI('review', [{ role: 'user', content: reviewPrompt }], env, 'You are a senior code reviewer. Be concise, identify issues, and recommend APPROVE or NEEDS_CHANGES.');
+        } catch (e) {
+          review = 'Review unavailable: ' + e.message;
         }
         
         await logTelemetry('edit_review', { editId }, env);
