@@ -18,14 +18,15 @@ const GITHUB_REPO = 'thejonanshow/omnibot';
 const GITHUB_API_URL = 'https://api.github.com';
 const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
 const VERSION = 'Electric Eel';
+const BUILD = '2.1'; // Increment on each deploy
 
 const GROQ_MODELS = {
-  // Use Llama for planning/review (good at reasoning)
+  // Use Llama 3.3 for planning/review (good at reasoning)
   llama: 'llama-3.3-70b-versatile',
-  // Use smaller Llama for code patches (fits in context)
+  // Use smaller Llama for code patches (fast)
   coder: 'llama-3.1-8b-instant',
-  // Use Llama as fallback (mixtral-8x7b-32768 is deprecated)
-  mixtral: 'llama-3.3-70b-versatile'
+  // Gemma as fallback (replaces deprecated mixtral)
+  gemma: 'gemma2-9b-it'
 };
 
 const REQUIRED_FUNCTIONS = [
@@ -41,7 +42,7 @@ const DEFAULT_MASTER_PROMPT = `You are OmniBot, a self-editing AI assistant.
 Project Context:
 - Repository: thejonanshow/omnibot
 - Platform: Cloudflare Workers
-- LLM Provider: Groq (Llama 3.3 70B, Llama 3.1 8B)
+- LLM Provider: Groq (Llama 3.3 70B, Qwen 2.5)
 - Version: ${VERSION}
 
 Capabilities:
@@ -207,7 +208,7 @@ async function callGroq(model, messages, env, systemPrompt = null) {
       'Content-Type': 'application/json' 
     },
     body: JSON.stringify({ 
-      model: GROQ_MODELS[model] || GROQ_MODELS.mixtral, 
+      model: GROQ_MODELS[model] || GROQ_MODELS.gemma, 
       messages: fullMessages, 
       max_tokens: 4000, // Keep responses short to avoid rate limits
       temperature: 0.3
@@ -224,60 +225,6 @@ async function callGroq(model, messages, env, systemPrompt = null) {
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
     throw new Error('No response from Groq API');
-  }
-  
-  return content;
-}
-
-// ============== QWEN (ALIBABA CLOUD) ==============
-async function callQwen(messages, env, systemPrompt = null) {
-  if (!env.QWEN_API_KEY && !env.DASHSCOPE_API_KEY) {
-    throw new Error('Qwen API key not configured');
-  }
-  
-  const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
-  
-  // Build full messages array
-  const fullMessages = [];
-  if (systemPrompt) {
-    fullMessages.push({ role: 'system', content: systemPrompt });
-  }
-  fullMessages.push(...messages);
-  
-  const res = await fetch('https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'qwen-max',
-      input: { messages: fullMessages },
-      parameters: {
-        result_format: 'message',
-        max_tokens: 4096,
-        temperature: 0.7
-      }
-    })
-  });
-  
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Qwen API error: ${res.status} - ${errorText}`);
-  }
-  
-  const data = await res.json();
-  
-  // Check for API-level errors
-  if (data.code && data.code !== '200' && data.code !== 'Success') {
-    throw new Error(`Qwen error: ${data.message || data.code}`);
-  }
-  
-  const content = data.output?.choices?.[0]?.message?.content 
-               || data.output?.text;
-  
-  if (!content) {
-    throw new Error('No response from Qwen API');
   }
   
   return content;
@@ -434,8 +381,8 @@ ${relevantCode.slice(0, 8000)}
 
 OUTPUT YOUR PATCHES NOW (remember: <<<REPLACE>>> old <<<WITH>>> new <<<END>>>):`;
 
-  // Use llama which is good at following strict formats
-  return await callGroq('llama', [{ role: 'user', content: userPrompt }], env, systemPrompt);
+  // Use gemma which is good at following strict formats
+  return await callGroq('gemma', [{ role: 'user', content: userPrompt }], env, systemPrompt);
 }
 
 // Extract code sections by name/pattern
@@ -1544,7 +1491,7 @@ const HTML = `<!DOCTYPE html>
   <!-- Login Screen -->
   <div id="loginScreen" class="login-screen">
     <div class="login-logo">OMNIBOT</div>
-    <div class="login-subtitle">Electric Eel Edition</div>
+    <div class="login-subtitle">Electric Eel v2.1</div>
     <a href="/auth/google" class="login-btn">
       <svg viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
       Sign in with Google
@@ -1571,7 +1518,7 @@ const HTML = `<!DOCTYPE html>
       <div class="lcars-header-curve"></div>
       <div class="lcars-header-bar">
         <span class="lcars-title">OmniBot</span>
-        <a href="https://en.wikipedia.org/wiki/Electric_eel" target="_blank" class="version-link">⚡ Electric Eel</a>
+        <a href="https://en.wikipedia.org/wiki/Electric_eel" target="_blank" class="version-link">⚡ Electric Eel v2.1</a>
         <span id="userEmail" class="lcars-user">...</span>
       </div>
       <div class="lcars-header-end"></div>
@@ -2189,6 +2136,7 @@ export default {
       return new Response(JSON.stringify({ 
         ok: true,
         version: VERSION,
+        build: BUILD,
         creature: 'Electric Eel'
       }), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -2320,22 +2268,8 @@ export default {
         
         let review = null;
         
-        // Try Qwen first (specialized in code review)
-        if (env.QWEN_API_KEY || env.DASHSCOPE_API_KEY) {
-          try {
-            const qwenReview = await callQwen(
-              [{ role: 'user', content: reviewPrompt }],
-              env,
-              'You are an expert code reviewer specializing in security, correctness, and best practices. Analyze the proposed changes carefully and provide actionable feedback.'
-            );
-            review = '**Qwen Code Review:**\\n\\n' + qwenReview;
-          } catch (e) {
-            console.log('Qwen review failed:', e.message);
-          }
-        }
-        
-        // Fallback to Gemini if Qwen not available or failed
-        if (!review && env.GEMINI_API_KEY) {
+        // Try Gemini first (free tier available)
+        if (env.GEMINI_API_KEY) {
           try {
             const geminiRes = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + env.GEMINI_API_KEY, {
               method: 'POST',
@@ -2346,20 +2280,20 @@ export default {
               })
             });
             const geminiData = await geminiRes.json();
-            const geminiReview = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (geminiReview) {
-              review = '**Gemini Review:**\\n\\n' + geminiReview;
+            review = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (review) {
+              review = '**Gemini Review:**\\n' + review;
             }
           } catch (e) {
-            console.log('Gemini review failed:', e.message);
+            console.log('Gemini failed:', e.message);
           }
         }
         
-        // Final fallback to Groq Llama if both Qwen and Gemini failed
+        // Fallback to Groq Mixtral if Gemini failed
         if (!review) {
           try {
-            const llamaReview = await callGroq('llama', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
-            review = '**Llama Review:**\\n\\n' + llamaReview;
+            const gemmaReview = await callGroq('gemma', [{ role: 'user', content: reviewPrompt }], env, 'You are a code reviewer. Be concise and helpful.');
+            review = '**Gemma Review:**\\n' + gemmaReview;
           } catch (e) {
             review = 'Review unavailable: ' + e.message;
           }
