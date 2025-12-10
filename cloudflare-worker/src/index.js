@@ -3,22 +3,33 @@
  * OmniBot - Electric Eel Edition
  * https://en.wikipedia.org/wiki/Electric_eel
  * 
- * Semantic versioning via exotic sea creatures (alphabetical):
+ * Semantic Versioning: MAJOR.MINOR.PATCH
+ * - MAJOR: Breaking changes
+ * - MINOR: New features (triggers new animal release)
+ * - PATCH: Bug fixes
+ * 
+ * Release Animals (alphabetical):
  * A: Axolotl, B: Blobfish, C: Cuttlefish, D: Dumbo Octopus, E: Electric Eel
+ * F: Firefly Squid, G: Glass Octopus, H: Hagfish, I: Isopod, J: Jellyfish
  * 
- * Current: Electric Eel (E) - Simple Google OAuth Redirect Login
- * 
- * NEW: Proper OAuth 2.0 redirect flow
- * - /auth/google → redirects to Google
- * - /auth/callback → handles response, sets cookie
- * - Cookie-based session (24hr)
+ * Current: v1.0.0 "Electric Eel" - Self-editing AI with PR workflow
  */
 
 const GITHUB_REPO = 'thejonanshow/omnibot';
 const GITHUB_API_URL = 'https://api.github.com';
 const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
-const VERSION = 'Electric Eel';
-const BUILD = '2.1'; // Increment on each deploy
+
+// Semantic version
+const VERSION = {
+  major: 1,
+  minor: 0,
+  patch: 0,
+  codename: 'Electric Eel',
+  emoji: '⚡',
+  wiki: 'https://en.wikipedia.org/wiki/Electric_eel'
+};
+const VERSION_STRING = `v${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
+const VERSION_FULL = `${VERSION.emoji} ${VERSION.codename} ${VERSION_STRING}`;
 
 const GROQ_MODELS = {
   // Use Llama 3.3 for planning/review (good at reasoning)
@@ -159,8 +170,8 @@ async function logTelemetry(event, data, env) {
 }
 
 // ============== GITHUB ==============
-async function githubGet(path, env) {
-  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}?ref=main`, {
+async function githubGet(path, env, ref = 'main') {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}?ref=${ref}`, {
     headers: { 
       'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
       'Accept': 'application/vnd.github.v3+json', 
@@ -170,8 +181,8 @@ async function githubGet(path, env) {
   return res.json();
 }
 
-async function githubPut(path, content, message, env) {
-  const current = await githubGet(path, env);
+async function githubPut(path, content, message, env, branch = 'main') {
+  const current = await githubGet(path, env, branch);
   const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/contents/${path}`, {
     method: 'PUT',
     headers: { 
@@ -182,8 +193,77 @@ async function githubPut(path, content, message, env) {
     body: JSON.stringify({ 
       message, 
       content: btoa(unescape(encodeURIComponent(content))), 
-      branch: 'main', 
+      branch, 
       sha: current.sha 
+    })
+  });
+  return res.json();
+}
+
+// Get the SHA of main branch HEAD
+async function getMainSha(env) {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/git/ref/heads/main`, {
+    headers: { 
+      'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
+      'Accept': 'application/vnd.github.v3+json', 
+      'User-Agent': 'OmniBot' 
+    }
+  });
+  const data = await res.json();
+  return data.object?.sha;
+}
+
+// Create a new branch from main
+async function createBranch(branchName, env) {
+  const mainSha = await getMainSha(env);
+  if (!mainSha) throw new Error('Could not get main SHA');
+  
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/git/refs`, {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
+      'Content-Type': 'application/json', 
+      'User-Agent': 'OmniBot' 
+    },
+    body: JSON.stringify({
+      ref: `refs/heads/${branchName}`,
+      sha: mainSha
+    })
+  });
+  return res.json();
+}
+
+// Create a pull request
+async function createPullRequest(title, body, branchName, env) {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/pulls`, {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
+      'Content-Type': 'application/json', 
+      'User-Agent': 'OmniBot' 
+    },
+    body: JSON.stringify({
+      title,
+      body,
+      head: branchName,
+      base: 'main'
+    })
+  });
+  return res.json();
+}
+
+// Merge a pull request
+async function mergePullRequest(prNumber, env) {
+  const res = await fetch(`${GITHUB_API_URL}/repos/${GITHUB_REPO}/pulls/${prNumber}/merge`, {
+    method: 'PUT',
+    headers: { 
+      'Authorization': `Bearer ${env.GITHUB_TOKEN}`, 
+      'Content-Type': 'application/json', 
+      'User-Agent': 'OmniBot' 
+    },
+    body: JSON.stringify({
+      commit_title: `[OmniBot] Merge PR #${prNumber}`,
+      merge_method: 'squash'
     })
   });
   return res.json();
@@ -561,7 +641,7 @@ async function prepareEdit(instruction, env) {
 }
 
 // Execute approved edit
-async function executeEdit(editId, env) {
+async function executeEdit(editId, env, directMerge = false) {
   try {
     // Retrieve pending edit
     if (!env.CONTEXT) {
@@ -575,7 +655,7 @@ async function executeEdit(editId, env) {
     
     const pending = JSON.parse(pendingJson);
     
-    // Get fresh code
+    // Get fresh code from main
     const file = await githubGet('cloudflare-worker/src/index.js', env);
     if (!file.content) {
       return { success: false, error: 'Could not read code' };
@@ -598,27 +678,101 @@ async function executeEdit(editId, env) {
       return { success: false, error: 'No changes were made' };
     }
     
-    // Commit
-    const commitMessage = `[OmniBot] ${pending.instruction.slice(0, 60)}`;
-    const result = await githubPut('cloudflare-worker/src/index.js', finalCode, commitMessage, env);
+    // Create branch name from instruction
+    const branchSlug = pending.instruction
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .slice(0, 30)
+      .replace(/-+$/, '');
+    const branchName = `omnibot/${branchSlug}-${editId}`;
     
-    if (!result.commit) {
-      return { success: false, error: 'Commit failed' };
+    // Create feature branch
+    const branchResult = await createBranch(branchName, env);
+    if (branchResult.message && branchResult.message.includes('Reference already exists')) {
+      // Branch exists, continue
+    } else if (!branchResult.ref) {
+      return { success: false, error: 'Could not create branch: ' + (branchResult.message || 'Unknown error') };
     }
     
-    // Cleanup
+    // Commit to feature branch
+    const commitMessage = `[OmniBot] ${pending.instruction.slice(0, 60)}`;
+    const commitResult = await githubPut('cloudflare-worker/src/index.js', finalCode, commitMessage, env, branchName);
+    
+    if (!commitResult.commit) {
+      return { success: false, error: 'Commit to branch failed' };
+    }
+    
+    // Create PR
+    const prTitle = `🤖 ${pending.instruction.slice(0, 60)}`;
+    const prBody = `## OmniBot Edit Request
+
+**Instruction:** ${pending.instruction}
+
+**Plan:**
+${pending.plan || 'No plan recorded'}
+
+---
+*Created by OmniBot ${VERSION_FULL}*`;
+
+    const prResult = await createPullRequest(prTitle, prBody, branchName, env);
+    
+    if (!prResult.number) {
+      return { success: false, error: 'Could not create PR: ' + (prResult.message || 'Unknown error') };
+    }
+    
+    // If directMerge requested (for quick fixes), merge immediately
+    if (directMerge) {
+      const mergeResult = await mergePullRequest(prResult.number, env);
+      if (!mergeResult.merged) {
+        return { 
+          success: true, 
+          pr_number: prResult.number,
+          pr_url: prResult.html_url,
+          message: 'PR created but auto-merge failed. Please merge manually.'
+        };
+      }
+      
+      // Cleanup
+      await env.CONTEXT.delete(`pending_edit_${editId}`);
+      
+      await logTelemetry('edit_merged', {
+        editId,
+        instruction: pending.instruction,
+        pr: prResult.number
+      }, env);
+      
+      return {
+        success: true,
+        merged: true,
+        pr_number: prResult.number,
+        pr_url: prResult.html_url,
+        message: `PR #${prResult.number} merged!`
+      };
+    }
+    
+    // Store PR info for later merge
+    await env.CONTEXT.put(`pending_pr_${editId}`, JSON.stringify({
+      pr_number: prResult.number,
+      branch: branchName,
+      instruction: pending.instruction
+    }), { expirationTtl: 86400 }); // 24 hour expiry
+    
+    // Cleanup edit but keep PR info
     await env.CONTEXT.delete(`pending_edit_${editId}`);
     
-    await logTelemetry('edit_execute_success', {
+    await logTelemetry('edit_pr_created', {
       editId,
       instruction: pending.instruction,
-      commit: result.commit.sha
+      pr: prResult.number
     }, env);
     
     return {
       success: true,
-      commit: result.commit.sha,
-      url: result.commit.html_url
+      pr_number: prResult.number,
+      pr_url: prResult.html_url,
+      branch: branchName,
+      editId, // Keep for merge action
+      message: `PR #${prResult.number} created! Review and merge when ready.`
     };
     
   } catch (e) {
@@ -1065,9 +1219,10 @@ const HTML = `<!DOCTYPE html>
       gap: 12px;
       margin: 16px 0;
       justify-content: center;
+      flex-wrap: wrap;
     }
     
-    .approve-btn, .reject-btn, .review-btn {
+    .approve-btn, .reject-btn, .review-btn, .merge-btn {
       padding: 12px 20px;
       border: none;
       border-radius: 8px;
@@ -1076,6 +1231,10 @@ const HTML = `<!DOCTYPE html>
       font-weight: 700;
       cursor: pointer;
       transition: all 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .approve-btn {
@@ -1084,6 +1243,16 @@ const HTML = `<!DOCTYPE html>
     }
     
     .approve-btn:hover {
+      filter: brightness(1.2);
+      transform: scale(1.05);
+    }
+    
+    .merge-btn {
+      background: var(--lcars-purple);
+      color: #000;
+    }
+    
+    .merge-btn:hover {
       filter: brightness(1.2);
       transform: scale(1.05);
     }
@@ -1491,7 +1660,7 @@ const HTML = `<!DOCTYPE html>
   <!-- Login Screen -->
   <div id="loginScreen" class="login-screen">
     <div class="login-logo">OMNIBOT</div>
-    <div class="login-subtitle">Electric Eel v2.1</div>
+    <div class="login-subtitle" id="versionSubtitle">Loading...</div>
     <a href="/auth/google" class="login-btn">
       <svg viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
       Sign in with Google
@@ -1518,7 +1687,7 @@ const HTML = `<!DOCTYPE html>
       <div class="lcars-header-curve"></div>
       <div class="lcars-header-bar">
         <span class="lcars-title">OmniBot</span>
-        <a href="https://en.wikipedia.org/wiki/Electric_eel" target="_blank" class="version-link">⚡ Electric Eel v2.1</a>
+        <a id="versionLink" href="https://en.wikipedia.org/wiki/Electric_eel" target="_blank" class="version-link">⚡ Loading...</a>
         <span id="userEmail" class="lcars-user">...</span>
       </div>
       <div class="lcars-header-end"></div>
@@ -1661,6 +1830,26 @@ const HTML = `<!DOCTYPE html>
         loadStats();
       }
       
+      // Load and display version
+      async function loadVersion() {
+        try {
+          const res = await fetch('/api/health');
+          const data = await res.json();
+          if (data.version) {
+            const v = data.version;
+            const vString = 'v' + v.major + '.' + v.minor + '.' + v.patch;
+            const vFull = v.emoji + ' ' + v.codename + ' ' + vString;
+            
+            document.getElementById('versionSubtitle').textContent = vFull;
+            document.getElementById('versionLink').textContent = vFull;
+            document.getElementById('versionLink').href = v.wiki;
+          }
+        } catch (e) {
+          console.log('Could not load version:', e);
+        }
+      }
+      loadVersion();
+      
       // Logout
       document.getElementById('logoutBtn').onclick = function() {
         clearSession();
@@ -1797,31 +1986,63 @@ const HTML = `<!DOCTYPE html>
         const approveDiv = document.createElement('div');
         approveDiv.className = 'approval-buttons';
         approveDiv.innerHTML = 
-          '<button class="approve-btn" data-edit-id="' + editId + '">✓ Approve</button>' +
+          '<button class="approve-btn" data-edit-id="' + editId + '">📝 Create PR</button>' +
+          '<button class="merge-btn" data-edit-id="' + editId + '">🚀 PR & Merge</button>' +
           '<button class="review-btn" data-edit-id="' + editId + '">🔍 Review</button>' +
           '<button class="reject-btn" data-edit-id="' + editId + '">✗ Deny</button>';
         $messages.appendChild(approveDiv);
         $messages.scrollTop = $messages.scrollHeight;
         
-        // Approve - deploy the changes
+        // Create PR only (for review on GitHub)
         approveDiv.querySelector('.approve-btn').onclick = async function() {
           const id = this.dataset.editId;
-          setEditStatus('Deploying...', true);
+          setEditStatus('Creating PR...', true);
           approveDiv.remove();
           
           try {
             const res = await fetch('/api/approve-edit', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ editId: id })
+              body: JSON.stringify({ editId: id, directMerge: false })
             });
             const data = await res.json();
             setEditStatus('', false);
             
             if (data.success) {
-              addMessage('system', '✓ Deployed! ' + (data.url || ''), 'success');
+              addMessage('system', '✓ ' + data.message + '\\n' + data.pr_url, 'success');
+              // Show merge button for this PR
+              showMergeButton(id, data.pr_number, data.pr_url);
             } else {
-              addMessage('system', '✗ ' + (data.error || 'Deploy failed'), 'error');
+              addMessage('system', '✗ ' + (data.error || 'PR creation failed'), 'error');
+            }
+          } catch (e) {
+            setEditStatus('', false);
+            addMessage('system', '✗ Error: ' + e.message, 'error');
+          }
+          loadStats();
+        };
+        
+        // Create PR and merge immediately
+        approveDiv.querySelector('.merge-btn').onclick = async function() {
+          const id = this.dataset.editId;
+          setEditStatus('Creating & merging PR...', true);
+          approveDiv.remove();
+          
+          try {
+            const res = await fetch('/api/approve-edit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ editId: id, directMerge: true })
+            });
+            const data = await res.json();
+            setEditStatus('', false);
+            
+            if (data.success && data.merged) {
+              addMessage('system', '🚀 ' + data.message + '\\n' + data.pr_url, 'success');
+            } else if (data.success) {
+              addMessage('system', '✓ PR created: ' + data.pr_url + '\\nAuto-merge failed - merge manually', 'info');
+            } else {
+              addMessage('system', '✗ ' + (data.error || 'Failed'), 'error');
             }
           } catch (e) {
             setEditStatus('', false);
@@ -1862,6 +2083,44 @@ const HTML = `<!DOCTYPE html>
         approveDiv.querySelector('.reject-btn').onclick = function() {
           approveDiv.remove();
           addMessage('system', '✗ Edit cancelled', 'info');
+        };
+      }
+      
+      // Show merge button for an existing PR
+      function showMergeButton(editId, prNumber, prUrl) {
+        const mergeDiv = document.createElement('div');
+        mergeDiv.className = 'approval-buttons';
+        mergeDiv.innerHTML = 
+          '<button class="merge-btn" data-edit-id="' + editId + '" data-pr="' + prNumber + '">🚀 Merge PR #' + prNumber + '</button>' +
+          '<a href="' + prUrl + '" target="_blank" class="review-btn">👀 View on GitHub</a>';
+        $messages.appendChild(mergeDiv);
+        $messages.scrollTop = $messages.scrollHeight;
+        
+        mergeDiv.querySelector('.merge-btn').onclick = async function() {
+          const pr = this.dataset.pr;
+          const id = this.dataset.editId;
+          setEditStatus('Merging PR #' + pr + '...', true);
+          mergeDiv.remove();
+          
+          try {
+            const res = await fetch('/api/merge-pr', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ editId: id, prNumber: parseInt(pr) })
+            });
+            const data = await res.json();
+            setEditStatus('', false);
+            
+            if (data.success) {
+              addMessage('system', '🚀 ' + data.message, 'success');
+            } else {
+              addMessage('system', '✗ ' + (data.error || 'Merge failed'), 'error');
+            }
+          } catch (e) {
+            setEditStatus('', false);
+            addMessage('system', '✗ Error: ' + e.message, 'error');
+          }
+          loadStats();
         };
       }
       
@@ -2136,8 +2395,8 @@ export default {
       return new Response(JSON.stringify({ 
         ok: true,
         version: VERSION,
-        build: BUILD,
-        creature: 'Electric Eel'
+        versionString: VERSION_STRING,
+        versionFull: VERSION_FULL
       }), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
       });
@@ -2224,7 +2483,7 @@ export default {
     // Approve and execute edit
     if (url.pathname === '/api/approve-edit' && request.method === 'POST') {
       try {
-        const { editId } = await request.json();
+        const { editId, directMerge } = await request.json();
         
         if (!editId) {
           return new Response(JSON.stringify({ success: false, error: 'Missing editId' }), { 
@@ -2232,10 +2491,66 @@ export default {
           });
         }
         
-        const result = await executeEdit(editId, env);
+        // directMerge=true will create PR and immediately merge
+        const result = await executeEdit(editId, env, directMerge === true);
         return new Response(JSON.stringify(result), { 
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e.message }), { 
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+    }
+    
+    // Merge an existing PR
+    if (url.pathname === '/api/merge-pr' && request.method === 'POST') {
+      try {
+        const { editId, prNumber } = await request.json();
+        
+        let pr = prNumber;
+        
+        // If editId provided, look up the PR number
+        if (!pr && editId && env.CONTEXT) {
+          const prJson = await env.CONTEXT.get('pending_pr_' + editId);
+          if (prJson) {
+            const prData = JSON.parse(prJson);
+            pr = prData.pr_number;
+          }
+        }
+        
+        if (!pr) {
+          return new Response(JSON.stringify({ success: false, error: 'Missing PR number' }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        
+        const mergeResult = await mergePullRequest(pr, env);
+        
+        if (mergeResult.merged) {
+          // Cleanup
+          if (editId && env.CONTEXT) {
+            await env.CONTEXT.delete('pending_pr_' + editId);
+          }
+          
+          await logTelemetry('pr_merged', { pr }, env);
+          
+          return new Response(JSON.stringify({ 
+            success: true, 
+            merged: true,
+            message: `PR #${pr} merged!`
+          }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        } else {
+          return new Response(JSON.stringify({ 
+            success: false, 
+            error: mergeResult.message || 'Merge failed'
+          }), { 
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
       } catch (e) {
         return new Response(JSON.stringify({ success: false, error: e.message }), { 
           status: 500,
