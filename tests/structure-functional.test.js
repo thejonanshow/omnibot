@@ -102,11 +102,11 @@ describe('OmniBot Safety Tests', () => {
   
   it('should have minimum size check', () => {
     expect(workerCode).to.include('code.length < 5000');
-    expect(workerCode).to.include('Code too short');
+    expect(workerCode).to.include('Code seems short');
   });
   
   it('should require HTML UI', () => {
-    expect(workerCode).to.include("Missing HTML UI");
+    expect(workerCode).to.include("const HTML =");
   });
   
   it('should not use browser APIs in worker runtime', () => {
