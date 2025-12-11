@@ -39,7 +39,8 @@ describe('OmniBot Functional Tests', () => {
   
   describe('UI', () => {
     it('should have themed CSS variables', () => {
-      expect(workerCode).to.include('--lcars-');
+      expect(workerCode).to.include('--bg-primary');
+      expect(workerCode).to.include('--text-primary');
     });
     
     it('should have edit mode styling', () => {
