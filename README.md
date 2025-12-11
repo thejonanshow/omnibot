@@ -90,44 +90,6 @@ When working with AI assistants on this project, follow these rules to maintain 
 - **Incremental progress** - Break large features into smaller, testable increments
 - **Documentation as code** - Keep documentation close to implementation and update together
 
-## Edit Pipeline Architecture
-
-Omnibot uses a sophisticated multi-stage edit pipeline to ensure high-quality code changes:
-
-### Pipeline Stages (Enforced Order)
-
-1. **Groq (Llama 3.3 70B)** - Initial planning and analysis
-   - Analyzes the change request
-   - Creates focused implementation plan
-   - Identifies sections to modify
-
-2. **Kimi (Moonshot AI)** - Architecture review checkpoint
-   - **⚠️ STOP HERE FOR ARCHITECTURE QUESTIONS**
-   - Reviews architectural soundness
-   - Validates approach before implementation
-   - Provides checkpoint for design decisions
-
-3. **Qwen (3 iterations)** - Implementation with refinement
-   - Iteration 1: Initial patch generation
-   - Iteration 2: Refinement for correctness
-   - Iteration 3: Final validation pass
-   - Produces code-only output (no markdown/prose)
-
-4. **Claude/Gemini** - Review and polish
-   - Final code review
-   - Quality assurance
-   - Recommendation for approval
-
-### Code-Only Output Requirement
-
-The edit pipeline enforces **code-only responses** to ensure downstream extraction succeeds:
-- No markdown code fences (```)
-- No explanatory prose or descriptions
-- Only patch syntax (`<<<REPLACE>>>`, `<<<WITH>>>`, `<<<END>>>`) and code
-- Critical for automated processing and deployment pipeline
-
-This ensures reliable extraction and prevents parsing errors in the deployment workflow.
-
 ## Configuration
 
 Set via `npm run setup` or manually in `.env`:
@@ -138,7 +100,6 @@ ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GROQ_API_KEY=
 GEMINI_API_KEY=
-KIMI_API_KEY=        # Optional: For architecture review checkpoint
 
 # Cloudflare
 CLOUDFLARE_ACCOUNT_ID=
