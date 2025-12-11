@@ -358,6 +358,40 @@ async function callGeminiDirect(model, messages, env, maxTokens = 4000) {
   return { content, provider: 'gemini', model };
 }
 
+async function callKimiDirect(model, messages, env, maxTokens = 4000) {
+  if (!env.KIMI_API_KEY) {
+    throw new Error('Kimi: No API key configured');
+  }
+  
+  // Kimi (Moonshot AI) uses OpenAI-compatible API
+  const res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${env.KIMI_API_KEY}`, 
+      'Content-Type': 'application/json' 
+    },
+    body: JSON.stringify({ 
+      model: model || 'moonshot-v1-8k',
+      messages, 
+      max_tokens: maxTokens,
+      temperature: 0.3
+    })
+  });
+  
+  const data = await res.json();
+  
+  if (data.error) {
+    throw new Error(`Kimi [${model}]: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+  
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error(`Kimi [${model}]: No response`);
+  }
+  
+  return { content, provider: 'kimi', model };
+}
+
 // Main AI call function with automatic fallback
 async function callAI(purpose, messages, env, systemPrompt = null, maxTokens = 4000) {
   const context = await getContext(env);
@@ -381,6 +415,8 @@ async function callAI(purpose, messages, env, systemPrompt = null, maxTokens = 4
         result = await callGroqDirect(model, fullMessages, env, maxTokens);
       } else if (provider === 'gemini' && env.GEMINI_API_KEY) {
         result = await callGeminiDirect(model, fullMessages, env, maxTokens);
+      } else if (provider === 'kimi' && env.KIMI_API_KEY) {
+        result = await callKimiDirect(model, fullMessages, env, maxTokens);
       } else {
         continue; // Skip if no API key for this provider
       }
@@ -447,6 +483,44 @@ function cleanCodeFences(text) {
     cleaned = cleaned.replace(/\n?```\s*$/, '');
   }
   return cleaned;
+}
+
+// Extract code-only output by removing markdown fences and prose
+function extractCodeOnly(text) {
+  let cleaned = text.trim();
+  
+  // Remove markdown code fences
+  cleaned = cleanCodeFences(cleaned);
+  
+  // Remove common explanatory patterns at start/end
+  // Remove lines that are clearly prose (start with capital letter, end with period, no code tokens)
+  const lines = cleaned.split('\n');
+  const codeLines = [];
+  let inCodeBlock = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    // Detect code patterns
+    const hasCodePattern = /^(function|const|let|var|class|import|export|async|if|for|while|return|\/\/|\/\*|\*|{|}|\(|\)|;|=>)/.test(trimmed);
+    const hasAssignment = /=/.test(trimmed);
+    const hasCodeSymbols = /[{}\[\]();]/.test(trimmed);
+    
+    // If line looks like code, include it
+    if (hasCodePattern || hasAssignment || hasCodeSymbols || inCodeBlock || trimmed === '') {
+      codeLines.push(line);
+      inCodeBlock = true;
+    }
+    // Skip prose-like lines (explanations, descriptions)
+    else if (!/^[A-Z].*\.$/.test(trimmed) || trimmed.includes('<<<')) {
+      // Include if it's part of patch syntax or doesn't look like prose
+      codeLines.push(line);
+      inCodeBlock = true;
+    }
+  }
+  
+  return codeLines.join('\n').trim();
 }
 
 // ============== SELF EDIT - MULTI-STAGE PIPELINE ==============
@@ -694,7 +768,8 @@ function applyPatch(originalCode, patch) {
   return result;
 }
 
-// Main edit orchestrator - now returns plan for approval
+// Main edit orchestrator - Enhanced pipeline with strict model ordering
+// Pipeline: Groq (Llama) → Kimi (architecture) → 3x Qwen (implementation) → Claude/Gemini (polish)
 async function prepareEdit(instruction, env) {
   try {
     await logTelemetry('edit_prepare_start', { instruction }, env);
@@ -706,22 +781,129 @@ async function prepareEdit(instruction, env) {
     }
     const currentCode = decodeURIComponent(escape(atob(file.content)));
     
-    // Stage 1: Plan with Groq
+    // ========================================================================
+    // STAGE 1: GROQ (LLAMA) - Initial planning and analysis
+    // ========================================================================
+    console.log('[Edit Pipeline] Stage 1: Groq (Llama) - Planning');
     const plan = await planEdit(instruction, currentCode, env);
     
-    // Stage 2: Generate patches with Qwen
-    const patches = await generatePatches(plan, currentCode, env);
+    // ========================================================================
+    // STAGE 2: KIMI (MOONSHOT) - Architecture review and validation
+    // **STOP HERE FOR ARCHITECTURE QUESTIONS**
+    // This is the checkpoint for architectural decisions before implementation
+    // ========================================================================
+    console.log('[Edit Pipeline] Stage 2: Kimi - Architecture Review (CHECKPOINT)');
+    let architectureReview = 'Kimi not configured - skipping architecture review';
+    
+    if (env.KIMI_API_KEY) {
+      try {
+        const archPrompt = `Review this code change plan for architectural soundness.
+        
+Original request: ${instruction}
+
+Proposed plan: ${plan.summary}
+
+Sections to modify: ${plan.sections_to_modify?.join(', ') || 'none specified'}
+
+Risk level: ${plan.risk_level || 'unknown'}
+
+Provide:
+1. Architecture assessment (is this the right approach?)
+2. Any architectural concerns or better alternatives
+3. Recommendation: PROCEED or STOP_FOR_REVIEW
+
+Be concise - this is an architecture checkpoint before implementation.`;
+
+        const archMessages = [{ role: 'user', content: archPrompt }];
+        const archResult = await callKimiDirect('moonshot-v1-8k', archMessages, env, 2000);
+        architectureReview = archResult.content;
+        
+        console.log('[Edit Pipeline] Architecture Review:', architectureReview);
+        
+        // Log checkpoint
+        await logTelemetry('edit_architecture_checkpoint', { 
+          instruction, 
+          review: architectureReview.slice(0, 200) 
+        }, env);
+      } catch (e) {
+        console.log('[Edit Pipeline] Kimi error (continuing):', e.message);
+        architectureReview = `Kimi unavailable: ${e.message}`;
+      }
+    }
+    
+    // ========================================================================
+    // STAGE 3: QWEN (3x calls) - Implementation with iterative refinement
+    // ========================================================================
+    console.log('[Edit Pipeline] Stage 3: Qwen - Implementation (3 iterations)');
+    
+    // Qwen iteration 1: Initial patch generation
+    let patches = await generatePatches(plan, currentCode, env);
+    console.log('[Edit Pipeline] Qwen iteration 1 complete');
+    
+    // Qwen iteration 2: Refinement (if first iteration succeeded)
+    if (patches.includes('<<<REPLACE>>>') || patches.includes('<<<INSERT_AFTER>>>')) {
+      try {
+        const refinePrompt = `Refine these code patches for correctness and completeness.
+
+Original task: ${plan.qwen_prompt || plan.summary}
+
+Current patches:
+${patches.slice(0, 3000)}
+
+Output refined patches in the same format (<<<REPLACE>>> ... <<<WITH>>> ... <<<END>>>).`;
+        
+        const refineResult = await callAI('coding', [{ role: 'user', content: refinePrompt }], env, 
+          'You are a code refinement specialist. Output only patch blocks.');
+        patches = extractCodeOnly(refineResult);
+        console.log('[Edit Pipeline] Qwen iteration 2 complete');
+      } catch (e) {
+        console.log('[Edit Pipeline] Qwen iteration 2 failed (using iteration 1):', e.message);
+      }
+    }
+    
+    // Qwen iteration 3: Final validation pass
+    if (patches.includes('<<<REPLACE>>>') || patches.includes('<<<INSERT_AFTER>>>')) {
+      try {
+        const validatePrompt = `Validate these code patches meet the requirements.
+
+Task: ${instruction}
+
+Patches:
+${patches.slice(0, 3000)}
+
+If patches are correct, output them unchanged. If improvements needed, output corrected patches.
+Use format: <<<REPLACE>>> ... <<<WITH>>> ... <<<END>>>`;
+        
+        const validateResult = await callAI('coding', [{ role: 'user', content: validatePrompt }], env,
+          'Validate and output patch blocks only.');
+        const validatedPatches = extractCodeOnly(validateResult);
+        
+        // Only use validated patches if they look valid
+        if (validatedPatches.includes('<<<REPLACE>>>') || validatedPatches.includes('<<<INSERT_AFTER>>>')) {
+          patches = validatedPatches;
+          console.log('[Edit Pipeline] Qwen iteration 3 complete');
+        }
+      } catch (e) {
+        console.log('[Edit Pipeline] Qwen iteration 3 failed (using iteration 2):', e.message);
+      }
+    }
+    
+    // Ensure patches are code-only (strip any remaining prose)
+    patches = extractCodeOnly(patches);
     
     // Check if patches are valid
     if (!patches.includes('<<<REPLACE>>>') && !patches.includes('<<<INSERT_AFTER>>>')) {
       return { 
         success: false, 
-        error: 'Could not generate valid patches',
+        error: 'Could not generate valid patches after 3 Qwen iterations',
         details: patches.slice(0, 500)
       };
     }
     
-    // Stage 3: Review with Groq
+    // ========================================================================
+    // STAGE 4: CLAUDE/GEMINI - Review and polish
+    // ========================================================================
+    console.log('[Edit Pipeline] Stage 4: Claude/Gemini - Review & Polish');
     const review = await reviewPatches(patches, plan, env);
     
     // Store pending edit for approval
@@ -731,14 +913,18 @@ async function prepareEdit(instruction, env) {
         instruction,
         plan,
         patches,
+        architectureReview,
         timestamp: Date.now()
       }), { expirationTtl: 3600 }); // 1 hour expiry
     }
+    
+    console.log('[Edit Pipeline] Complete - awaiting approval');
     
     return {
       success: true,
       editId,
       plan: plan.summary,
+      architectureReview,
       review,
       patches_preview: patches.slice(0, 1000),
       awaiting_approval: true
