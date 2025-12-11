@@ -68,6 +68,9 @@ jobs:
         with:
           node-version: '20'
       
+      - name: Build consolidated worker
+        run: npm run build
+      
       - name: Install Wrangler
         run: npm install -g wrangler
       

@@ -36,7 +36,7 @@ describe('OmniBot Structure Tests', () => {
   
   it('should include HTML UI', () => {
     expect(workerCode).to.include('const HTML =', 'Missing HTML UI');
-    expect(workerCode).to.include('<html>', 'Missing HTML content');
+    expect(workerCode).to.match(/<html[\s>]/, 'Missing HTML content');
   });
   
   it('should not use browser-only APIs in worker code', () => {

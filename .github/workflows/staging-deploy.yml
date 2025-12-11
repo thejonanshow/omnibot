@@ -5,7 +5,9 @@ on:
     branches: [ staging, develop ]
     paths:
       - 'cloudflare-worker/src/**'
-      - 'test/**'
+      - 'frontend/**'
+      - 'tests/**'
+      - 'scripts/**'
       - '.github/workflows/**'
   pull_request:
     branches: [ main ]
@@ -45,6 +47,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      
+      - name: Build consolidated worker
+        run: npm run build
       
       - name: Install Wrangler
         run: npm install -g wrangler
