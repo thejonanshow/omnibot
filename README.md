@@ -5,9 +5,10 @@ Voice-controlled AI assistant with automatic LLM provider rotation and self-upgr
 ## Quick Start
 
 ```bash
-npm run setup    # One-time setup
-npm run deploy   # Deploy to Cloudflare
-npm run start    # Launch frontend
+npm install      # Install dependencies
+npm run build    # Build consolidated worker (embeds frontend HTML)
+npm test         # Run tests
+# Deploy via GitHub Actions workflows (see Deployment Pipeline below)
 ```
 
 ## Features
@@ -20,22 +21,36 @@ npm run start    # Launch frontend
 
 ## Architecture
 
-- **Frontend**: Single-page app (HTML/CSS/JS) hosted on Cloudflare Pages
-- **Backend**: Cloudflare Worker routes requests to LLM providers
-- **Storage**: KV stores for rate limiting and conversation history
-- **Upgrade**: GitHub API + Cloudflare API for zero-downtime deploys
+- **Consolidated Worker**: Single Cloudflare Worker with embedded HTML/CSS/JS UI
+  - Source UI: `frontend/index.html`
+  - Built worker: `cloudflare-worker/src/index.js` (contains embedded HTML)
+  - Build process: `npm run build` embeds frontend into worker
+- **LLM Integration**: Routes requests to Groq/Gemini/Claude/GPT with auto-rotation
+- **Storage**: KV stores for context and telemetry
+- **Deployment**: GitHub Actions with staging → production promotion workflow
+
+See [BUILD_PROCESS.md](BUILD_PROCESS.md) for detailed build and deployment information.
 
 ## Development
 
 ```bash
-# Test changes locally
-cd cloudflare-worker && npm test
+# Make changes to the UI
+# Edit: frontend/index.html
+
+# Make changes to worker logic
+# Edit: cloudflare-worker/src/index.js
+
+# Build consolidated worker (embeds frontend HTML)
+npm run build
+
+# Run tests
+npm test
 
 # Run E2E tests
-npx playwright test
+npm run test:e2e
 
-# Deploy
-npm run deploy
+# Local development with Wrangler (requires credentials)
+cd cloudflare-worker && npx wrangler dev
 ```
 
 ## Deployment Pipeline
@@ -43,19 +58,24 @@ npm run deploy
 Omnibot uses a staging-to-production deployment pipeline:
 
 ### Staging Deployment
-- **Automatic**: Pushes to `main` automatically deploy to staging
-- **URL**: https://ad6fdc76.omnibot-ui-staging.pages.dev
-- **Purpose**: Test changes in production-like environment
-- **Tests**: Full E2E test suite runs on staging
+- **Automatic**: Pull requests to `main` trigger staging deployment
+- **URL**: https://omnibot-staging.jonanscheffler.workers.dev
+- **Purpose**: Test changes in production-like environment before promoting
+- **Process**:
+  1. Create PR to `main`
+  2. GitHub Actions runs tests and builds consolidated worker
+  3. Deploys to staging worker
+  4. Health checks verify deployment
 
 ### Production Deployment
-- **Manual**: Must be explicitly promoted from staging
-- **URL**: https://omnibot-ui.pages.dev
+- **Manual**: Must be explicitly promoted from staging via workflow dispatch
+- **URL**: https://omnibot.jonanscheffler.workers.dev
 - **Process**:
   1. Verify staging works correctly
-  2. Run: `gh workflow run production-deploy.yml`
-  3. Or tag release: `git tag -a v1.x.x -m "Release" && git push --tags`
-- **Safety**: Full test suite must pass on staging before promotion
+  2. Go to Actions → "Promote Staging to Production"
+  3. Click "Run workflow" and type "promote" to confirm
+  4. Workflow validates staging and deploys to production
+- **Safety**: Staging health checks must pass before promotion is allowed
 
 ### Workflow
 1. Develop and test locally
