@@ -135,7 +135,9 @@ function validateSession(token) {
     if (payload.expiry > Date.now() && payload.email === ALLOWED_EMAIL) {
       return { valid: true, email: payload.email };
     }
-  } catch (e) {}
+  } catch (e) {
+    // Invalid token format
+  }
   return { valid: false };
 }
 
@@ -505,7 +507,7 @@ function extractCodeOnly(text) {
     // Detect code patterns
     const hasCodePattern = /^(function|const|let|var|class|import|export|async|if|for|while|return|\/\/|\/\*|\*|{|}|\(|\)|;|=>)/.test(trimmed);
     const hasAssignment = /=/.test(trimmed);
-    const hasCodeSymbols = /[{}\[\]();]/.test(trimmed);
+    const hasCodeSymbols = /[{}[\]();]/.test(trimmed);
     
     // If line looks like code, include it
     if (hasCodePattern || hasAssignment || hasCodeSymbols || inCodeBlock || trimmed === '') {
