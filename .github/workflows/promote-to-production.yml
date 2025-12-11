@@ -68,8 +68,29 @@ jobs:
         with:
           node-version: '20'
       
+      - name: Install dependencies
+        run: npm install
+      
       - name: Build consolidated worker
         run: npm run build
+      
+      - name: Verify build output
+        run: |
+          if [ ! -f cloudflare-worker/src/index.js ]; then
+            echo "ERROR: Build did not produce index.js"
+            exit 1
+          fi
+          SIZE=$(wc -c < cloudflare-worker/src/index.js)
+          echo "Built worker size: $SIZE bytes"
+          if [ $SIZE -lt 100000 ]; then
+            echo "ERROR: Built worker is too small (expected >100KB with embedded HTML)"
+            exit 1
+          fi
+          if ! grep -q "<!DOCTYPE html>" cloudflare-worker/src/index.js; then
+            echo "ERROR: Built worker does not contain embedded HTML"
+            exit 1
+          fi
+          echo "✓ Build verification passed"
       
       - name: Install Wrangler
         run: npm install -g wrangler
@@ -101,16 +122,32 @@ jobs:
           # Verify all endpoints
           echo "Verifying production endpoints..."
           
-          curl -sf https://omnibot.jonanscheffler.workers.dev/ > /dev/null
-          echo "✓ Homepage"
+          # Verify HTML UI is served
+          HTML_RESPONSE=$(curl -sf https://omnibot.jonanscheffler.workers.dev/)
+          if ! echo "$HTML_RESPONSE" | grep -q "<!DOCTYPE html>"; then
+            echo "ERROR: HTML UI not served"
+            exit 1
+          fi
+          if ! echo "$HTML_RESPONSE" | grep -q "Omnibot"; then
+            echo "ERROR: HTML does not contain expected content"
+            exit 1
+          fi
+          echo "✓ Homepage with HTML UI"
           
-          curl -sf https://omnibot.jonanscheffler.workers.dev/api/health > /dev/null
-          echo "✓ Health"
+          # Health check
+          HEALTH=$(curl -sf https://omnibot.jonanscheffler.workers.dev/api/health)
+          if ! echo "$HEALTH" | grep -q '"ok":true'; then
+            echo "ERROR: Health check failed"
+            exit 1
+          fi
+          VERSION=$(echo "$HEALTH" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+          echo "✓ Health (version: $VERSION)"
           
+          # Test endpoint
           curl -sf https://omnibot.jonanscheffler.workers.dev/api/test > /dev/null
-          echo "✓ Test"
+          echo "✓ Test endpoint"
           
-          echo "Production deployment verified!"
+          echo "✅ Production deployment verified!"
 
   notify-failure:
     name: Notify on Invalid Confirmation

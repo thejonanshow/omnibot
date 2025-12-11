@@ -55,7 +55,7 @@ cd cloudflare-worker && npx wrangler dev
 
 ## Deployment Pipeline
 
-Omnibot uses a staging-to-production deployment pipeline:
+Omnibot uses a staging-to-production deployment pipeline with comprehensive validation:
 
 ### Staging Deployment
 - **Automatic**: Pull requests to `main` trigger staging deployment
@@ -63,9 +63,15 @@ Omnibot uses a staging-to-production deployment pipeline:
 - **Purpose**: Test changes in production-like environment before promoting
 - **Process**:
   1. Create PR to `main`
-  2. GitHub Actions runs tests and builds consolidated worker
-  3. Deploys to staging worker
-  4. Health checks verify deployment
+  2. GitHub Actions runs tests (`npm test`)
+  3. Installs dependencies (`npm install`)
+  4. Builds consolidated worker (`npm run build`)
+  5. Verifies build output (file size, HTML embedding)
+  6. Deploys to staging worker via Wrangler
+  7. Post-deployment validation:
+     - Health check with JSON validation
+     - HTML UI presence and content verification
+     - API endpoint accessibility tests
 
 ### Production Deployment
 - **Manual**: Must be explicitly promoted from staging via workflow dispatch
@@ -74,15 +80,42 @@ Omnibot uses a staging-to-production deployment pipeline:
   1. Verify staging works correctly
   2. Go to Actions → "Promote Staging to Production"
   3. Click "Run workflow" and type "promote" to confirm
-  4. Workflow validates staging and deploys to production
-- **Safety**: Staging health checks must pass before promotion is allowed
+  4. Workflow validates staging deployment first
+  5. Runs smoke tests on staging
+  6. Installs dependencies and builds fresh worker
+  7. Verifies build output
+  8. Deploys to production via Wrangler
+  9. Comprehensive post-deployment validation
+- **Safety**: Staging health checks and smoke tests must pass before promotion is allowed
+
+### Verification
+
+Manual deployment verification:
+```bash
+# Verify staging deployment
+./scripts/verify-deployment.sh staging
+
+# Verify production deployment
+./scripts/verify-deployment.sh production
+```
+
+### Build Process Guarantees
+
+The build pipeline ensures:
+- ✅ Dependencies installed before build
+- ✅ Build output validated (>100KB with embedded HTML)
+- ✅ HTML UI properly embedded in worker
+- ✅ Deployment verified post-deploy
+- ✅ Clear error messages on any failure
+
+See [DEPLOYMENT_POSTMORTEM.md](DEPLOYMENT_POSTMORTEM.md) for details on recent pipeline improvements.
 
 ### Workflow
-1. Develop and test locally
-2. Push to `main` → Auto-deploys to staging
-3. Test staging deployment
-4. Manually promote to production
-5. Verify production deployment
+1. Develop and test locally (`npm test`)
+2. Push to `main` → Auto-deploys to staging (with full validation)
+3. Test staging deployment (manual or automated)
+4. Manually promote to production (requires confirmation)
+5. Verify production deployment (automated checks)
 
 ## LLM-Driven Contribution Guidelines
 

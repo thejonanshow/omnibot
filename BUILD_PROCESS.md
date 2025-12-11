@@ -31,24 +31,48 @@ The build process (`scripts/build-consolidated-worker.js`) does the following:
 
 ## Deployment
 
-All deployments automatically build the consolidated worker:
+All deployments automatically build the consolidated worker with comprehensive validation:
 
-### Staging Deployment
+### Staging Deployment (Automatic)
 1. Push to a branch and create a PR to `main`
 2. GitHub Actions automatically:
-   - Runs tests
+   - Runs tests (`npm test`)
+   - Installs dependencies (`npm install`)
    - Builds consolidated worker (`npm run build`)
-   - Deploys to staging environment
-   - Runs health checks
+   - Verifies build output:
+     * File exists
+     * Size >100KB (ensures HTML is embedded)
+     * Contains `<!DOCTYPE html>`
+   - Deploys to staging environment via Wrangler
+   - Post-deployment validation:
+     * Health endpoint returns `{"ok":true}`
+     * HTML UI is served at root path
+     * API endpoints are accessible
+     * Version information is present
 
-### Production Deployment
-1. Merge PR to `main` (after staging verification)
-2. Manually trigger production promotion workflow
-3. GitHub Actions:
-   - Validates staging is healthy
-   - Builds consolidated worker
-   - Deploys to production
-   - Verifies deployment
+### Production Deployment (Manual)
+1. Verify staging deployment is healthy
+2. Manually trigger "Promote Staging to Production" workflow
+3. Type "promote" to confirm
+4. GitHub Actions:
+   - Validates staging is healthy (smoke tests)
+   - Installs dependencies (`npm install`)
+   - Builds consolidated worker (`npm run build`)
+   - Verifies build output (same checks as staging)
+   - Deploys to production via Wrangler
+   - Comprehensive post-deployment validation
+   - Reports version and deployment status
+
+### Build Guarantees
+
+The CI/CD pipeline ensures every deployment:
+- ✅ Has all dependencies installed
+- ✅ Runs the build step successfully
+- ✅ Produces valid output with embedded HTML
+- ✅ Is verified post-deployment
+- ✅ Has accessible health and API endpoints
+
+If any step fails, the deployment is aborted with clear error messages.
 
 ## Local Testing
 
@@ -84,18 +108,62 @@ npx wrangler dev
 - `scripts/build-consolidated-worker.js` - **Build Tool** - Embeds HTML into worker
 - `deploy.sh` - **Legacy** - Old deployment script (use GitHub Actions instead)
 
+## Verification
+
+### Manual Deployment Verification
+
+Use the verification script to check a deployment:
+
+```bash
+# Verify staging
+./scripts/verify-deployment.sh staging
+
+# Verify production
+./scripts/verify-deployment.sh production
+```
+
+The script checks:
+- Health endpoint returns valid JSON
+- HTML UI is served and contains expected content
+- API endpoints are accessible
+- Version information is present
+- CORS and security headers
+
 ## Troubleshooting
 
 ### Build fails
 - Ensure `frontend/index.html` exists and is valid HTML
 - Check for syntax errors in the frontend HTML
+- Verify dependencies are installed: `npm install`
+- Check Node.js version (requires v20+)
 
 ### Tests fail after build
-- Verify the HTML was embedded correctly
+- Verify the HTML was embedded correctly: `grep -c "<!DOCTYPE html>" cloudflare-worker/src/index.js`
 - Check that required functions are still present
 - Run `npm test` to see specific failures
 
 ### Deployment fails
-- Ensure you ran `npm run build` before deploying
-- Check that the worker size is within Cloudflare limits (<1MB)
-- Verify all secrets are configured in GitHub Actions
+
+#### Build verification fails
+- Check if file size is too small: `wc -c cloudflare-worker/src/index.js`
+- Verify HTML is embedded: `grep "<!DOCTYPE html>" cloudflare-worker/src/index.js`
+- Re-run build: `npm run build`
+
+#### Post-deployment verification fails
+- Wait 30-60 seconds for Cloudflare to propagate changes
+- Check deployment logs in GitHub Actions
+- Manually verify endpoints:
+  ```bash
+  curl -s https://omnibot-staging.jonanscheffler.workers.dev/api/health | jq
+  curl -s https://omnibot-staging.jonanscheffler.workers.dev/ | grep "DOCTYPE"
+  ```
+- Run verification script: `./scripts/verify-deployment.sh staging`
+
+#### Dependencies missing
+- Ensure `npm install` runs before `npm run build` in workflows
+- Check package.json for any missing dependencies
+- Verify GitHub Actions has access to npm registry
+
+### See Also
+
+For detailed information about recent deployment pipeline improvements, see [DEPLOYMENT_POSTMORTEM.md](DEPLOYMENT_POSTMORTEM.md).
