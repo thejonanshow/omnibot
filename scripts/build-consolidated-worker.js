@@ -31,10 +31,8 @@ if (htmlStartIndex === -1) {
   process.exit(1);
 }
 
-// Find the end of the HTML constant
+// Find the end of the HTML constant by looking for the closing backtick and semicolon
 let htmlEndIndex = htmlStartIndex + htmlStartMarker.length;
-let braceCount = 0;
-let inBacktick = false;
 
 for (let i = htmlEndIndex; i < workerCode.length; i++) {
   if (workerCode[i] === '`' && workerCode[i - 1] !== '\\') {
@@ -58,7 +56,13 @@ if (cleanHTML.startsWith('<!DOCTYPE html>')) {
 }
 
 // Build the new worker code
-const beforeHTML = workerCode.substring(0, htmlStartIndex);
+// First, find the comment line before the HTML constant
+const beforeHTMLRaw = workerCode.substring(0, htmlStartIndex);
+const commentLineMatch = beforeHTMLRaw.match(/\/\/ ={10,} HTML UI ={10,}\n$/);
+const beforeHTML = commentLineMatch 
+  ? beforeHTMLRaw.substring(0, beforeHTMLRaw.length - commentLineMatch[0].length)
+  : beforeHTMLRaw;
+
 const afterHTML = workerCode.substring(htmlEndIndex + htmlEndMarker.length);
 
 const newWorkerCode = beforeHTML +
