@@ -135,7 +135,9 @@ function validateSession(token) {
     if (payload.expiry > Date.now() && payload.email === ALLOWED_EMAIL) {
       return { valid: true, email: payload.email };
     }
-  } catch (e) {}
+  } catch (e) {
+    // Invalid token format
+  }
   return { valid: false };
 }
 
@@ -358,6 +360,40 @@ async function callGeminiDirect(model, messages, env, maxTokens = 4000) {
   return { content, provider: 'gemini', model };
 }
 
+async function callKimiDirect(model, messages, env, maxTokens = 4000) {
+  if (!env.KIMI_API_KEY) {
+    throw new Error('Kimi: No API key configured');
+  }
+  
+  // Kimi (Moonshot AI) uses OpenAI-compatible API
+  const res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${env.KIMI_API_KEY}`,
+      'Content-Type': 'application/json' 
+    },
+    body: JSON.stringify({ 
+      model: model || 'moonshot-v1-8k',
+      messages, 
+      max_tokens: maxTokens,
+      temperature: 0.3
+    })
+  });
+  
+  const data = await res.json();
+  
+  if (data.error) {
+    throw new Error(`Kimi [${model}]: ${data.error.message || JSON.stringify(data.error)}`);
+  }
+  
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error(`Kimi [${model}]: No response`);
+  }
+  
+  return { content, provider: 'kimi', model };
+}
+
 // Main AI call function with automatic fallback
 async function callAI(purpose, messages, env, systemPrompt = null, maxTokens = 4000) {
   const context = await getContext(env);
@@ -381,6 +417,8 @@ async function callAI(purpose, messages, env, systemPrompt = null, maxTokens = 4
         result = await callGroqDirect(model, fullMessages, env, maxTokens);
       } else if (provider === 'gemini' && env.GEMINI_API_KEY) {
         result = await callGeminiDirect(model, fullMessages, env, maxTokens);
+      } else if (provider === 'kimi' && env.KIMI_API_KEY) {
+        result = await callKimiDirect(model, fullMessages, env, maxTokens);
       } else {
         continue; // Skip if no API key for this provider
       }
@@ -695,6 +733,8 @@ function applyPatch(originalCode, patch) {
 }
 
 // Main edit orchestrator - now returns plan for approval
+// Multi-stage edit pipeline: Kimi → Groq → 3x Qwen → Claude/Gemini
+// Creates PR with elaborate description (like Claude's interface)
 async function prepareEdit(instruction, env) {
   try {
     await logTelemetry('edit_prepare_start', { instruction }, env);
@@ -706,31 +746,142 @@ async function prepareEdit(instruction, env) {
     }
     const currentCode = decodeURIComponent(escape(atob(file.content)));
     
-    // Stage 1: Plan with Groq
-    const plan = await planEdit(instruction, currentCode, env);
+    const responses = []; // Collect all stage responses for PR description
     
-    // Stage 2: Generate patches with Qwen
-    const patches = await generatePatches(plan, currentCode, env);
+    // ========================================================================
+    // STAGE 1: KIMI - Initial analysis and approach
+    // ========================================================================
+    let kimiAnalysis = 'Kimi not configured';
+    if (env.KIMI_API_KEY) {
+      try {
+        const kimiPrompt = `Analyze this code change request and provide initial guidance.
+
+User request: ${instruction}
+
+Code length: ${currentCode.length} characters
+
+Provide:
+1. Initial assessment of the request
+2. Suggested approach or architecture
+3. Key considerations
+
+Be concise but insightful.`;
+
+        kimiAnalysis = await callAI('chat', [{ role: 'user', content: kimiPrompt }], env, 
+          'You are an expert software architect analyzing a code change request.');
+        responses.push({ stage: 'Kimi Analysis', content: kimiAnalysis });
+      } catch (e) {
+        kimiAnalysis = `Kimi unavailable: ${e.message}`;
+      }
+    }
+    
+    // ========================================================================
+    // STAGE 2: GROQ - Detailed planning
+    // ========================================================================
+    const plan = await planEdit(instruction, currentCode, env);
+    responses.push({ 
+      stage: 'Groq Planning', 
+      content: `**Summary:** ${plan.summary}\n\n**Sections to modify:** ${plan.sections_to_modify?.join(', ')}\n\n**Risk level:** ${plan.risk_level}` 
+    });
+    
+    // ========================================================================
+    // STAGE 3: QWEN (3 iterations) - Implementation
+    // ========================================================================
+    
+    // Qwen iteration 1: Initial implementation
+    let patches = await generatePatches(plan, currentCode, env);
+    
+    // Qwen iteration 2: Refinement
+    if (patches.includes('<<<REPLACE>>>') || patches.includes('<<<INSERT_AFTER>>>')) {
+      try {
+        const refinePrompt = `Review and refine these patches for correctness.
+
+Task: ${plan.qwen_prompt || instruction}
+
+Current patches:
+${patches.slice(0, 3000)}
+
+Provide refined patches in the same format (<<<REPLACE>>> ... <<<WITH>>> ... <<<END>>>).`;
+        
+        const refined = await callAI('coding', [{ role: 'user', content: refinePrompt }], env,
+          'You are a code refinement specialist.');
+        
+        // Only use refined if it has patches
+        if (refined.includes('<<<REPLACE>>>') || refined.includes('<<<INSERT_AFTER>>>')) {
+          patches = refined;
+        }
+      } catch (e) {
+        // Keep original patches if refinement fails
+      }
+    }
+    
+    // Qwen iteration 3: Validation
+    if (patches.includes('<<<REPLACE>>>') || patches.includes('<<<INSERT_AFTER>>>')) {
+      try {
+        const validatePrompt = `Final validation of these patches.
+
+Task: ${instruction}
+
+Patches:
+${patches.slice(0, 3000)}
+
+Confirm patches are correct or provide corrections. Use format: <<<REPLACE>>> ... <<<WITH>>> ... <<<END>>>`;
+        
+        const validated = await callAI('coding', [{ role: 'user', content: validatePrompt }], env,
+          'You are a code validation specialist.');
+        
+        if (validated.includes('<<<REPLACE>>>') || validated.includes('<<<INSERT_AFTER>>>')) {
+          patches = validated;
+        }
+      } catch (e) {
+        // Keep previous patches if validation fails
+      }
+    }
+    
+    responses.push({ stage: 'Qwen Implementation (3 iterations)', content: 'Code patches generated and refined.' });
     
     // Check if patches are valid
     if (!patches.includes('<<<REPLACE>>>') && !patches.includes('<<<INSERT_AFTER>>>')) {
       return { 
         success: false, 
-        error: 'Could not generate valid patches',
+        error: 'Could not generate valid patches after all iterations',
         details: patches.slice(0, 500)
       };
     }
     
-    // Stage 3: Review with Groq
-    const review = await reviewPatches(patches, plan, env);
+    // ========================================================================
+    // STAGE 4: CLAUDE/GEMINI - Final review and explanation
+    // ========================================================================
+    const reviewPrompt = `Review these code changes and provide a detailed explanation for a PR description.
+
+Original request: ${instruction}
+
+Proposed changes:
+${patches.slice(0, 2000)}
+
+Provide:
+1. **Overview** - What changes are being made
+2. **Implementation Details** - How the changes work
+3. **Testing Considerations** - What should be tested
+4. **Potential Risks** - Any concerns or edge cases
+
+Format your response in markdown suitable for a GitHub PR description.`;
+
+    const finalReview = await callAI('review', [{ role: 'user', content: reviewPrompt }], env,
+      'You are a senior code reviewer preparing a detailed PR description.');
     
-    // Store pending edit for approval
+    responses.push({ stage: 'Final Review & Explanation', content: finalReview });
+    
+    // Store pending edit for approval with all context
     const editId = Date.now().toString(36);
     if (env.CONTEXT) {
       await env.CONTEXT.put(`pending_edit_${editId}`, JSON.stringify({
         instruction,
         plan,
         patches,
+        responses, // All stage responses for PR description
+        kimiAnalysis,
+        finalReview,
         timestamp: Date.now()
       }), { expirationTtl: 3600 }); // 1 hour expiry
     }
@@ -739,7 +890,8 @@ async function prepareEdit(instruction, env) {
       success: true,
       editId,
       plan: plan.summary,
-      review,
+      review: finalReview,
+      responses, // Return all responses
       patches_preview: patches.slice(0, 1000),
       awaiting_approval: true
     };
@@ -812,17 +964,69 @@ async function executeEdit(editId, env, directMerge = false) {
       return { success: false, error: 'Commit to branch failed' };
     }
     
-    // Create PR
+    // Create PR with elaborate description (Claude-style interface)
     const prTitle = `🤖 ${pending.instruction.slice(0, 60)}`;
-    const prBody = `## OmniBot Edit Request
+    
+    // Build elaborate PR description from all pipeline stages
+    let prBody = `# ${pending.instruction}
 
-**Instruction:** ${pending.instruction}
+## Overview
 
-**Plan:**
-${pending.plan || 'No plan recorded'}
+${pending.finalReview || 'Code changes implemented as requested.'}
 
 ---
-*Created by OmniBot ${VERSION_FULL}*`;
+
+## Pipeline Analysis
+
+`;
+
+    // Add each stage's response
+    if (pending.responses && pending.responses.length > 0) {
+      for (const response of pending.responses) {
+        prBody += `### ${response.stage}\n\n${response.content}\n\n---\n\n`;
+      }
+    }
+
+    // Add implementation details
+    prBody += `## Implementation Plan
+
+${pending.plan?.summary || pending.instruction}
+
+**Sections Modified:** ${pending.plan?.sections_to_modify?.join(', ') || 'N/A'}
+
+**Risk Level:** ${pending.plan?.risk_level || 'Medium'}
+
+---
+
+## Code Changes
+
+The code modifications are included in this PR. Review the diff for specific changes.
+
+`;
+
+    // Add Kimi analysis if available
+    if (pending.kimiAnalysis && !pending.kimiAnalysis.includes('not configured')) {
+      prBody += `## Initial Architecture Analysis (Kimi)
+
+${pending.kimiAnalysis}
+
+---
+
+`;
+    }
+
+    prBody += `
+## Testing & Verification
+
+Please review the changes and test:
+- Functionality works as expected
+- No regressions in existing features
+- Edge cases are handled appropriately
+
+---
+
+*Created by OmniBot ${VERSION_FULL}*
+*Pipeline: Kimi → Groq → 3x Qwen → Claude/Gemini → PR*`;
 
     const prResult = await createPullRequest(prTitle, prBody, branchName, env);
     

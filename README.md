@@ -90,6 +90,44 @@ When working with AI assistants on this project, follow these rules to maintain 
 - **Incremental progress** - Break large features into smaller, testable increments
 - **Documentation as code** - Keep documentation close to implementation and update together
 
+## Edit Pipeline Architecture
+
+Omnibot uses a multi-stage AI pipeline to generate high-quality code changes with detailed explanations:
+
+### Pipeline Flow
+
+1. **Kimi (Moonshot AI)** - Initial analysis and architectural guidance
+   - Analyzes the change request
+   - Provides architectural recommendations
+   - Sets the foundation for implementation
+
+2. **Groq (Llama)** - Detailed planning
+   - Creates focused implementation plan
+   - Identifies code sections to modify
+   - Assesses risk level
+
+3. **Qwen (3 iterations)** - Implementation and refinement
+   - Iteration 1: Initial code generation
+   - Iteration 2: Refinement for correctness
+   - Iteration 3: Final validation
+
+4. **Claude/Gemini** - Review and explanation
+   - Comprehensive code review
+   - Detailed PR description generation
+   - Testing considerations and risk assessment
+
+### PR Creation
+
+The pipeline automatically creates a GitHub Pull Request with:
+- **Code changes**: Implemented in the PR diff
+- **Elaborate description**: All AI responses formatted in a Claude-style interface
+  - Initial analysis and architectural considerations
+  - Implementation plan and details
+  - Testing recommendations
+  - Potential risks and edge cases
+
+This separation allows for rich context in the PR while keeping the code changes clean and focused.
+
 ## Configuration
 
 Set via `npm run setup` or manually in `.env`:
@@ -100,6 +138,7 @@ ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GROQ_API_KEY=
 GEMINI_API_KEY=
+KIMI_API_KEY=        # Optional: For architecture analysis
 
 # Cloudflare
 CLOUDFLARE_ACCOUNT_ID=
