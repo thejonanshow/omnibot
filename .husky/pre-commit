@@ -1,0 +1,21 @@
+# Run linting on staged files
+echo "🔍 Running pre-commit checks..."
+echo "  → Linting staged files..."
+
+# Get list of staged JavaScript files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.js$' || true)
+
+if [ -n "$STAGED_FILES" ]; then
+  # Run ESLint on staged JavaScript files
+  npx eslint $STAGED_FILES
+  
+  if [ $? -ne 0 ]; then
+    echo "❌ Linting failed. Please fix the errors before committing."
+    echo "💡 Tip: Run 'npx eslint --fix $STAGED_FILES' to automatically fix some issues"
+    exit 1
+  fi
+else
+  echo "  → No JavaScript files to lint"
+fi
+
+echo "✅ Pre-commit checks passed!"

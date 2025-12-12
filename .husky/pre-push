@@ -1,0 +1,13 @@
+# Run tests before pushing
+echo "🧪 Running pre-push checks..."
+echo "  → Running test suite..."
+
+npm test
+
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed. Please fix the failing tests before pushing."
+  echo "💡 Tip: Run 'npm test' locally to see detailed test results"
+  exit 1
+fi
+
+echo "✅ Pre-push checks passed!"
