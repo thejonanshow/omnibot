@@ -55,6 +55,14 @@ if (cleanHTML.startsWith('<!DOCTYPE html>')) {
   cleanHTML = cleanHTML.replace('<!DOCTYPE html>\n', '');
 }
 
+// Escape template literal syntax for embedding in a template literal
+// We need to escape backticks and ${ to prevent them from being interpreted
+// as template literal syntax when embedded in the worker's template literal
+cleanHTML = cleanHTML
+  .replace(/\\/g, '\\\\')     // Escape backslashes first (must be first!)
+  .replace(/`/g, '\\`')        // Escape backticks  
+  .replace(/\$\{/g, '\\$\\{');  // Escape template literal interpolations (both $ and {)
+
 // Build the new worker code
 // First, find the comment line before the HTML constant
 const beforeHTMLRaw = workerCode.substring(0, htmlStartIndex);

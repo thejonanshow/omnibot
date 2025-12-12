@@ -18,53 +18,54 @@
  * 4. Worker parses and commits to GitHub
  */
 
-export default {
-  async email(message, env, ctx) {
-    try {
-      // Get email subject and body
-      const subject = message.headers.get('subject');
-      const from = message.headers.get('from');
-      
-      // Only process emails from authorized sender
-      if (!from.includes('jonanscheffler@gmail.com')) {
-        console.log('Unauthorized sender:', from);
-        return;
-      }
-      
-      // Get email body
-      const reader = message.raw.getReader();
-      const chunks = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-      }
-      
-      const rawEmail = new TextDecoder().decode(
-        new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], []))
-      );
-      
-      // Extract plain text body
-      const body = extractPlainTextBody(rawEmail);
-      
-      // Parse commit request
-      const commitRequest = parseCommitRequest(body);
-      
-      if (!commitRequest) {
-        console.log('Invalid commit format');
-        return;
-      }
-      
-      // Commit to GitHub
-      const result = await commitToGitHub(commitRequest, env.GITHUB_TOKEN);
-      
-      console.log('Commit successful:', result.commit.sha);
-      
-    } catch (error) {
-      console.error('Error processing email:', error);
+async function handleEmail(message, env, ctx) {
+  try {
+    // Get email subject and body
+    const subject = message.headers.get('subject');
+    const from = message.headers.get('from');
+    
+    // Only process emails from authorized sender
+    if (!from.includes('jonanscheffler@gmail.com')) {
+      console.log('Unauthorized sender:', from);
+      return;
     }
+    
+    // Get email body
+    const reader = message.raw.getReader();
+    const chunks = [];
+    let done = false;
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+      if (!done) {
+        chunks.push(result.value);
+      }
+    }
+    
+    const rawEmail = new TextDecoder().decode(
+      new Uint8Array(chunks.reduce((acc, chunk) => [...acc, ...chunk], []))
+    );
+    
+    // Extract plain text body
+    const body = extractPlainTextBody(rawEmail);
+    
+    // Parse commit request
+    const commitRequest = parseCommitRequest(body);
+    
+    if (!commitRequest) {
+      console.log('Invalid commit format');
+      return;
+    }
+    
+    // Commit to GitHub
+    const result = await commitToGitHub(commitRequest, env.GITHUB_TOKEN);
+    
+    console.log('Commit successful:', result.commit.sha);
+    
+  } catch (error) {
+    console.error('Error processing email:', error);
   }
-};
+}
 
 /**
  * Extract plain text body from raw email
@@ -261,6 +262,10 @@ async function commitToGitHub(request, token) {
  */
 
 export default {
+  async email(message, env, ctx) {
+    return await handleEmail(message, env, ctx);
+  },
+  
   async fetch(request, env) {
     const url = new URL(request.url);
     
@@ -318,7 +323,7 @@ async function handleCommitRequest(url, env) {
     }
     
     // Parse commit request
-    const commitRequest = parseCommitRequest(emailContent);
+    const commitRequest = parseCommitRequest(emailContent.body);
     
     if (!commitRequest) {
       return new Response('Invalid commit format', { status: 400 });
@@ -424,164 +429,7 @@ function extractEmailBody(message) {
   return '';
 }
 
-/**
- * Parse COMMIT_REQUEST from email body
- */
-function parseCommitRequest(emailContent) {
-  const body = emailContent.body;
-  
-  if (!body.includes('COMMIT_REQUEST')) {
-    return null;
-  }
-  
-  const lines = body.split('\n');
-  const data = {
-    owner: 'thejonanshow',
-    repo: null,
-    branch: 'main',
-    files: [],
-    message: null
-  };
-  
-  let inContent = false;
-  let currentFile = null;
-  let contentLines = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    if (line.includes('--- FILE CONTENT START ---')) {
-      inContent = true;
-      contentLines = [];
-      continue;
-    }
-    
-    if (line.includes('--- FILE CONTENT END ---')) {
-      inContent = false;
-      if (currentFile) {
-        data.files.push({
-          path: currentFile,
-          content: contentLines.join('\n')
-        });
-        currentFile = null;
-      }
-      continue;
-    }
-    
-    if (inContent) {
-      contentLines.push(lines[i]);
-      continue;
-    }
-    
-    if (line.startsWith('Repository:')) {
-      const repo = line.split('Repository:')[1].trim();
-      if (repo.includes('/')) {
-        const parts = repo.split('/');
-        data.owner = parts[0];
-        data.repo = parts[1];
-      } else {
-        data.repo = repo;
-      }
-    } else if (line.startsWith('Branch:')) {
-      data.branch = line.split('Branch:')[1].trim();
-    } else if (line.startsWith('File:')) {
-      currentFile = line.split('File:')[1].trim();
-    } else if (line.startsWith('Commit Message:')) {
-      data.message = line.split('Commit Message:')[1].trim();
-    }
-  }
-  
-  if (!data.repo || data.files.length === 0 || !data.message) {
-    return null;
-  }
-  
-  return data;
-}
 
-/**
- * Commit to GitHub using the API
- */
-async function commitToGitHub(request, token) {
-  const { owner, repo, branch, message, files } = request;
-  const baseUrl = `https://api.github.com/repos/${owner}/${repo}`;
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Accept': 'application/vnd.github.v3+json',
-    'User-Agent': 'Gmail-Commit-Worker'
-  };
-  
-  // Get current branch ref
-  const refRes = await fetch(`${baseUrl}/git/ref/heads/${branch}`, { headers });
-  const refData = await refRes.json();
-  const baseSha = refData.object.sha;
-  
-  // Get base commit
-  const commitRes = await fetch(`${baseUrl}/git/commits/${baseSha}`, { headers });
-  const commitData = await commitRes.json();
-  const baseTreeSha = commitData.tree.sha;
-  
-  // Create blobs
-  const treeItems = [];
-  for (const file of files) {
-    const blobRes = await fetch(`${baseUrl}/git/blobs`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: file.content,
-        encoding: 'utf-8'
-      })
-    });
-    
-    const blob = await blobRes.json();
-    treeItems.push({
-      path: file.path,
-      mode: '100644',
-      type: 'blob',
-      sha: blob.sha
-    });
-  }
-  
-  // Create tree
-  const treeRes = await fetch(`${baseUrl}/git/trees`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      base_tree: baseTreeSha,
-      tree: treeItems
-    })
-  });
-  
-  const tree = await treeRes.json();
-  
-  // Create commit
-  const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      tree: tree.sha,
-      parents: [baseSha]
-    })
-  });
-  
-  const newCommit = await newCommitRes.json();
-  
-  // Update ref
-  await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
-    method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sha: newCommit.sha
-    })
-  });
-  
-  return {
-    commit: {
-      sha: newCommit.sha,
-      html_url: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`
-    }
-  };
-}
 
 /**
  * Archive (remove inbox label) from Gmail message
