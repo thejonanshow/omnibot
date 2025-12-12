@@ -7544,6 +7544,3726 @@ const HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+        logDiv.textContent = `${title}\n${'='.repeat(40)}\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`;
+        container.appendChild(logDiv);
+        container.scrollTop = container.scrollHeight;
+        
+        // Also send to API (async, non-blocking)
+        sendLogToAPI(type, title, data);
+    }
+    
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const [url, options = {}] = args;
+        // Skip logging for API log calls to prevent recursion
+        if (url.includes('/api/log')) {
+            return originalFetch(...args);
+        }
+        
+        logToChat('📤 REQUEST', { url, method: options.method || 'GET', headers: options.headers }, 'info');
+        try {
+            const response = await originalFetch(...args);
+            const clone = response.clone();
+            logToChat('📥 RESPONSE', { status: response.status, ok: response.ok, url: response.url }, response.ok ? 'info' : 'error');
+            if (!response.ok) { try { const text = await clone.text(); logToChat('❌ ERROR BODY', text.substring(0, 800), 'error'); } catch(e) {} }
+            return response;
+        } catch (error) {
+            logToChat('💥 NETWORK ERROR', { message: error.message, url }, 'error');
+            throw error;
+        }
+    };
+    console.log('✅ Debug logging active with API integration');
+})();
+// ==================== END ERROR LOGGING ====================
+        // Configuration
+        let config = {
+            routerUrl: localStorage.getItem('routerUrl') || '',
+            secret: localStorage.getItem('secret') || '',
+            theme: localStorage.getItem('theme') || detectSystemTheme()
+        };
+        
+        // Detect system theme preference
+        function detectSystemTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                return 'portal'; // Light theme
+            }
+            return 'cyberpunk'; // Default dark cyberpunk theme
+        }
+        
+        // State
+        let conversation = [];
+        let recognition = null;
+        let currentChallenge = null;
+        let upgradeMode = false;
+        let isRecording = false;
+        let isVoiceInput = false;
+        let micPermissionGranted = false;
+        let isLoading = false;
+        let codeMode = false;
+        let translateMode = false;
+        let swarmMode = false;
+        let editMode = false;
+        let editingMessageIndex = null;
+        let editingMessageElement = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            setupSpeechRecognition();
+            setupEventListeners();
+            setupScrollBehavior();
+            setupThemeToggle();
+            autoResize();
+            applyTheme(config.theme);
+            updateThemeToggleIcon();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        });
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            const input = document.getElementById('message-input');
+            const voiceBtn = document.getElementById('voice-btn');
+            const sendBtn = document.getElementById('send-btn');
+            const themeSelect = document.getElementById('theme-select');
+
+            input.addEventListener('input', () => {
+                autoResize();
+                updateSendButton();
+            });
+            
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                } else if (e.key === 'Escape' && editMode) {
+                    e.preventDefault();
+                    cancelEdit();
+                }
+            });
+
+            voiceBtn.addEventListener('click', toggleVoice);
+            sendBtn.addEventListener('click', sendMessage);
+            themeSelect.addEventListener('change', (e) => {
+                localStorage.setItem('themeManuallySet', 'true');
+                applyTheme(e.target.value);
+            });
+
+            document.getElementById('theme-toggle-btn').addEventListener('click', toggleThemeQuick);
+            document.getElementById('status-btn').addEventListener('click', updateStatus);
+            document.getElementById('settings-btn').addEventListener('click', openSettings);
+            document.getElementById('settings-overlay').addEventListener('click', closeSettings);
+            document.getElementById('scroll-to-bottom').addEventListener('click', scrollToBottom);
+            
+            // Secondary action buttons
+            document.getElementById('code-btn').addEventListener('click', toggleCodeMode);
+            document.getElementById('translate-btn').addEventListener('click', toggleTranslateMode);
+            document.getElementById('swarm-btn').addEventListener('click', toggleSwarmMode);
+            document.getElementById('upgrade-mode-btn').addEventListener('click', toggleUpgradeMode);
+            document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+            
+            // Transcription overlay click to cancel
+            document.getElementById('transcription-overlay').addEventListener('click', () => {
+                if (isRecording && recognition) {
+                    recognition.stop();
+                }
+            });
+        }
+
+        // Scroll Behavior
+        function setupScrollBehavior() {
+            const container = document.getElementById('chat-container');
+            const scrollBtn = document.getElementById('scroll-to-bottom');
+            
+            container.addEventListener('scroll', () => {
+                const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                scrollBtn.classList.toggle('visible', !isNearBottom && container.scrollHeight > container.clientHeight);
+            });
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-container');
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        function updateSendButton() {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = !input.value.trim() && !isRecording;
+        }
+
+        // Speech Recognition
+        function setupSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                document.getElementById('voice-btn').disabled = true;
+                document.getElementById('voice-btn').title = 'Speech recognition not supported';
+                addMessage('system', '⚠️ Voice input not available in this browser. Please use text input.');
+                return;
+            }
+
+            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => {
+                isRecording = true;
+                micPermissionGranted = true;
+                document.getElementById('voice-btn').classList.add('recording');
+                document.getElementById('voice-btn').textContent = '⏹';
+                updateSendButton();
+            };
+            
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById('message-input').value = text;
+                isVoiceInput = true;
+                autoResize();
+                updateSendButton();
+            };
+            
+            recognition.onend = () => {
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                const text = document.getElementById('message-input').value.trim();
+                if (text) {
+                    sendMessage();
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                if (event.error === 'no-speech') {
+                    addMessage('system', '🎤 No speech detected. Please try again.');
+                } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    addMessage('error', '🔒 Microphone access denied. Please enable microphone permissions in your browser.');
+                } else if (event.error !== 'aborted') {
+                    addMessage('system', `⚠️ Voice error: ${event.error}`);
+                }
+            };
+        }
+
+        async function toggleVoice() {
+            if (!recognition) {
+                addMessage('system', '⚠️ Speech recognition not available.');
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                try {
+                    isVoiceInput = true;
+                    recognition.start();
+                } catch (error) {
+                    console.error('Recognition start error:', error);
+                }
+            }
+        }
+
+        // Message Sending
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            
+            if (!text || isLoading) return;
+            
+            // Handle edit mode
+            if (editMode) {
+                handleEditSave(text);
+                return;
+            }
+            
+            if (!config.routerUrl || !config.secret) {
+                addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first.');
+                openSettings();
+                return;
+            }
+
+            input.value = '';
+            autoResize();
+            updateSendButton();
+
+            // Add to conversation first to get correct index
+            conversation.push({ role: 'user', content: text });
+            const messageIndex = conversation.length - 1;
+            
+            // Add message with correct index for edit capability
+            addMessage('user', text, messageIndex);
+
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('upgrade mode')) {
+                toggleUpgradeMode();
+                const wasVoice = isVoiceInput;
+                isVoiceInput = false;
+                if (wasVoice) {
+                    speak(upgradeMode ? 'Upgrade mode activated.' : 'Normal mode resumed.');
+                }
+                return;
+            }
+
+            showTypingIndicator();
+            isLoading = true;
+
+            try {
+                currentChallenge = await getChallenge();
+                
+                let response;
+                if (upgradeMode) {
+                    response = await sendUpgrade(text);
+                    handleUpgradeResponse(response);
+                } else {
+                    response = await sendChat(text);
+                    handleChatResponse(response);
+                }
+                
+                if (isVoiceInput && !upgradeMode) {
+                    speak(response.response);
+                }
+                
+            } catch (error) {
+                console.error('Send message error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach server. Check your connection.`);
+                } else if (error.message.includes('challenge')) {
+                    addMessage('error', `❌ Authentication failed. Check your Shared Secret in Settings.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            } finally {
+                hideTypingIndicator();
+                isVoiceInput = false;
+                isLoading = false;
+            }
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chat-container');
+            const indicator = document.createElement('div');
+            indicator.className = 'typing-indicator';
+            indicator.id = 'typing-indicator';
+            indicator.innerHTML = '<span></span><span></span><span></span>';
+            container.appendChild(indicator);
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // API Calls
+        async function getChallenge() {
+            const response = await fetch(`${config.routerUrl}/challenge`);
+            if (!response.ok) throw new Error('Failed to get authentication challenge');
+            return response.json();
+        }
+
+        async function sendChat(message) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, message);
+            
+            const response = await fetch(`${config.routerUrl}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ message, conversation })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Request failed');
+            }
+            return response.json();
+        }
+
+        async function sendUpgrade(instruction) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, instruction);
+            
+            const response = await fetch(`${config.routerUrl}/upgrade`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ instruction })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Upgrade failed');
+            }
+            return response.json();
+        }
+
+        async function computeSignature(challenge, timestamp, message) {
+            const data = `${challenge}|${timestamp}|unknown|${navigator.userAgent}|${JSON.stringify({ message, conversation })}`;
+            const encoder = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(config.secret),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Response Handlers
+        function handleChatResponse(response) {
+            addMessage('assistant', response.response);
+            conversation.push({ role: 'assistant', content: response.response });
+            
+            document.getElementById('llm-status').textContent = response.provider || '---';
+            document.getElementById('usage-status').textContent = `${response.usage || 0}/${response.limit || 0}`;
+        }
+
+        function handleUpgradeResponse(response) {
+            // Handle approval flow for proposed changes
+            if (response.awaiting_approval && response.editId) {
+                // Show the proposed changes
+                const message = response.message || response.review || response.plan || 'Changes proposed';
+                addMessage('system', `📋 **Proposed Changes:**\n\n${message}`);
+                
+                // Show approval buttons
+                showApprovalButtons(response.editId, response.patches_preview || '');
+                return;
+            }
+            
+            // Handle completed upgrade
+            if (response.success) {
+                addMessage('system', '✅ Upgrade Successful!');
+                if (response.changes) {
+                    response.changes.forEach(change => {
+                        addMessage('system', `📝 ${change.file}: ${change.reason}`);
+                    });
+                }
+                if (response.deployment_triggered) {
+                    addMessage('system', '🚀 Deployment initiated. Changes will be live in ~60 seconds.');
+                }
+                if (response.commit) {
+                    addMessage('system', `✓ Committed: ${response.commit}`);
+                }
+                if (response.url) {
+                    addMessage('system', `🔗 ${response.url}`);
+                }
+            } else {
+                addMessage('error', `❌ Upgrade Failed: ${response.error || 'Unknown error'}`);
+            }
+            
+            if (upgradeMode) {
+                toggleUpgradeMode();
+            }
+        }
+        
+        // Show approval buttons for proposed changes
+        function showApprovalButtons(editId, patchPreview) {
+            // Remove any existing approval buttons
+            const existingButtons = document.querySelectorAll('.approval-buttons');
+            existingButtons.forEach(el => el.remove());
+            
+            const container = document.getElementById('chat-container');
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'approval-buttons';
+            buttonsDiv.innerHTML = `
+                <button class="approve-btn" data-edit-id="${editId}">
+                    ✓ Approve
+                </button>
+                <button class="review-btn" data-edit-id="${editId}">
+                    🔍 Review
+                </button>
+                <button class="deny-btn" data-edit-id="${editId}">
+                    ✗ Deny
+                </button>
+            `;
+            
+            container.appendChild(buttonsDiv);
+            scrollToBottom();
+            
+            // Attach event handlers
+            const approveBtn = buttonsDiv.querySelector('.approve-btn');
+            const reviewBtn = buttonsDiv.querySelector('.review-btn');
+            const denyBtn = buttonsDiv.querySelector('.deny-btn');
+            
+            approveBtn.onclick = () => approveEdit(editId, buttonsDiv);
+            reviewBtn.onclick = () => reviewEdit(editId, patchPreview, buttonsDiv);
+            denyBtn.onclick = () => denyEdit(buttonsDiv);
+        }
+        
+        // Approve and execute the proposed changes
+        async function approveEdit(editId, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '⏳ Deploying changes...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/approve-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addMessage('system', `✅ Changes deployed successfully!`);
+                    if (data.commit) {
+                        addMessage('system', `📝 Commit: ${data.commit}`);
+                    }
+                    if (data.url) {
+                        addMessage('system', `🔗 ${data.url}`);
+                    }
+                } else {
+                    addMessage('error', `❌ Deployment failed: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Request review of proposed changes using Qwen
+        async function reviewEdit(editId, patchPreview, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '🔍 Requesting Qwen review...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/review-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.review) {
+                    addMessage('system', `🔍 **Review Results:**\n\n${data.review}`);
+                    // Show buttons again after review
+                    showApprovalButtons(editId, patchPreview);
+                } else {
+                    addMessage('error', `❌ Review failed: ${data.error || 'Unknown error'}`);
+                    // Show buttons again even if review failed
+                    showApprovalButtons(editId, patchPreview);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+                // Show buttons again even if there was an error
+                showApprovalButtons(editId, patchPreview);
+            }
+        }
+        
+        // Deny/cancel the proposed changes
+        function denyEdit(buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '❌ Changes rejected');
+        }
+
+        // Upgrade Mode
+        function toggleUpgradeMode() {
+            upgradeMode = !upgradeMode;
+            const modeStatus = document.getElementById('mode-status');
+            const upgradeBtn = document.getElementById('upgrade-mode-btn');
+            
+            if (upgradeMode) {
+                document.body.classList.add('upgrade-mode-active');
+                modeStatus.textContent = 'UPGRADE';
+                modeStatus.style.color = '#ff6600';
+                upgradeBtn.classList.add('active');
+                addMessage('system', '⚠️ UPGRADE MODE ACTIVATED - Next command will modify the system');
+            } else {
+                document.body.classList.remove('upgrade-mode-active');
+                modeStatus.textContent = 'Normal';
+                modeStatus.style.color = '';
+                upgradeBtn.classList.remove('active');
+                addMessage('system', '✅ Normal mode resumed');
+            }
+        }
+
+        // Status Update
+        async function updateStatus() {
+            if (!config.routerUrl) {
+                addMessage('error', '⚙️ Configure Router URL in Settings first');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/status`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => response.statusText);
+                    throw new Error(`Server returned ${response.status}: ${errorText}`);
+                }
+                
+                const status = await response.json();
+                
+                let totalUsage = 0;
+                let totalLimit = 0;
+                let providers = [];
+                
+                if (status.groq !== undefined) {
+                    totalUsage += status.groq;
+                    totalLimit += 30;
+                    providers.push(`Groq: ${status.groq}/30`);
+                }
+                if (status.gemini !== undefined) {
+                    totalUsage += status.gemini;
+                    totalLimit += 15;
+                    providers.push(`Gemini: ${status.gemini}/15`);
+                }
+                if (status.claude !== undefined) {
+                    totalUsage += status.claude;
+                    totalLimit += 50;
+                    providers.push(`Claude: ${status.claude}/50`);
+                }
+                
+                document.getElementById('usage-status').textContent = `${totalUsage}/${totalLimit}`;
+                addMessage('system', `📊 ${providers.join(' • ')}`);
+            } catch (error) {
+                console.error('Status check error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach ${config.routerUrl}. Check your connection or Router URL.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            }
+        }
+
+        // Text-to-Speech
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Message Display
+        function addMessage(role, content, messageIndex = null) {
+            const container = document.getElementById('chat-container');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            
+            // Store message index for editing
+            if (role === 'user' && messageIndex !== null) {
+                msg.dataset.messageIndex = messageIndex;
+            }
+            
+            if (role !== 'system' && role !== 'error') {
+                const roleLabel = document.createElement('div');
+                roleLabel.className = 'message-role';
+                roleLabel.textContent = role === 'user' ? 'You' : 'Omnibot';
+                msg.appendChild(roleLabel);
+            }
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            msg.appendChild(contentDiv);
+            
+            // Add edit button for user messages
+            if (role === 'user' && messageIndex !== null) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'message-edit-btn';
+                editBtn.innerHTML = '✏️';
+                editBtn.title = 'Edit message';
+                editBtn.setAttribute('aria-label', 'Edit this message');
+                editBtn.onclick = () => startEditMessage(messageIndex, content, msg);
+                msg.appendChild(editBtn);
+            }
+            
+            // Add timestamp
+            if (role !== 'system') {
+                const timestamp = document.createElement('div');
+                timestamp.className = 'message-timestamp';
+                timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                msg.appendChild(timestamp);
+            }
+            
+            container.appendChild(msg);
+            scrollToBottom();
+            
+            return msg;
+        }
+        
+        // Start editing a message
+        function startEditMessage(index, content, messageElement) {
+            if (isLoading) return;
+            
+            editMode = true;
+            editingMessageIndex = index;
+            editingMessageElement = messageElement;
+            
+            // Highlight the message being edited
+            messageElement.classList.add('editing');
+            
+            // Fill input with message content
+            const input = document.getElementById('message-input');
+            input.value = content;
+            input.focus();
+            autoResize();
+            
+            // Change input styling to show edit mode
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.add('edit-mode');
+            
+            // Show cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'inline-flex';
+            
+            // Show edit indicator
+            addMessage('system', '✏️ Editing message - press Send to update or Escape/Cancel to abort');
+            
+            // Change send button text
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '💾';
+            sendBtn.title = 'Save edited message';
+        }
+        
+        // Cancel edit mode
+        function cancelEdit() {
+            if (!editMode) return;
+            
+            editMode = false;
+            
+            // Remove highlighting
+            if (editingMessageElement) {
+                editingMessageElement.classList.remove('editing');
+            }
+            
+            // Reset input
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            // Remove edit mode styling
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            // Reset send button
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            addMessage('system', '❌ Edit cancelled');
+            
+            editingMessageIndex = null;
+            editingMessageElement = null;
+        }
+        
+        // Handle saving edited message
+        async function handleEditSave(newText) {
+            if (editingMessageIndex === null) return;
+            
+            // Update conversation history
+            conversation[editingMessageIndex].content = newText;
+            
+            // Update the message element
+            if (editingMessageElement) {
+                const contentDiv = editingMessageElement.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.textContent = newText;
+                }
+                editingMessageElement.classList.remove('editing');
+                editingMessageElement.classList.add('edited');
+                
+                // Add edited indicator
+                let editedLabel = editingMessageElement.querySelector('.edited-label');
+                if (!editedLabel) {
+                    editedLabel = document.createElement('span');
+                    editedLabel.className = 'edited-label';
+                    editedLabel.textContent = '(edited)';
+                    editedLabel.title = 'This message was edited';
+                    const timestamp = editingMessageElement.querySelector('.message-timestamp');
+                    if (timestamp) {
+                        timestamp.appendChild(document.createTextNode(' '));
+                        timestamp.appendChild(editedLabel);
+                    }
+                }
+            }
+            
+            // Reset edit mode
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            editMode = false;
+            editingMessageIndex = null;
+            editingMessageElement = null;
+            
+            addMessage('system', '✅ Message updated');
+        }
+
+        // Auto-resize Textarea
+        function autoResize() {
+            const textarea = document.getElementById('message-input');
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        // Theme Management
+        function applyTheme(theme) {
+            document.body.className = `theme-${theme}`;
+            const panel = document.getElementById('settings-panel');
+            panel.className = `settings-panel theme-${theme}`;
+            config.theme = theme;
+            localStorage.setItem('theme', theme);
+            updateThemeToggleIcon();
+        }
+        
+        // Setup theme toggle with system preference monitoring
+        function setupThemeToggle() {
+            // Listen for system theme changes
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                    // Only auto-switch if user hasn't manually set a theme
+                    if (!localStorage.getItem('themeManuallySet')) {
+                        const newTheme = e.matches ? 'cyberpunk' : 'portal';
+                        applyTheme(newTheme);
+                    }
+                });
+            }
+        }
+        
+        // Quick theme toggle between light and dark
+        function toggleThemeQuick() {
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const lightThemes = ['portal'];
+            
+            const isDark = darkThemes.includes(config.theme);
+            let newTheme;
+            
+            if (isDark) {
+                // Switch to light
+                newTheme = 'portal';
+            } else {
+                // Switch to dark cyberpunk
+                newTheme = 'cyberpunk';
+            }
+            
+            localStorage.setItem('themeManuallySet', 'true');
+            applyTheme(newTheme);
+            document.getElementById('theme-select').value = newTheme;
+            
+            // Add visual feedback animation
+            const btn = document.getElementById('theme-toggle-btn');
+            btn.style.transition = 'transform 0.2s ease';
+            btn.style.transform = 'scale(0.9) rotate(180deg)';
+            setTimeout(() => {
+                btn.style.transform = '';
+            }, 200);
+            
+            // Announce theme change for screen readers
+            const announcement = document.createElement('div');
+            announcement.setAttribute('role', 'status');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.style.position = 'absolute';
+            announcement.style.left = '-10000px';
+            announcement.textContent = `Theme switched to ${newTheme === 'portal' ? 'light' : 'dark'} mode`;
+            document.body.appendChild(announcement);
+            setTimeout(() => announcement.remove(), 1000);
+        }
+        
+        // Update theme toggle button icon
+        function updateThemeToggleIcon() {
+            const btn = document.getElementById('theme-toggle-btn');
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            
+            if (darkThemes.includes(config.theme)) {
+                btn.textContent = '☀️'; // Sun icon for switching to light
+                btn.title = 'Switch to Light Theme';
+                btn.setAttribute('aria-label', 'Switch to light theme');
+            } else {
+                btn.textContent = '🌙'; // Moon icon for switching to dark
+                btn.title = 'Switch to Dark Theme';
+                btn.setAttribute('aria-label', 'Switch to dark theme');
+            }
+        }
+
+        // Settings Panel
+        function openSettings() {
+            document.getElementById('settings-panel').classList.add('active');
+            document.getElementById('settings-overlay').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('active');
+            document.getElementById('settings-overlay').classList.remove('active');
+        }
+
+        function loadSettings() {
+            document.getElementById('router-url').value = config.routerUrl;
+            document.getElementById('secret').value = config.secret;
+            document.getElementById('theme-select').value = config.theme;
+        }
+
+        function saveSettings() {
+            config.routerUrl = document.getElementById('router-url').value.trim();
+            config.secret = document.getElementById('secret').value.trim();
+            config.theme = document.getElementById('theme-select').value;
+            
+            localStorage.setItem('routerUrl', config.routerUrl);
+            localStorage.setItem('secret', config.secret);
+            localStorage.setItem('theme', config.theme);
+            
+            applyTheme(config.theme);
+            addMessage('system', '✅ Settings saved successfully!');
+            closeSettings();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        }
+
+        // Mode Toggle Functions
+        function toggleCodeMode() {
+            codeMode = !codeMode;
+            document.getElementById('code-btn').classList.toggle('active');
+            addMessage('system', codeMode ? '💻 Code mode activated' : '✅ Code mode deactivated');
+        }
+
+        function toggleTranslateMode() {
+            translateMode = !translateMode;
+            document.getElementById('translate-btn').classList.toggle('active');
+            addMessage('system', translateMode ? '🌐 Translate mode activated' : '✅ Translate mode deactivated');
+        }
+
+        function toggleSwarmMode() {
+            swarmMode = !swarmMode;
+            document.getElementById('swarm-btn').classList.toggle('active');
+            addMessage('system', swarmMode ? '🔗 Swarm mode activated' : '✅ Swarm mode deactivated');
+        }
+    </script>
+</body>
+</html>`;
+
+        logDiv.textContent = `${title}\n${'='.repeat(40)}\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`;
+        container.appendChild(logDiv);
+        container.scrollTop = container.scrollHeight;
+        
+        // Also send to API (async, non-blocking)
+        sendLogToAPI(type, title, data);
+    }
+    
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const [url, options = {}] = args;
+        // Skip logging for API log calls to prevent recursion
+        if (url.includes('/api/log')) {
+            return originalFetch(...args);
+        }
+        
+        logToChat('📤 REQUEST', { url, method: options.method || 'GET', headers: options.headers }, 'info');
+        try {
+            const response = await originalFetch(...args);
+            const clone = response.clone();
+            logToChat('📥 RESPONSE', { status: response.status, ok: response.ok, url: response.url }, response.ok ? 'info' : 'error');
+            if (!response.ok) { try { const text = await clone.text(); logToChat('❌ ERROR BODY', text.substring(0, 800), 'error'); } catch(e) {} }
+            return response;
+        } catch (error) {
+            logToChat('💥 NETWORK ERROR', { message: error.message, url }, 'error');
+            throw error;
+        }
+    };
+    console.log('✅ Debug logging active with API integration');
+})();
+// ==================== END ERROR LOGGING ====================
+        // Configuration
+        let config = {
+            routerUrl: localStorage.getItem('routerUrl') || '',
+            secret: localStorage.getItem('secret') || '',
+            theme: localStorage.getItem('theme') || detectSystemTheme()
+        };
+        
+        // Detect system theme preference
+        function detectSystemTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                return 'portal'; // Light theme
+            }
+            return 'cyberpunk'; // Default dark cyberpunk theme
+        }
+        
+        // State
+        let conversation = [];
+        let recognition = null;
+        let currentChallenge = null;
+        let upgradeMode = false;
+        let isRecording = false;
+        let isVoiceInput = false;
+        let micPermissionGranted = false;
+        let isLoading = false;
+        let codeMode = false;
+        let translateMode = false;
+        let swarmMode = false;
+        let editMode = false;
+        let editingMessageIndex = null;
+        let editingMessageElement = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            setupSpeechRecognition();
+            setupEventListeners();
+            setupScrollBehavior();
+            setupThemeToggle();
+            autoResize();
+            applyTheme(config.theme);
+            updateThemeToggleIcon();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        });
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            const input = document.getElementById('message-input');
+            const voiceBtn = document.getElementById('voice-btn');
+            const sendBtn = document.getElementById('send-btn');
+            const themeSelect = document.getElementById('theme-select');
+
+            input.addEventListener('input', () => {
+                autoResize();
+                updateSendButton();
+            });
+            
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                } else if (e.key === 'Escape' && editMode) {
+                    e.preventDefault();
+                    cancelEdit();
+                }
+            });
+
+            voiceBtn.addEventListener('click', toggleVoice);
+            sendBtn.addEventListener('click', sendMessage);
+            themeSelect.addEventListener('change', (e) => {
+                localStorage.setItem('themeManuallySet', 'true');
+                applyTheme(e.target.value);
+            });
+
+            document.getElementById('theme-toggle-btn').addEventListener('click', toggleThemeQuick);
+            document.getElementById('status-btn').addEventListener('click', updateStatus);
+            document.getElementById('settings-btn').addEventListener('click', openSettings);
+            document.getElementById('settings-overlay').addEventListener('click', closeSettings);
+            document.getElementById('scroll-to-bottom').addEventListener('click', scrollToBottom);
+            
+            // Secondary action buttons
+            document.getElementById('code-btn').addEventListener('click', toggleCodeMode);
+            document.getElementById('translate-btn').addEventListener('click', toggleTranslateMode);
+            document.getElementById('swarm-btn').addEventListener('click', toggleSwarmMode);
+            document.getElementById('upgrade-mode-btn').addEventListener('click', toggleUpgradeMode);
+            document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+            
+            // Transcription overlay click to cancel
+            document.getElementById('transcription-overlay').addEventListener('click', () => {
+                if (isRecording && recognition) {
+                    recognition.stop();
+                }
+            });
+        }
+
+        // Scroll Behavior
+        function setupScrollBehavior() {
+            const container = document.getElementById('chat-container');
+            const scrollBtn = document.getElementById('scroll-to-bottom');
+            
+            container.addEventListener('scroll', () => {
+                const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                scrollBtn.classList.toggle('visible', !isNearBottom && container.scrollHeight > container.clientHeight);
+            });
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-container');
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        function updateSendButton() {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = !input.value.trim() && !isRecording;
+        }
+
+        // Speech Recognition
+        function setupSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                document.getElementById('voice-btn').disabled = true;
+                document.getElementById('voice-btn').title = 'Speech recognition not supported';
+                addMessage('system', '⚠️ Voice input not available in this browser. Please use text input.');
+                return;
+            }
+
+            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => {
+                isRecording = true;
+                micPermissionGranted = true;
+                document.getElementById('voice-btn').classList.add('recording');
+                document.getElementById('voice-btn').textContent = '⏹';
+                updateSendButton();
+            };
+            
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById('message-input').value = text;
+                isVoiceInput = true;
+                autoResize();
+                updateSendButton();
+            };
+            
+            recognition.onend = () => {
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                const text = document.getElementById('message-input').value.trim();
+                if (text) {
+                    sendMessage();
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                if (event.error === 'no-speech') {
+                    addMessage('system', '🎤 No speech detected. Please try again.');
+                } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    addMessage('error', '🔒 Microphone access denied. Please enable microphone permissions in your browser.');
+                } else if (event.error !== 'aborted') {
+                    addMessage('system', `⚠️ Voice error: ${event.error}`);
+                }
+            };
+        }
+
+        async function toggleVoice() {
+            if (!recognition) {
+                addMessage('system', '⚠️ Speech recognition not available.');
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                try {
+                    isVoiceInput = true;
+                    recognition.start();
+                } catch (error) {
+                    console.error('Recognition start error:', error);
+                }
+            }
+        }
+
+        // Message Sending
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            
+            if (!text || isLoading) return;
+            
+            // Handle edit mode
+            if (editMode) {
+                handleEditSave(text);
+                return;
+            }
+            
+            if (!config.routerUrl || !config.secret) {
+                addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first.');
+                openSettings();
+                return;
+            }
+
+            input.value = '';
+            autoResize();
+            updateSendButton();
+
+            // Add to conversation first to get correct index
+            conversation.push({ role: 'user', content: text });
+            const messageIndex = conversation.length - 1;
+            
+            // Add message with correct index for edit capability
+            addMessage('user', text, messageIndex);
+
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('upgrade mode')) {
+                toggleUpgradeMode();
+                const wasVoice = isVoiceInput;
+                isVoiceInput = false;
+                if (wasVoice) {
+                    speak(upgradeMode ? 'Upgrade mode activated.' : 'Normal mode resumed.');
+                }
+                return;
+            }
+
+            showTypingIndicator();
+            isLoading = true;
+
+            try {
+                currentChallenge = await getChallenge();
+                
+                let response;
+                if (upgradeMode) {
+                    response = await sendUpgrade(text);
+                    handleUpgradeResponse(response);
+                } else {
+                    response = await sendChat(text);
+                    handleChatResponse(response);
+                }
+                
+                if (isVoiceInput && !upgradeMode) {
+                    speak(response.response);
+                }
+                
+            } catch (error) {
+                console.error('Send message error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach server. Check your connection.`);
+                } else if (error.message.includes('challenge')) {
+                    addMessage('error', `❌ Authentication failed. Check your Shared Secret in Settings.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            } finally {
+                hideTypingIndicator();
+                isVoiceInput = false;
+                isLoading = false;
+            }
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chat-container');
+            const indicator = document.createElement('div');
+            indicator.className = 'typing-indicator';
+            indicator.id = 'typing-indicator';
+            indicator.innerHTML = '<span></span><span></span><span></span>';
+            container.appendChild(indicator);
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // API Calls
+        async function getChallenge() {
+            const response = await fetch(`${config.routerUrl}/challenge`);
+            if (!response.ok) throw new Error('Failed to get authentication challenge');
+            return response.json();
+        }
+
+        async function sendChat(message) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, message);
+            
+            const response = await fetch(`${config.routerUrl}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ message, conversation })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Request failed');
+            }
+            return response.json();
+        }
+
+        async function sendUpgrade(instruction) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, instruction);
+            
+            const response = await fetch(`${config.routerUrl}/upgrade`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ instruction })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Upgrade failed');
+            }
+            return response.json();
+        }
+
+        async function computeSignature(challenge, timestamp, message) {
+            const data = `${challenge}|${timestamp}|unknown|${navigator.userAgent}|${JSON.stringify({ message, conversation })}`;
+            const encoder = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(config.secret),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Response Handlers
+        function handleChatResponse(response) {
+            addMessage('assistant', response.response);
+            conversation.push({ role: 'assistant', content: response.response });
+            
+            document.getElementById('llm-status').textContent = response.provider || '---';
+            document.getElementById('usage-status').textContent = `${response.usage || 0}/${response.limit || 0}`;
+        }
+
+        function handleUpgradeResponse(response) {
+            // Handle approval flow for proposed changes
+            if (response.awaiting_approval && response.editId) {
+                // Show the proposed changes
+                const message = response.message || response.review || response.plan || 'Changes proposed';
+                addMessage('system', `📋 **Proposed Changes:**\n\n${message}`);
+                
+                // Show approval buttons
+                showApprovalButtons(response.editId, response.patches_preview || '');
+                return;
+            }
+            
+            // Handle completed upgrade
+            if (response.success) {
+                addMessage('system', '✅ Upgrade Successful!');
+                if (response.changes) {
+                    response.changes.forEach(change => {
+                        addMessage('system', `📝 ${change.file}: ${change.reason}`);
+                    });
+                }
+                if (response.deployment_triggered) {
+                    addMessage('system', '🚀 Deployment initiated. Changes will be live in ~60 seconds.');
+                }
+                if (response.commit) {
+                    addMessage('system', `✓ Committed: ${response.commit}`);
+                }
+                if (response.url) {
+                    addMessage('system', `🔗 ${response.url}`);
+                }
+            } else {
+                addMessage('error', `❌ Upgrade Failed: ${response.error || 'Unknown error'}`);
+            }
+            
+            if (upgradeMode) {
+                toggleUpgradeMode();
+            }
+        }
+        
+        // Show approval buttons for proposed changes
+        function showApprovalButtons(editId, patchPreview) {
+            // Remove any existing approval buttons
+            const existingButtons = document.querySelectorAll('.approval-buttons');
+            existingButtons.forEach(el => el.remove());
+            
+            const container = document.getElementById('chat-container');
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'approval-buttons';
+            buttonsDiv.innerHTML = `
+                <button class="approve-btn" data-edit-id="${editId}">
+                    ✓ Approve
+                </button>
+                <button class="review-btn" data-edit-id="${editId}">
+                    🔍 Review
+                </button>
+                <button class="deny-btn" data-edit-id="${editId}">
+                    ✗ Deny
+                </button>
+            `;
+            
+            container.appendChild(buttonsDiv);
+            scrollToBottom();
+            
+            // Attach event handlers
+            const approveBtn = buttonsDiv.querySelector('.approve-btn');
+            const reviewBtn = buttonsDiv.querySelector('.review-btn');
+            const denyBtn = buttonsDiv.querySelector('.deny-btn');
+            
+            approveBtn.onclick = () => approveEdit(editId, buttonsDiv);
+            reviewBtn.onclick = () => reviewEdit(editId, patchPreview, buttonsDiv);
+            denyBtn.onclick = () => denyEdit(buttonsDiv);
+        }
+        
+        // Approve and execute the proposed changes
+        async function approveEdit(editId, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '⏳ Deploying changes...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/approve-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addMessage('system', `✅ Changes deployed successfully!`);
+                    if (data.commit) {
+                        addMessage('system', `📝 Commit: ${data.commit}`);
+                    }
+                    if (data.url) {
+                        addMessage('system', `🔗 ${data.url}`);
+                    }
+                } else {
+                    addMessage('error', `❌ Deployment failed: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Request review of proposed changes using Qwen
+        async function reviewEdit(editId, patchPreview, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '🔍 Requesting Qwen review...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/review-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.review) {
+                    addMessage('system', `🔍 **Review Results:**\n\n${data.review}`);
+                    // Show buttons again after review
+                    showApprovalButtons(editId, patchPreview);
+                } else {
+                    addMessage('error', `❌ Review failed: ${data.error || 'Unknown error'}`);
+                    // Show buttons again even if review failed
+                    showApprovalButtons(editId, patchPreview);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+                // Show buttons again even if there was an error
+                showApprovalButtons(editId, patchPreview);
+            }
+        }
+        
+        // Deny/cancel the proposed changes
+        function denyEdit(buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '❌ Changes rejected');
+        }
+
+        // Upgrade Mode
+        function toggleUpgradeMode() {
+            upgradeMode = !upgradeMode;
+            const modeStatus = document.getElementById('mode-status');
+            const upgradeBtn = document.getElementById('upgrade-mode-btn');
+            
+            if (upgradeMode) {
+                document.body.classList.add('upgrade-mode-active');
+                modeStatus.textContent = 'UPGRADE';
+                modeStatus.style.color = '#ff6600';
+                upgradeBtn.classList.add('active');
+                addMessage('system', '⚠️ UPGRADE MODE ACTIVATED - Next command will modify the system');
+            } else {
+                document.body.classList.remove('upgrade-mode-active');
+                modeStatus.textContent = 'Normal';
+                modeStatus.style.color = '';
+                upgradeBtn.classList.remove('active');
+                addMessage('system', '✅ Normal mode resumed');
+            }
+        }
+
+        // Status Update
+        async function updateStatus() {
+            if (!config.routerUrl) {
+                addMessage('error', '⚙️ Configure Router URL in Settings first');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/status`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => response.statusText);
+                    throw new Error(`Server returned ${response.status}: ${errorText}`);
+                }
+                
+                const status = await response.json();
+                
+                let totalUsage = 0;
+                let totalLimit = 0;
+                let providers = [];
+                
+                if (status.groq !== undefined) {
+                    totalUsage += status.groq;
+                    totalLimit += 30;
+                    providers.push(`Groq: ${status.groq}/30`);
+                }
+                if (status.gemini !== undefined) {
+                    totalUsage += status.gemini;
+                    totalLimit += 15;
+                    providers.push(`Gemini: ${status.gemini}/15`);
+                }
+                if (status.claude !== undefined) {
+                    totalUsage += status.claude;
+                    totalLimit += 50;
+                    providers.push(`Claude: ${status.claude}/50`);
+                }
+                
+                document.getElementById('usage-status').textContent = `${totalUsage}/${totalLimit}`;
+                addMessage('system', `📊 ${providers.join(' • ')}`);
+            } catch (error) {
+                console.error('Status check error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach ${config.routerUrl}. Check your connection or Router URL.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            }
+        }
+
+        // Text-to-Speech
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Message Display
+        function addMessage(role, content, messageIndex = null) {
+            const container = document.getElementById('chat-container');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            
+            // Store message index for editing
+            if (role === 'user' && messageIndex !== null) {
+                msg.dataset.messageIndex = messageIndex;
+            }
+            
+            if (role !== 'system' && role !== 'error') {
+                const roleLabel = document.createElement('div');
+                roleLabel.className = 'message-role';
+                roleLabel.textContent = role === 'user' ? 'You' : 'Omnibot';
+                msg.appendChild(roleLabel);
+            }
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            msg.appendChild(contentDiv);
+            
+            // Add edit button for user messages
+            if (role === 'user' && messageIndex !== null) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'message-edit-btn';
+                editBtn.innerHTML = '✏️';
+                editBtn.title = 'Edit message';
+                editBtn.setAttribute('aria-label', 'Edit this message');
+                editBtn.onclick = () => startEditMessage(messageIndex, content, msg);
+                msg.appendChild(editBtn);
+            }
+            
+            // Add timestamp
+            if (role !== 'system') {
+                const timestamp = document.createElement('div');
+                timestamp.className = 'message-timestamp';
+                timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                msg.appendChild(timestamp);
+            }
+            
+            container.appendChild(msg);
+            scrollToBottom();
+            
+            return msg;
+        }
+        
+        // Start editing a message
+        function startEditMessage(index, content, messageElement) {
+            if (isLoading) return;
+            
+            editMode = true;
+            editingMessageIndex = index;
+            editingMessageElement = messageElement;
+            
+            // Highlight the message being edited
+            messageElement.classList.add('editing');
+            
+            // Fill input with message content
+            const input = document.getElementById('message-input');
+            input.value = content;
+            input.focus();
+            autoResize();
+            
+            // Change input styling to show edit mode
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.add('edit-mode');
+            
+            // Show cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'inline-flex';
+            
+            // Show edit indicator
+            addMessage('system', '✏️ Editing message - press Send to update or Escape/Cancel to abort');
+            
+            // Change send button text
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '💾';
+            sendBtn.title = 'Save edited message';
+        }
+        
+        // Cancel edit mode
+        function cancelEdit() {
+            if (!editMode) return;
+            
+            editMode = false;
+            
+            // Remove highlighting
+            if (editingMessageElement) {
+                editingMessageElement.classList.remove('editing');
+            }
+            
+            // Reset input
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            // Remove edit mode styling
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            // Reset send button
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            addMessage('system', '❌ Edit cancelled');
+            
+            editingMessageIndex = null;
+            editingMessageElement = null;
+        }
+        
+        // Handle saving edited message
+        async function handleEditSave(newText) {
+            if (editingMessageIndex === null) return;
+            
+            // Update conversation history
+            conversation[editingMessageIndex].content = newText;
+            
+            // Update the message element
+            if (editingMessageElement) {
+                const contentDiv = editingMessageElement.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.textContent = newText;
+                }
+                editingMessageElement.classList.remove('editing');
+                editingMessageElement.classList.add('edited');
+                
+                // Add edited indicator
+                let editedLabel = editingMessageElement.querySelector('.edited-label');
+                if (!editedLabel) {
+                    editedLabel = document.createElement('span');
+                    editedLabel.className = 'edited-label';
+                    editedLabel.textContent = '(edited)';
+                    editedLabel.title = 'This message was edited';
+                    const timestamp = editingMessageElement.querySelector('.message-timestamp');
+                    if (timestamp) {
+                        timestamp.appendChild(document.createTextNode(' '));
+                        timestamp.appendChild(editedLabel);
+                    }
+                }
+            }
+            
+            // Reset edit mode
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            editMode = false;
+            editingMessageIndex = null;
+            editingMessageElement = null;
+            
+            addMessage('system', '✅ Message updated');
+        }
+
+        // Auto-resize Textarea
+        function autoResize() {
+            const textarea = document.getElementById('message-input');
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        // Theme Management
+        function applyTheme(theme) {
+            document.body.className = `theme-${theme}`;
+            const panel = document.getElementById('settings-panel');
+            panel.className = `settings-panel theme-${theme}`;
+            config.theme = theme;
+            localStorage.setItem('theme', theme);
+            updateThemeToggleIcon();
+        }
+        
+        // Setup theme toggle with system preference monitoring
+        function setupThemeToggle() {
+            // Listen for system theme changes
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                    // Only auto-switch if user hasn't manually set a theme
+                    if (!localStorage.getItem('themeManuallySet')) {
+                        const newTheme = e.matches ? 'cyberpunk' : 'portal';
+                        applyTheme(newTheme);
+                    }
+                });
+            }
+        }
+        
+        // Quick theme toggle between light and dark
+        function toggleThemeQuick() {
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const lightThemes = ['portal'];
+            
+            const isDark = darkThemes.includes(config.theme);
+            let newTheme;
+            
+            if (isDark) {
+                // Switch to light
+                newTheme = 'portal';
+            } else {
+                // Switch to dark cyberpunk
+                newTheme = 'cyberpunk';
+            }
+            
+            localStorage.setItem('themeManuallySet', 'true');
+            applyTheme(newTheme);
+            document.getElementById('theme-select').value = newTheme;
+            
+            // Add visual feedback animation
+            const btn = document.getElementById('theme-toggle-btn');
+            btn.style.transition = 'transform 0.2s ease';
+            btn.style.transform = 'scale(0.9) rotate(180deg)';
+            setTimeout(() => {
+                btn.style.transform = '';
+            }, 200);
+            
+            // Announce theme change for screen readers
+            const announcement = document.createElement('div');
+            announcement.setAttribute('role', 'status');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.style.position = 'absolute';
+            announcement.style.left = '-10000px';
+            announcement.textContent = `Theme switched to ${newTheme === 'portal' ? 'light' : 'dark'} mode`;
+            document.body.appendChild(announcement);
+            setTimeout(() => announcement.remove(), 1000);
+        }
+        
+        // Update theme toggle button icon
+        function updateThemeToggleIcon() {
+            const btn = document.getElementById('theme-toggle-btn');
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            
+            if (darkThemes.includes(config.theme)) {
+                btn.textContent = '☀️'; // Sun icon for switching to light
+                btn.title = 'Switch to Light Theme';
+                btn.setAttribute('aria-label', 'Switch to light theme');
+            } else {
+                btn.textContent = '🌙'; // Moon icon for switching to dark
+                btn.title = 'Switch to Dark Theme';
+                btn.setAttribute('aria-label', 'Switch to dark theme');
+            }
+        }
+
+        // Settings Panel
+        function openSettings() {
+            document.getElementById('settings-panel').classList.add('active');
+            document.getElementById('settings-overlay').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('active');
+            document.getElementById('settings-overlay').classList.remove('active');
+        }
+
+        function loadSettings() {
+            document.getElementById('router-url').value = config.routerUrl;
+            document.getElementById('secret').value = config.secret;
+            document.getElementById('theme-select').value = config.theme;
+        }
+
+        function saveSettings() {
+            config.routerUrl = document.getElementById('router-url').value.trim();
+            config.secret = document.getElementById('secret').value.trim();
+            config.theme = document.getElementById('theme-select').value;
+            
+            localStorage.setItem('routerUrl', config.routerUrl);
+            localStorage.setItem('secret', config.secret);
+            localStorage.setItem('theme', config.theme);
+            
+            applyTheme(config.theme);
+            addMessage('system', '✅ Settings saved successfully!');
+            closeSettings();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        }
+
+        // Mode Toggle Functions
+        function toggleCodeMode() {
+            codeMode = !codeMode;
+            document.getElementById('code-btn').classList.toggle('active');
+            addMessage('system', codeMode ? '💻 Code mode activated' : '✅ Code mode deactivated');
+        }
+
+        function toggleTranslateMode() {
+            translateMode = !translateMode;
+            document.getElementById('translate-btn').classList.toggle('active');
+            addMessage('system', translateMode ? '🌐 Translate mode activated' : '✅ Translate mode deactivated');
+        }
+
+        function toggleSwarmMode() {
+            swarmMode = !swarmMode;
+            document.getElementById('swarm-btn').classList.toggle('active');
+            addMessage('system', swarmMode ? '🔗 Swarm mode activated' : '✅ Swarm mode deactivated');
+        }
+    </script>
+</body>
+</html>`;
+
+        logDiv.textContent = `${title}\n${'='.repeat(40)}\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`;
+        container.appendChild(logDiv);
+        container.scrollTop = container.scrollHeight;
+        
+        // Also send to API (async, non-blocking)
+        sendLogToAPI(type, title, data);
+    }
+    
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const [url, options = {}] = args;
+        // Skip logging for API log calls to prevent recursion
+        if (url.includes('/api/log')) {
+            return originalFetch(...args);
+        }
+        
+        logToChat('📤 REQUEST', { url, method: options.method || 'GET', headers: options.headers }, 'info');
+        try {
+            const response = await originalFetch(...args);
+            const clone = response.clone();
+            logToChat('📥 RESPONSE', { status: response.status, ok: response.ok, url: response.url }, response.ok ? 'info' : 'error');
+            if (!response.ok) { try { const text = await clone.text(); logToChat('❌ ERROR BODY', text.substring(0, 800), 'error'); } catch(e) {} }
+            return response;
+        } catch (error) {
+            logToChat('💥 NETWORK ERROR', { message: error.message, url }, 'error');
+            throw error;
+        }
+    };
+    console.log('✅ Debug logging active with API integration');
+})();
+// ==================== END ERROR LOGGING ====================
+        // Configuration
+        let config = {
+            routerUrl: localStorage.getItem('routerUrl') || '',
+            secret: localStorage.getItem('secret') || '',
+            theme: localStorage.getItem('theme') || detectSystemTheme()
+        };
+        
+        // Detect system theme preference
+        function detectSystemTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                return 'portal'; // Light theme
+            }
+            return 'cyberpunk'; // Default dark cyberpunk theme
+        }
+        
+        // State
+        let conversation = [];
+        let recognition = null;
+        let currentChallenge = null;
+        let upgradeMode = false;
+        let isRecording = false;
+        let isVoiceInput = false;
+        let micPermissionGranted = false;
+        let isLoading = false;
+        let codeMode = false;
+        let translateMode = false;
+        let swarmMode = false;
+        let editMode = false;
+        let editingMessageIndex = null;
+        let editingMessageElement = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            setupSpeechRecognition();
+            setupEventListeners();
+            setupScrollBehavior();
+            setupThemeToggle();
+            autoResize();
+            applyTheme(config.theme);
+            updateThemeToggleIcon();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        });
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            const input = document.getElementById('message-input');
+            const voiceBtn = document.getElementById('voice-btn');
+            const sendBtn = document.getElementById('send-btn');
+            const themeSelect = document.getElementById('theme-select');
+
+            input.addEventListener('input', () => {
+                autoResize();
+                updateSendButton();
+            });
+            
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                } else if (e.key === 'Escape' && editMode) {
+                    e.preventDefault();
+                    cancelEdit();
+                }
+            });
+
+            voiceBtn.addEventListener('click', toggleVoice);
+            sendBtn.addEventListener('click', sendMessage);
+            themeSelect.addEventListener('change', (e) => {
+                localStorage.setItem('themeManuallySet', 'true');
+                applyTheme(e.target.value);
+            });
+
+            document.getElementById('theme-toggle-btn').addEventListener('click', toggleThemeQuick);
+            document.getElementById('status-btn').addEventListener('click', updateStatus);
+            document.getElementById('settings-btn').addEventListener('click', openSettings);
+            document.getElementById('settings-overlay').addEventListener('click', closeSettings);
+            document.getElementById('scroll-to-bottom').addEventListener('click', scrollToBottom);
+            
+            // Secondary action buttons
+            document.getElementById('code-btn').addEventListener('click', toggleCodeMode);
+            document.getElementById('translate-btn').addEventListener('click', toggleTranslateMode);
+            document.getElementById('swarm-btn').addEventListener('click', toggleSwarmMode);
+            document.getElementById('upgrade-mode-btn').addEventListener('click', toggleUpgradeMode);
+            document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+            
+            // Transcription overlay click to cancel
+            document.getElementById('transcription-overlay').addEventListener('click', () => {
+                if (isRecording && recognition) {
+                    recognition.stop();
+                }
+            });
+        }
+
+        // Scroll Behavior
+        function setupScrollBehavior() {
+            const container = document.getElementById('chat-container');
+            const scrollBtn = document.getElementById('scroll-to-bottom');
+            
+            container.addEventListener('scroll', () => {
+                const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                scrollBtn.classList.toggle('visible', !isNearBottom && container.scrollHeight > container.clientHeight);
+            });
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-container');
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        function updateSendButton() {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = !input.value.trim() && !isRecording;
+        }
+
+        // Speech Recognition
+        function setupSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                document.getElementById('voice-btn').disabled = true;
+                document.getElementById('voice-btn').title = 'Speech recognition not supported';
+                addMessage('system', '⚠️ Voice input not available in this browser. Please use text input.');
+                return;
+            }
+
+            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => {
+                isRecording = true;
+                micPermissionGranted = true;
+                document.getElementById('voice-btn').classList.add('recording');
+                document.getElementById('voice-btn').textContent = '⏹';
+                updateSendButton();
+            };
+            
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById('message-input').value = text;
+                isVoiceInput = true;
+                autoResize();
+                updateSendButton();
+            };
+            
+            recognition.onend = () => {
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                const text = document.getElementById('message-input').value.trim();
+                if (text) {
+                    sendMessage();
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                if (event.error === 'no-speech') {
+                    addMessage('system', '🎤 No speech detected. Please try again.');
+                } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    addMessage('error', '🔒 Microphone access denied. Please enable microphone permissions in your browser.');
+                } else if (event.error !== 'aborted') {
+                    addMessage('system', `⚠️ Voice error: ${event.error}`);
+                }
+            };
+        }
+
+        async function toggleVoice() {
+            if (!recognition) {
+                addMessage('system', '⚠️ Speech recognition not available.');
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                try {
+                    isVoiceInput = true;
+                    recognition.start();
+                } catch (error) {
+                    console.error('Recognition start error:', error);
+                }
+            }
+        }
+
+        // Message Sending
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            
+            if (!text || isLoading) return;
+            
+            // Handle edit mode
+            if (editMode) {
+                handleEditSave(text);
+                return;
+            }
+            
+            if (!config.routerUrl || !config.secret) {
+                addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first.');
+                openSettings();
+                return;
+            }
+
+            input.value = '';
+            autoResize();
+            updateSendButton();
+
+            // Add to conversation first to get correct index
+            conversation.push({ role: 'user', content: text });
+            const messageIndex = conversation.length - 1;
+            
+            // Add message with correct index for edit capability
+            addMessage('user', text, messageIndex);
+
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('upgrade mode')) {
+                toggleUpgradeMode();
+                const wasVoice = isVoiceInput;
+                isVoiceInput = false;
+                if (wasVoice) {
+                    speak(upgradeMode ? 'Upgrade mode activated.' : 'Normal mode resumed.');
+                }
+                return;
+            }
+
+            showTypingIndicator();
+            isLoading = true;
+
+            try {
+                currentChallenge = await getChallenge();
+                
+                let response;
+                if (upgradeMode) {
+                    response = await sendUpgrade(text);
+                    handleUpgradeResponse(response);
+                } else {
+                    response = await sendChat(text);
+                    handleChatResponse(response);
+                }
+                
+                if (isVoiceInput && !upgradeMode) {
+                    speak(response.response);
+                }
+                
+            } catch (error) {
+                console.error('Send message error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach server. Check your connection.`);
+                } else if (error.message.includes('challenge')) {
+                    addMessage('error', `❌ Authentication failed. Check your Shared Secret in Settings.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            } finally {
+                hideTypingIndicator();
+                isVoiceInput = false;
+                isLoading = false;
+            }
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chat-container');
+            const indicator = document.createElement('div');
+            indicator.className = 'typing-indicator';
+            indicator.id = 'typing-indicator';
+            indicator.innerHTML = '<span></span><span></span><span></span>';
+            container.appendChild(indicator);
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // API Calls
+        async function getChallenge() {
+            const response = await fetch(`${config.routerUrl}/challenge`);
+            if (!response.ok) throw new Error('Failed to get authentication challenge');
+            return response.json();
+        }
+
+        async function sendChat(message) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, message);
+            
+            const response = await fetch(`${config.routerUrl}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ message, conversation })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Request failed');
+            }
+            return response.json();
+        }
+
+        async function sendUpgrade(instruction) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, instruction);
+            
+            const response = await fetch(`${config.routerUrl}/upgrade`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ instruction })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Upgrade failed');
+            }
+            return response.json();
+        }
+
+        async function computeSignature(challenge, timestamp, message) {
+            const data = `${challenge}|${timestamp}|unknown|${navigator.userAgent}|${JSON.stringify({ message, conversation })}`;
+            const encoder = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(config.secret),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Response Handlers
+        function handleChatResponse(response) {
+            addMessage('assistant', response.response);
+            conversation.push({ role: 'assistant', content: response.response });
+            
+            document.getElementById('llm-status').textContent = response.provider || '---';
+            document.getElementById('usage-status').textContent = `${response.usage || 0}/${response.limit || 0}`;
+        }
+
+        function handleUpgradeResponse(response) {
+            // Handle approval flow for proposed changes
+            if (response.awaiting_approval && response.editId) {
+                // Show the proposed changes
+                const message = response.message || response.review || response.plan || 'Changes proposed';
+                addMessage('system', `📋 **Proposed Changes:**\n\n${message}`);
+                
+                // Show approval buttons
+                showApprovalButtons(response.editId, response.patches_preview || '');
+                return;
+            }
+            
+            // Handle completed upgrade
+            if (response.success) {
+                addMessage('system', '✅ Upgrade Successful!');
+                if (response.changes) {
+                    response.changes.forEach(change => {
+                        addMessage('system', `📝 ${change.file}: ${change.reason}`);
+                    });
+                }
+                if (response.deployment_triggered) {
+                    addMessage('system', '🚀 Deployment initiated. Changes will be live in ~60 seconds.');
+                }
+                if (response.commit) {
+                    addMessage('system', `✓ Committed: ${response.commit}`);
+                }
+                if (response.url) {
+                    addMessage('system', `🔗 ${response.url}`);
+                }
+            } else {
+                addMessage('error', `❌ Upgrade Failed: ${response.error || 'Unknown error'}`);
+            }
+            
+            if (upgradeMode) {
+                toggleUpgradeMode();
+            }
+        }
+        
+        // Show approval buttons for proposed changes
+        function showApprovalButtons(editId, patchPreview) {
+            // Remove any existing approval buttons
+            const existingButtons = document.querySelectorAll('.approval-buttons');
+            existingButtons.forEach(el => el.remove());
+            
+            const container = document.getElementById('chat-container');
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'approval-buttons';
+            buttonsDiv.innerHTML = `
+                <button class="approve-btn" data-edit-id="${editId}">
+                    ✓ Approve
+                </button>
+                <button class="review-btn" data-edit-id="${editId}">
+                    🔍 Review
+                </button>
+                <button class="deny-btn" data-edit-id="${editId}">
+                    ✗ Deny
+                </button>
+            `;
+            
+            container.appendChild(buttonsDiv);
+            scrollToBottom();
+            
+            // Attach event handlers
+            const approveBtn = buttonsDiv.querySelector('.approve-btn');
+            const reviewBtn = buttonsDiv.querySelector('.review-btn');
+            const denyBtn = buttonsDiv.querySelector('.deny-btn');
+            
+            approveBtn.onclick = () => approveEdit(editId, buttonsDiv);
+            reviewBtn.onclick = () => reviewEdit(editId, patchPreview, buttonsDiv);
+            denyBtn.onclick = () => denyEdit(buttonsDiv);
+        }
+        
+        // Approve and execute the proposed changes
+        async function approveEdit(editId, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '⏳ Deploying changes...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/approve-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addMessage('system', `✅ Changes deployed successfully!`);
+                    if (data.commit) {
+                        addMessage('system', `📝 Commit: ${data.commit}`);
+                    }
+                    if (data.url) {
+                        addMessage('system', `🔗 ${data.url}`);
+                    }
+                } else {
+                    addMessage('error', `❌ Deployment failed: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Request review of proposed changes using Qwen
+        async function reviewEdit(editId, patchPreview, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '🔍 Requesting Qwen review...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/review-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.review) {
+                    addMessage('system', `🔍 **Review Results:**\n\n${data.review}`);
+                    // Show buttons again after review
+                    showApprovalButtons(editId, patchPreview);
+                } else {
+                    addMessage('error', `❌ Review failed: ${data.error || 'Unknown error'}`);
+                    // Show buttons again even if review failed
+                    showApprovalButtons(editId, patchPreview);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+                // Show buttons again even if there was an error
+                showApprovalButtons(editId, patchPreview);
+            }
+        }
+        
+        // Deny/cancel the proposed changes
+        function denyEdit(buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '❌ Changes rejected');
+        }
+
+        // Upgrade Mode
+        function toggleUpgradeMode() {
+            upgradeMode = !upgradeMode;
+            const modeStatus = document.getElementById('mode-status');
+            const upgradeBtn = document.getElementById('upgrade-mode-btn');
+            
+            if (upgradeMode) {
+                document.body.classList.add('upgrade-mode-active');
+                modeStatus.textContent = 'UPGRADE';
+                modeStatus.style.color = '#ff6600';
+                upgradeBtn.classList.add('active');
+                addMessage('system', '⚠️ UPGRADE MODE ACTIVATED - Next command will modify the system');
+            } else {
+                document.body.classList.remove('upgrade-mode-active');
+                modeStatus.textContent = 'Normal';
+                modeStatus.style.color = '';
+                upgradeBtn.classList.remove('active');
+                addMessage('system', '✅ Normal mode resumed');
+            }
+        }
+
+        // Status Update
+        async function updateStatus() {
+            if (!config.routerUrl) {
+                addMessage('error', '⚙️ Configure Router URL in Settings first');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/status`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => response.statusText);
+                    throw new Error(`Server returned ${response.status}: ${errorText}`);
+                }
+                
+                const status = await response.json();
+                
+                let totalUsage = 0;
+                let totalLimit = 0;
+                let providers = [];
+                
+                if (status.groq !== undefined) {
+                    totalUsage += status.groq;
+                    totalLimit += 30;
+                    providers.push(`Groq: ${status.groq}/30`);
+                }
+                if (status.gemini !== undefined) {
+                    totalUsage += status.gemini;
+                    totalLimit += 15;
+                    providers.push(`Gemini: ${status.gemini}/15`);
+                }
+                if (status.claude !== undefined) {
+                    totalUsage += status.claude;
+                    totalLimit += 50;
+                    providers.push(`Claude: ${status.claude}/50`);
+                }
+                
+                document.getElementById('usage-status').textContent = `${totalUsage}/${totalLimit}`;
+                addMessage('system', `📊 ${providers.join(' • ')}`);
+            } catch (error) {
+                console.error('Status check error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach ${config.routerUrl}. Check your connection or Router URL.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            }
+        }
+
+        // Text-to-Speech
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Message Display
+        function addMessage(role, content, messageIndex = null) {
+            const container = document.getElementById('chat-container');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            
+            // Store message index for editing
+            if (role === 'user' && messageIndex !== null) {
+                msg.dataset.messageIndex = messageIndex;
+            }
+            
+            if (role !== 'system' && role !== 'error') {
+                const roleLabel = document.createElement('div');
+                roleLabel.className = 'message-role';
+                roleLabel.textContent = role === 'user' ? 'You' : 'Omnibot';
+                msg.appendChild(roleLabel);
+            }
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            msg.appendChild(contentDiv);
+            
+            // Add edit button for user messages
+            if (role === 'user' && messageIndex !== null) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'message-edit-btn';
+                editBtn.innerHTML = '✏️';
+                editBtn.title = 'Edit message';
+                editBtn.setAttribute('aria-label', 'Edit this message');
+                editBtn.onclick = () => startEditMessage(messageIndex, content, msg);
+                msg.appendChild(editBtn);
+            }
+            
+            // Add timestamp
+            if (role !== 'system') {
+                const timestamp = document.createElement('div');
+                timestamp.className = 'message-timestamp';
+                timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                msg.appendChild(timestamp);
+            }
+            
+            container.appendChild(msg);
+            scrollToBottom();
+            
+            return msg;
+        }
+        
+        // Start editing a message
+        function startEditMessage(index, content, messageElement) {
+            if (isLoading) return;
+            
+            editMode = true;
+            editingMessageIndex = index;
+            editingMessageElement = messageElement;
+            
+            // Highlight the message being edited
+            messageElement.classList.add('editing');
+            
+            // Fill input with message content
+            const input = document.getElementById('message-input');
+            input.value = content;
+            input.focus();
+            autoResize();
+            
+            // Change input styling to show edit mode
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.add('edit-mode');
+            
+            // Show cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'inline-flex';
+            
+            // Show edit indicator
+            addMessage('system', '✏️ Editing message - press Send to update or Escape/Cancel to abort');
+            
+            // Change send button text
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '💾';
+            sendBtn.title = 'Save edited message';
+        }
+        
+        // Cancel edit mode
+        function cancelEdit() {
+            if (!editMode) return;
+            
+            editMode = false;
+            
+            // Remove highlighting
+            if (editingMessageElement) {
+                editingMessageElement.classList.remove('editing');
+            }
+            
+            // Reset input
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            // Remove edit mode styling
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            // Reset send button
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            addMessage('system', '❌ Edit cancelled');
+            
+            editingMessageIndex = null;
+            editingMessageElement = null;
+        }
+        
+        // Handle saving edited message
+        async function handleEditSave(newText) {
+            if (editingMessageIndex === null) return;
+            
+            // Update conversation history
+            conversation[editingMessageIndex].content = newText;
+            
+            // Update the message element
+            if (editingMessageElement) {
+                const contentDiv = editingMessageElement.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.textContent = newText;
+                }
+                editingMessageElement.classList.remove('editing');
+                editingMessageElement.classList.add('edited');
+                
+                // Add edited indicator
+                let editedLabel = editingMessageElement.querySelector('.edited-label');
+                if (!editedLabel) {
+                    editedLabel = document.createElement('span');
+                    editedLabel.className = 'edited-label';
+                    editedLabel.textContent = '(edited)';
+                    editedLabel.title = 'This message was edited';
+                    const timestamp = editingMessageElement.querySelector('.message-timestamp');
+                    if (timestamp) {
+                        timestamp.appendChild(document.createTextNode(' '));
+                        timestamp.appendChild(editedLabel);
+                    }
+                }
+            }
+            
+            // Reset edit mode
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            editMode = false;
+            editingMessageIndex = null;
+            editingMessageElement = null;
+            
+            addMessage('system', '✅ Message updated');
+        }
+
+        // Auto-resize Textarea
+        function autoResize() {
+            const textarea = document.getElementById('message-input');
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        // Theme Management
+        function applyTheme(theme) {
+            document.body.className = `theme-${theme}`;
+            const panel = document.getElementById('settings-panel');
+            panel.className = `settings-panel theme-${theme}`;
+            config.theme = theme;
+            localStorage.setItem('theme', theme);
+            updateThemeToggleIcon();
+        }
+        
+        // Setup theme toggle with system preference monitoring
+        function setupThemeToggle() {
+            // Listen for system theme changes
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                    // Only auto-switch if user hasn't manually set a theme
+                    if (!localStorage.getItem('themeManuallySet')) {
+                        const newTheme = e.matches ? 'cyberpunk' : 'portal';
+                        applyTheme(newTheme);
+                    }
+                });
+            }
+        }
+        
+        // Quick theme toggle between light and dark
+        function toggleThemeQuick() {
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const lightThemes = ['portal'];
+            
+            const isDark = darkThemes.includes(config.theme);
+            let newTheme;
+            
+            if (isDark) {
+                // Switch to light
+                newTheme = 'portal';
+            } else {
+                // Switch to dark cyberpunk
+                newTheme = 'cyberpunk';
+            }
+            
+            localStorage.setItem('themeManuallySet', 'true');
+            applyTheme(newTheme);
+            document.getElementById('theme-select').value = newTheme;
+            
+            // Add visual feedback animation
+            const btn = document.getElementById('theme-toggle-btn');
+            btn.style.transition = 'transform 0.2s ease';
+            btn.style.transform = 'scale(0.9) rotate(180deg)';
+            setTimeout(() => {
+                btn.style.transform = '';
+            }, 200);
+            
+            // Announce theme change for screen readers
+            const announcement = document.createElement('div');
+            announcement.setAttribute('role', 'status');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.style.position = 'absolute';
+            announcement.style.left = '-10000px';
+            announcement.textContent = `Theme switched to ${newTheme === 'portal' ? 'light' : 'dark'} mode`;
+            document.body.appendChild(announcement);
+            setTimeout(() => announcement.remove(), 1000);
+        }
+        
+        // Update theme toggle button icon
+        function updateThemeToggleIcon() {
+            const btn = document.getElementById('theme-toggle-btn');
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            
+            if (darkThemes.includes(config.theme)) {
+                btn.textContent = '☀️'; // Sun icon for switching to light
+                btn.title = 'Switch to Light Theme';
+                btn.setAttribute('aria-label', 'Switch to light theme');
+            } else {
+                btn.textContent = '🌙'; // Moon icon for switching to dark
+                btn.title = 'Switch to Dark Theme';
+                btn.setAttribute('aria-label', 'Switch to dark theme');
+            }
+        }
+
+        // Settings Panel
+        function openSettings() {
+            document.getElementById('settings-panel').classList.add('active');
+            document.getElementById('settings-overlay').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('active');
+            document.getElementById('settings-overlay').classList.remove('active');
+        }
+
+        function loadSettings() {
+            document.getElementById('router-url').value = config.routerUrl;
+            document.getElementById('secret').value = config.secret;
+            document.getElementById('theme-select').value = config.theme;
+        }
+
+        function saveSettings() {
+            config.routerUrl = document.getElementById('router-url').value.trim();
+            config.secret = document.getElementById('secret').value.trim();
+            config.theme = document.getElementById('theme-select').value;
+            
+            localStorage.setItem('routerUrl', config.routerUrl);
+            localStorage.setItem('secret', config.secret);
+            localStorage.setItem('theme', config.theme);
+            
+            applyTheme(config.theme);
+            addMessage('system', '✅ Settings saved successfully!');
+            closeSettings();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        }
+
+        // Mode Toggle Functions
+        function toggleCodeMode() {
+            codeMode = !codeMode;
+            document.getElementById('code-btn').classList.toggle('active');
+            addMessage('system', codeMode ? '💻 Code mode activated' : '✅ Code mode deactivated');
+        }
+
+        function toggleTranslateMode() {
+            translateMode = !translateMode;
+            document.getElementById('translate-btn').classList.toggle('active');
+            addMessage('system', translateMode ? '🌐 Translate mode activated' : '✅ Translate mode deactivated');
+        }
+
+        function toggleSwarmMode() {
+            swarmMode = !swarmMode;
+            document.getElementById('swarm-btn').classList.toggle('active');
+            addMessage('system', swarmMode ? '🔗 Swarm mode activated' : '✅ Swarm mode deactivated');
+        }
+    </script>
+</body>
+</html>`;
+
+        logDiv.textContent = `${title}\n${'='.repeat(40)}\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`;
+        container.appendChild(logDiv);
+        container.scrollTop = container.scrollHeight;
+        
+        // Also send to API (async, non-blocking)
+        sendLogToAPI(type, title, data);
+    }
+    
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const [url, options = {}] = args;
+        // Skip logging for API log calls to prevent recursion
+        if (url.includes('/api/log')) {
+            return originalFetch(...args);
+        }
+        
+        logToChat('📤 REQUEST', { url, method: options.method || 'GET', headers: options.headers }, 'info');
+        try {
+            const response = await originalFetch(...args);
+            const clone = response.clone();
+            logToChat('📥 RESPONSE', { status: response.status, ok: response.ok, url: response.url }, response.ok ? 'info' : 'error');
+            if (!response.ok) { try { const text = await clone.text(); logToChat('❌ ERROR BODY', text.substring(0, 800), 'error'); } catch(e) {} }
+            return response;
+        } catch (error) {
+            logToChat('💥 NETWORK ERROR', { message: error.message, url }, 'error');
+            throw error;
+        }
+    };
+    console.log('✅ Debug logging active with API integration');
+})();
+// ==================== END ERROR LOGGING ====================
+        // Configuration
+        let config = {
+            routerUrl: localStorage.getItem('routerUrl') || '',
+            secret: localStorage.getItem('secret') || '',
+            theme: localStorage.getItem('theme') || detectSystemTheme()
+        };
+        
+        // Detect system theme preference
+        function detectSystemTheme() {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                return 'portal'; // Light theme
+            }
+            return 'cyberpunk'; // Default dark cyberpunk theme
+        }
+        
+        // State
+        let conversation = [];
+        let recognition = null;
+        let currentChallenge = null;
+        let upgradeMode = false;
+        let isRecording = false;
+        let isVoiceInput = false;
+        let micPermissionGranted = false;
+        let isLoading = false;
+        let codeMode = false;
+        let translateMode = false;
+        let swarmMode = false;
+        let editMode = false;
+        let editingMessageIndex = null;
+        let editingMessageElement = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            setupSpeechRecognition();
+            setupEventListeners();
+            setupScrollBehavior();
+            setupThemeToggle();
+            autoResize();
+            applyTheme(config.theme);
+            updateThemeToggleIcon();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        });
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            const input = document.getElementById('message-input');
+            const voiceBtn = document.getElementById('voice-btn');
+            const sendBtn = document.getElementById('send-btn');
+            const themeSelect = document.getElementById('theme-select');
+
+            input.addEventListener('input', () => {
+                autoResize();
+                updateSendButton();
+            });
+            
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                } else if (e.key === 'Escape' && editMode) {
+                    e.preventDefault();
+                    cancelEdit();
+                }
+            });
+
+            voiceBtn.addEventListener('click', toggleVoice);
+            sendBtn.addEventListener('click', sendMessage);
+            themeSelect.addEventListener('change', (e) => {
+                localStorage.setItem('themeManuallySet', 'true');
+                applyTheme(e.target.value);
+            });
+
+            document.getElementById('theme-toggle-btn').addEventListener('click', toggleThemeQuick);
+            document.getElementById('status-btn').addEventListener('click', updateStatus);
+            document.getElementById('settings-btn').addEventListener('click', openSettings);
+            document.getElementById('settings-overlay').addEventListener('click', closeSettings);
+            document.getElementById('scroll-to-bottom').addEventListener('click', scrollToBottom);
+            
+            // Secondary action buttons
+            document.getElementById('code-btn').addEventListener('click', toggleCodeMode);
+            document.getElementById('translate-btn').addEventListener('click', toggleTranslateMode);
+            document.getElementById('swarm-btn').addEventListener('click', toggleSwarmMode);
+            document.getElementById('upgrade-mode-btn').addEventListener('click', toggleUpgradeMode);
+            document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+            
+            // Transcription overlay click to cancel
+            document.getElementById('transcription-overlay').addEventListener('click', () => {
+                if (isRecording && recognition) {
+                    recognition.stop();
+                }
+            });
+        }
+
+        // Scroll Behavior
+        function setupScrollBehavior() {
+            const container = document.getElementById('chat-container');
+            const scrollBtn = document.getElementById('scroll-to-bottom');
+            
+            container.addEventListener('scroll', () => {
+                const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                scrollBtn.classList.toggle('visible', !isNearBottom && container.scrollHeight > container.clientHeight);
+            });
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-container');
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        function updateSendButton() {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = !input.value.trim() && !isRecording;
+        }
+
+        // Speech Recognition
+        function setupSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                document.getElementById('voice-btn').disabled = true;
+                document.getElementById('voice-btn').title = 'Speech recognition not supported';
+                addMessage('system', '⚠️ Voice input not available in this browser. Please use text input.');
+                return;
+            }
+
+            const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => {
+                isRecording = true;
+                micPermissionGranted = true;
+                document.getElementById('voice-btn').classList.add('recording');
+                document.getElementById('voice-btn').textContent = '⏹';
+                updateSendButton();
+            };
+            
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById('message-input').value = text;
+                isVoiceInput = true;
+                autoResize();
+                updateSendButton();
+            };
+            
+            recognition.onend = () => {
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                const text = document.getElementById('message-input').value.trim();
+                if (text) {
+                    sendMessage();
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                isRecording = false;
+                document.getElementById('voice-btn').classList.remove('recording');
+                document.getElementById('voice-btn').textContent = '🎤';
+                updateSendButton();
+                
+                if (event.error === 'no-speech') {
+                    addMessage('system', '🎤 No speech detected. Please try again.');
+                } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    addMessage('error', '🔒 Microphone access denied. Please enable microphone permissions in your browser.');
+                } else if (event.error !== 'aborted') {
+                    addMessage('system', `⚠️ Voice error: ${event.error}`);
+                }
+            };
+        }
+
+        async function toggleVoice() {
+            if (!recognition) {
+                addMessage('system', '⚠️ Speech recognition not available.');
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                try {
+                    isVoiceInput = true;
+                    recognition.start();
+                } catch (error) {
+                    console.error('Recognition start error:', error);
+                }
+            }
+        }
+
+        // Message Sending
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            
+            if (!text || isLoading) return;
+            
+            // Handle edit mode
+            if (editMode) {
+                handleEditSave(text);
+                return;
+            }
+            
+            if (!config.routerUrl || !config.secret) {
+                addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first.');
+                openSettings();
+                return;
+            }
+
+            input.value = '';
+            autoResize();
+            updateSendButton();
+
+            // Add to conversation first to get correct index
+            conversation.push({ role: 'user', content: text });
+            const messageIndex = conversation.length - 1;
+            
+            // Add message with correct index for edit capability
+            addMessage('user', text, messageIndex);
+
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('upgrade mode')) {
+                toggleUpgradeMode();
+                const wasVoice = isVoiceInput;
+                isVoiceInput = false;
+                if (wasVoice) {
+                    speak(upgradeMode ? 'Upgrade mode activated.' : 'Normal mode resumed.');
+                }
+                return;
+            }
+
+            showTypingIndicator();
+            isLoading = true;
+
+            try {
+                currentChallenge = await getChallenge();
+                
+                let response;
+                if (upgradeMode) {
+                    response = await sendUpgrade(text);
+                    handleUpgradeResponse(response);
+                } else {
+                    response = await sendChat(text);
+                    handleChatResponse(response);
+                }
+                
+                if (isVoiceInput && !upgradeMode) {
+                    speak(response.response);
+                }
+                
+            } catch (error) {
+                console.error('Send message error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach server. Check your connection.`);
+                } else if (error.message.includes('challenge')) {
+                    addMessage('error', `❌ Authentication failed. Check your Shared Secret in Settings.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            } finally {
+                hideTypingIndicator();
+                isVoiceInput = false;
+                isLoading = false;
+            }
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chat-container');
+            const indicator = document.createElement('div');
+            indicator.className = 'typing-indicator';
+            indicator.id = 'typing-indicator';
+            indicator.innerHTML = '<span></span><span></span><span></span>';
+            container.appendChild(indicator);
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // API Calls
+        async function getChallenge() {
+            const response = await fetch(`${config.routerUrl}/challenge`);
+            if (!response.ok) throw new Error('Failed to get authentication challenge');
+            return response.json();
+        }
+
+        async function sendChat(message) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, message);
+            
+            const response = await fetch(`${config.routerUrl}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ message, conversation })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Request failed');
+            }
+            return response.json();
+        }
+
+        async function sendUpgrade(instruction) {
+            const timestamp = Date.now();
+            const signature = await computeSignature(currentChallenge.challenge, timestamp, instruction);
+            
+            const response = await fetch(`${config.routerUrl}/upgrade`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Challenge': currentChallenge.challenge,
+                    'X-Timestamp': timestamp.toString(),
+                    'X-Signature': signature
+                },
+                body: JSON.stringify({ instruction })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Upgrade failed');
+            }
+            return response.json();
+        }
+
+        async function computeSignature(challenge, timestamp, message) {
+            const data = `${challenge}|${timestamp}|unknown|${navigator.userAgent}|${JSON.stringify({ message, conversation })}`;
+            const encoder = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(config.secret),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Response Handlers
+        function handleChatResponse(response) {
+            addMessage('assistant', response.response);
+            conversation.push({ role: 'assistant', content: response.response });
+            
+            document.getElementById('llm-status').textContent = response.provider || '---';
+            document.getElementById('usage-status').textContent = `${response.usage || 0}/${response.limit || 0}`;
+        }
+
+        function handleUpgradeResponse(response) {
+            // Handle approval flow for proposed changes
+            if (response.awaiting_approval && response.editId) {
+                // Show the proposed changes
+                const message = response.message || response.review || response.plan || 'Changes proposed';
+                addMessage('system', `📋 **Proposed Changes:**\n\n${message}`);
+                
+                // Show approval buttons
+                showApprovalButtons(response.editId, response.patches_preview || '');
+                return;
+            }
+            
+            // Handle completed upgrade
+            if (response.success) {
+                addMessage('system', '✅ Upgrade Successful!');
+                if (response.changes) {
+                    response.changes.forEach(change => {
+                        addMessage('system', `📝 ${change.file}: ${change.reason}`);
+                    });
+                }
+                if (response.deployment_triggered) {
+                    addMessage('system', '🚀 Deployment initiated. Changes will be live in ~60 seconds.');
+                }
+                if (response.commit) {
+                    addMessage('system', `✓ Committed: ${response.commit}`);
+                }
+                if (response.url) {
+                    addMessage('system', `🔗 ${response.url}`);
+                }
+            } else {
+                addMessage('error', `❌ Upgrade Failed: ${response.error || 'Unknown error'}`);
+            }
+            
+            if (upgradeMode) {
+                toggleUpgradeMode();
+            }
+        }
+        
+        // Show approval buttons for proposed changes
+        function showApprovalButtons(editId, patchPreview) {
+            // Remove any existing approval buttons
+            const existingButtons = document.querySelectorAll('.approval-buttons');
+            existingButtons.forEach(el => el.remove());
+            
+            const container = document.getElementById('chat-container');
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'approval-buttons';
+            buttonsDiv.innerHTML = `
+                <button class="approve-btn" data-edit-id="${editId}">
+                    ✓ Approve
+                </button>
+                <button class="review-btn" data-edit-id="${editId}">
+                    🔍 Review
+                </button>
+                <button class="deny-btn" data-edit-id="${editId}">
+                    ✗ Deny
+                </button>
+            `;
+            
+            container.appendChild(buttonsDiv);
+            scrollToBottom();
+            
+            // Attach event handlers
+            const approveBtn = buttonsDiv.querySelector('.approve-btn');
+            const reviewBtn = buttonsDiv.querySelector('.review-btn');
+            const denyBtn = buttonsDiv.querySelector('.deny-btn');
+            
+            approveBtn.onclick = () => approveEdit(editId, buttonsDiv);
+            reviewBtn.onclick = () => reviewEdit(editId, patchPreview, buttonsDiv);
+            denyBtn.onclick = () => denyEdit(buttonsDiv);
+        }
+        
+        // Approve and execute the proposed changes
+        async function approveEdit(editId, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '⏳ Deploying changes...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/approve-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addMessage('system', `✅ Changes deployed successfully!`);
+                    if (data.commit) {
+                        addMessage('system', `📝 Commit: ${data.commit}`);
+                    }
+                    if (data.url) {
+                        addMessage('system', `🔗 ${data.url}`);
+                    }
+                } else {
+                    addMessage('error', `❌ Deployment failed: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Request review of proposed changes using Qwen
+        async function reviewEdit(editId, patchPreview, buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '🔍 Requesting Qwen review...');
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/api/review-edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ editId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.review) {
+                    addMessage('system', `🔍 **Review Results:**\n\n${data.review}`);
+                    // Show buttons again after review
+                    showApprovalButtons(editId, patchPreview);
+                } else {
+                    addMessage('error', `❌ Review failed: ${data.error || 'Unknown error'}`);
+                    // Show buttons again even if review failed
+                    showApprovalButtons(editId, patchPreview);
+                }
+            } catch (error) {
+                addMessage('error', `❌ Error: ${error.message}`);
+                // Show buttons again even if there was an error
+                showApprovalButtons(editId, patchPreview);
+            }
+        }
+        
+        // Deny/cancel the proposed changes
+        function denyEdit(buttonsDiv) {
+            buttonsDiv.remove();
+            addMessage('system', '❌ Changes rejected');
+        }
+
+        // Upgrade Mode
+        function toggleUpgradeMode() {
+            upgradeMode = !upgradeMode;
+            const modeStatus = document.getElementById('mode-status');
+            const upgradeBtn = document.getElementById('upgrade-mode-btn');
+            
+            if (upgradeMode) {
+                document.body.classList.add('upgrade-mode-active');
+                modeStatus.textContent = 'UPGRADE';
+                modeStatus.style.color = '#ff6600';
+                upgradeBtn.classList.add('active');
+                addMessage('system', '⚠️ UPGRADE MODE ACTIVATED - Next command will modify the system');
+            } else {
+                document.body.classList.remove('upgrade-mode-active');
+                modeStatus.textContent = 'Normal';
+                modeStatus.style.color = '';
+                upgradeBtn.classList.remove('active');
+                addMessage('system', '✅ Normal mode resumed');
+            }
+        }
+
+        // Status Update
+        async function updateStatus() {
+            if (!config.routerUrl) {
+                addMessage('error', '⚙️ Configure Router URL in Settings first');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${config.routerUrl}/status`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => response.statusText);
+                    throw new Error(`Server returned ${response.status}: ${errorText}`);
+                }
+                
+                const status = await response.json();
+                
+                let totalUsage = 0;
+                let totalLimit = 0;
+                let providers = [];
+                
+                if (status.groq !== undefined) {
+                    totalUsage += status.groq;
+                    totalLimit += 30;
+                    providers.push(`Groq: ${status.groq}/30`);
+                }
+                if (status.gemini !== undefined) {
+                    totalUsage += status.gemini;
+                    totalLimit += 15;
+                    providers.push(`Gemini: ${status.gemini}/15`);
+                }
+                if (status.claude !== undefined) {
+                    totalUsage += status.claude;
+                    totalLimit += 50;
+                    providers.push(`Claude: ${status.claude}/50`);
+                }
+                
+                document.getElementById('usage-status').textContent = `${totalUsage}/${totalLimit}`;
+                addMessage('system', `📊 ${providers.join(' • ')}`);
+            } catch (error) {
+                console.error('Status check error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    addMessage('error', `❌ Cannot reach ${config.routerUrl}. Check your connection or Router URL.`);
+                } else {
+                    addMessage('error', `❌ ${error.message}`);
+                }
+            }
+        }
+
+        // Text-to-Speech
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Message Display
+        function addMessage(role, content, messageIndex = null) {
+            const container = document.getElementById('chat-container');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            
+            // Store message index for editing
+            if (role === 'user' && messageIndex !== null) {
+                msg.dataset.messageIndex = messageIndex;
+            }
+            
+            if (role !== 'system' && role !== 'error') {
+                const roleLabel = document.createElement('div');
+                roleLabel.className = 'message-role';
+                roleLabel.textContent = role === 'user' ? 'You' : 'Omnibot';
+                msg.appendChild(roleLabel);
+            }
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            msg.appendChild(contentDiv);
+            
+            // Add edit button for user messages
+            if (role === 'user' && messageIndex !== null) {
+                const editBtn = document.createElement('button');
+                editBtn.className = 'message-edit-btn';
+                editBtn.innerHTML = '✏️';
+                editBtn.title = 'Edit message';
+                editBtn.setAttribute('aria-label', 'Edit this message');
+                editBtn.onclick = () => startEditMessage(messageIndex, content, msg);
+                msg.appendChild(editBtn);
+            }
+            
+            // Add timestamp
+            if (role !== 'system') {
+                const timestamp = document.createElement('div');
+                timestamp.className = 'message-timestamp';
+                timestamp.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                msg.appendChild(timestamp);
+            }
+            
+            container.appendChild(msg);
+            scrollToBottom();
+            
+            return msg;
+        }
+        
+        // Start editing a message
+        function startEditMessage(index, content, messageElement) {
+            if (isLoading) return;
+            
+            editMode = true;
+            editingMessageIndex = index;
+            editingMessageElement = messageElement;
+            
+            // Highlight the message being edited
+            messageElement.classList.add('editing');
+            
+            // Fill input with message content
+            const input = document.getElementById('message-input');
+            input.value = content;
+            input.focus();
+            autoResize();
+            
+            // Change input styling to show edit mode
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.add('edit-mode');
+            
+            // Show cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'inline-flex';
+            
+            // Show edit indicator
+            addMessage('system', '✏️ Editing message - press Send to update or Escape/Cancel to abort');
+            
+            // Change send button text
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '💾';
+            sendBtn.title = 'Save edited message';
+        }
+        
+        // Cancel edit mode
+        function cancelEdit() {
+            if (!editMode) return;
+            
+            editMode = false;
+            
+            // Remove highlighting
+            if (editingMessageElement) {
+                editingMessageElement.classList.remove('editing');
+            }
+            
+            // Reset input
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            // Remove edit mode styling
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            // Reset send button
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            addMessage('system', '❌ Edit cancelled');
+            
+            editingMessageIndex = null;
+            editingMessageElement = null;
+        }
+        
+        // Handle saving edited message
+        async function handleEditSave(newText) {
+            if (editingMessageIndex === null) return;
+            
+            // Update conversation history
+            conversation[editingMessageIndex].content = newText;
+            
+            // Update the message element
+            if (editingMessageElement) {
+                const contentDiv = editingMessageElement.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.textContent = newText;
+                }
+                editingMessageElement.classList.remove('editing');
+                editingMessageElement.classList.add('edited');
+                
+                // Add edited indicator
+                let editedLabel = editingMessageElement.querySelector('.edited-label');
+                if (!editedLabel) {
+                    editedLabel = document.createElement('span');
+                    editedLabel.className = 'edited-label';
+                    editedLabel.textContent = '(edited)';
+                    editedLabel.title = 'This message was edited';
+                    const timestamp = editingMessageElement.querySelector('.message-timestamp');
+                    if (timestamp) {
+                        timestamp.appendChild(document.createTextNode(' '));
+                        timestamp.appendChild(editedLabel);
+                    }
+                }
+            }
+            
+            // Reset edit mode
+            const input = document.getElementById('message-input');
+            input.value = '';
+            autoResize();
+            
+            const inputContainer = document.querySelector('.input-container');
+            inputContainer.classList.remove('edit-mode');
+            
+            // Hide cancel button
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+            
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.innerHTML = '➤';
+            sendBtn.title = 'Send message';
+            
+            editMode = false;
+            editingMessageIndex = null;
+            editingMessageElement = null;
+            
+            addMessage('system', '✅ Message updated');
+        }
+
+        // Auto-resize Textarea
+        function autoResize() {
+            const textarea = document.getElementById('message-input');
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+
+        // Theme Management
+        function applyTheme(theme) {
+            document.body.className = `theme-${theme}`;
+            const panel = document.getElementById('settings-panel');
+            panel.className = `settings-panel theme-${theme}`;
+            config.theme = theme;
+            localStorage.setItem('theme', theme);
+            updateThemeToggleIcon();
+        }
+        
+        // Setup theme toggle with system preference monitoring
+        function setupThemeToggle() {
+            // Listen for system theme changes
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+                    // Only auto-switch if user hasn't manually set a theme
+                    if (!localStorage.getItem('themeManuallySet')) {
+                        const newTheme = e.matches ? 'cyberpunk' : 'portal';
+                        applyTheme(newTheme);
+                    }
+                });
+            }
+        }
+        
+        // Quick theme toggle between light and dark
+        function toggleThemeQuick() {
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const lightThemes = ['portal'];
+            
+            const isDark = darkThemes.includes(config.theme);
+            let newTheme;
+            
+            if (isDark) {
+                // Switch to light
+                newTheme = 'portal';
+            } else {
+                // Switch to dark cyberpunk
+                newTheme = 'cyberpunk';
+            }
+            
+            localStorage.setItem('themeManuallySet', 'true');
+            applyTheme(newTheme);
+            document.getElementById('theme-select').value = newTheme;
+            
+            // Add visual feedback animation
+            const btn = document.getElementById('theme-toggle-btn');
+            btn.style.transition = 'transform 0.2s ease';
+            btn.style.transform = 'scale(0.9) rotate(180deg)';
+            setTimeout(() => {
+                btn.style.transform = '';
+            }, 200);
+            
+            // Announce theme change for screen readers
+            const announcement = document.createElement('div');
+            announcement.setAttribute('role', 'status');
+            announcement.setAttribute('aria-live', 'polite');
+            announcement.style.position = 'absolute';
+            announcement.style.left = '-10000px';
+            announcement.textContent = `Theme switched to ${newTheme === 'portal' ? 'light' : 'dark'} mode`;
+            document.body.appendChild(announcement);
+            setTimeout(() => announcement.remove(), 1000);
+        }
+        
+        // Update theme toggle button icon
+        function updateThemeToggleIcon() {
+            const btn = document.getElementById('theme-toggle-btn');
+            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            
+            if (darkThemes.includes(config.theme)) {
+                btn.textContent = '☀️'; // Sun icon for switching to light
+                btn.title = 'Switch to Light Theme';
+                btn.setAttribute('aria-label', 'Switch to light theme');
+            } else {
+                btn.textContent = '🌙'; // Moon icon for switching to dark
+                btn.title = 'Switch to Dark Theme';
+                btn.setAttribute('aria-label', 'Switch to dark theme');
+            }
+        }
+
+        // Settings Panel
+        function openSettings() {
+            document.getElementById('settings-panel').classList.add('active');
+            document.getElementById('settings-overlay').classList.add('active');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('active');
+            document.getElementById('settings-overlay').classList.remove('active');
+        }
+
+        function loadSettings() {
+            document.getElementById('router-url').value = config.routerUrl;
+            document.getElementById('secret').value = config.secret;
+            document.getElementById('theme-select').value = config.theme;
+        }
+
+        function saveSettings() {
+            config.routerUrl = document.getElementById('router-url').value.trim();
+            config.secret = document.getElementById('secret').value.trim();
+            config.theme = document.getElementById('theme-select').value;
+            
+            localStorage.setItem('routerUrl', config.routerUrl);
+            localStorage.setItem('secret', config.secret);
+            localStorage.setItem('theme', config.theme);
+            
+            applyTheme(config.theme);
+            addMessage('system', '✅ Settings saved successfully!');
+            closeSettings();
+            
+            if (config.routerUrl) {
+                updateStatus();
+            }
+        }
+
+        // Mode Toggle Functions
+        function toggleCodeMode() {
+            codeMode = !codeMode;
+            document.getElementById('code-btn').classList.toggle('active');
+            addMessage('system', codeMode ? '💻 Code mode activated' : '✅ Code mode deactivated');
+        }
+
+        function toggleTranslateMode() {
+            translateMode = !translateMode;
+            document.getElementById('translate-btn').classList.toggle('active');
+            addMessage('system', translateMode ? '🌐 Translate mode activated' : '✅ Translate mode deactivated');
+        }
+
+        function toggleSwarmMode() {
+            swarmMode = !swarmMode;
+            document.getElementById('swarm-btn').classList.toggle('active');
+            addMessage('system', swarmMode ? '🔗 Swarm mode activated' : '✅ Swarm mode deactivated');
+        }
+    </script>
+</body>
+</html>`;
+
 
 // ============== MAIN HANDLER ==============
 export default {
