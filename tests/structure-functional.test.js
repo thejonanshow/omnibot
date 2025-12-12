@@ -10,7 +10,14 @@ describe('OmniBot Functional Tests', () => {
   let workerCode;
   
   before(() => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    try {
+      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      console.log(`✓ Loaded worker code for functional tests: ${workerCode.length} characters`);
+    } catch (error) {
+      console.error('✗ Failed to load worker code:', error.message);
+      console.error('  Stack:', error.stack);
+      throw error;
+    }
   });
   
   describe('API Endpoints', () => {
@@ -66,13 +73,27 @@ describe('OmniBot Functional Tests', () => {
   
   describe('Error Handling', () => {
     it('should have try-catch in API handlers', () => {
-      expect(workerCode).to.include('try {');
-      expect(workerCode).to.include('catch (e)');
-      expect(workerCode).to.include('error: e.message');
+      const checks = [
+        { pattern: 'try {', desc: 'try block' },
+        { pattern: 'catch (e)', desc: 'catch clause' },
+        { pattern: 'error: e.message', desc: 'error message handling' }
+      ];
+      
+      for (const check of checks) {
+        if (!workerCode.includes(check.pattern)) {
+          console.error(`✗ Missing error handling component: ${check.desc}`);
+          console.error(`  Expected pattern: ${check.pattern}`);
+        }
+        expect(workerCode).to.include(check.pattern, `Missing ${check.desc} in error handling`);
+      }
     });
     
     it('should return proper error responses', () => {
-      expect(workerCode).to.include('status: 500');
+      if (!workerCode.includes('status: 500')) {
+        console.error('✗ Missing HTTP 500 error response handling');
+        console.error('  Expected: status: 500');
+      }
+      expect(workerCode).to.include('status: 500', 'Missing HTTP 500 error status in responses');
     });
   });
   
@@ -93,21 +114,51 @@ describe('OmniBot Safety Tests', () => {
   let workerCode;
   
   before(() => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    try {
+      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      console.log(`✓ Loaded worker code for safety tests: ${workerCode.length} characters`);
+    } catch (error) {
+      console.error('✗ Failed to load worker code:', error.message);
+      throw error;
+    }
   });
   
   it('should validate code structure before commit', () => {
-    expect(workerCode).to.include('validateCodeStructure');
-    expect(workerCode).to.include('REQUIRED_FUNCTIONS');
+    const validationChecks = [
+      { pattern: 'validateCodeStructure', desc: 'code structure validation function' },
+      { pattern: 'REQUIRED_FUNCTIONS', desc: 'required functions list' }
+    ];
+    
+    for (const check of validationChecks) {
+      if (!workerCode.includes(check.pattern)) {
+        console.error(`✗ Missing safety check: ${check.desc}`);
+        console.error(`  Expected pattern: ${check.pattern}`);
+      }
+      expect(workerCode).to.include(check.pattern, `Missing ${check.desc}`);
+    }
   });
   
   it('should have minimum size check', () => {
-    expect(workerCode).to.include('code.length < 5000');
-    expect(workerCode).to.include('Code seems short');
+    const sizeChecks = [
+      { pattern: 'code.length < 5000', desc: 'minimum size validation' },
+      { pattern: 'Code seems short', desc: 'size warning message' }
+    ];
+    
+    for (const check of sizeChecks) {
+      if (!workerCode.includes(check.pattern)) {
+        console.error(`✗ Missing code size validation: ${check.desc}`);
+        console.error(`  Expected pattern: ${check.pattern}`);
+      }
+      expect(workerCode).to.include(check.pattern, `Missing ${check.desc} in validation`);
+    }
   });
   
   it('should require HTML UI', () => {
-    expect(workerCode).to.include("const HTML =");
+    if (!workerCode.includes("const HTML =")) {
+      console.error('✗ Missing HTML UI constant in safety validation');
+      console.error('  This is critical for preventing broken deployments');
+    }
+    expect(workerCode).to.include("const HTML =", 'HTML UI constant is required for safety validation');
   });
   
   it('should not use browser APIs in worker runtime', () => {

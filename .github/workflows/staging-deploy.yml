@@ -31,6 +31,37 @@ jobs:
       - name: Install dependencies
         run: npm install
       
+      - name: Pre-test validation
+        run: |
+          echo "Running pre-test validation checks..."
+          
+          # Check that the worker file exists
+          if [ ! -f cloudflare-worker/src/index.js ]; then
+            echo "ERROR: Worker source file not found"
+            exit 1
+          fi
+          
+          # Check file size
+          SIZE=$(wc -c < cloudflare-worker/src/index.js)
+          echo "Worker file size: $SIZE bytes"
+          if [ $SIZE -lt 5000 ]; then
+            echo "WARNING: Worker file seems unusually small (< 5KB)"
+            echo "This may indicate an incomplete or corrupted file"
+          fi
+          
+          # Check for critical patterns
+          if ! grep -q "const HTML =" cloudflare-worker/src/index.js; then
+            echo "WARNING: HTML UI constant not found"
+            echo "This may cause test failures"
+          fi
+          
+          if ! grep -q "export default" cloudflare-worker/src/index.js; then
+            echo "ERROR: Missing default export"
+            exit 1
+          fi
+          
+          echo "✓ Pre-test validation passed"
+      
       - name: Run tests
         run: npm test
 
