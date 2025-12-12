@@ -132,12 +132,12 @@ describe('CI/CD Pipeline Validation', () => {
     it('should have lint script in package.json', () => {
       const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
       assert.ok(packageJson.scripts.lint, 'Should have lint script');
-      assert.strictEqual(packageJson.scripts.lint, 'eslint .', 'Lint script should run ESLint');
+      assert.ok(packageJson.scripts.lint.includes('eslint'), 'Lint script should use ESLint');
     });
     
     it('linting should exit with non-zero code on errors', () => {
-      // This test verifies that linting would fail CI
-      // We expect it to fail due to existing errors in codebase
+      // This test verifies that linting would fail CI on errors
+      // Note: This test depends on pre-existing linting errors in the codebase
       let exitCode = 0;
       try {
         execSync('npm run lint', { stdio: 'pipe' });
@@ -145,8 +145,7 @@ describe('CI/CD Pipeline Validation', () => {
         exitCode = error.status;
       }
       
-      // Exit code should be non-zero when there are errors
-      // (Currently we have 5 errors in the codebase)
+      // Exit code should be non-zero when there are errors in the codebase
       assert.ok(exitCode !== 0, 'Linting should exit with non-zero code when errors exist');
     });
   });

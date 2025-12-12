@@ -3,6 +3,7 @@ echo "🔍 Running pre-commit checks..."
 echo "  → Linting staged files..."
 
 # Get list of staged JavaScript files
+# Note: This repo uses .js files only. Add other extensions (e.g., .ts, .jsx) if needed
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.js$' || true)
 
 if [ -n "$STAGED_FILES" ]; then
