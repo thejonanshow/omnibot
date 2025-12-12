@@ -11,7 +11,15 @@ describe('OmniBot Structure Tests', () => {
   let workerCode;
   
   before(async () => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    try {
+      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      console.log(`✓ Loaded worker code: ${workerCode.length} characters`);
+    } catch (error) {
+      console.error('✗ Failed to load worker code:', error.message);
+      console.error('  Current directory:', process.cwd());
+      console.error('  Stack:', error.stack);
+      throw error;
+    }
   });
   
   it('should have all required functions', () => {
@@ -30,13 +38,40 @@ describe('OmniBot Structure Tests', () => {
   });
   
   it('should have minimum size', () => {
-    expect(workerCode.length).to.be.at.least(5000, 
-      `Code too short (${workerCode.length} chars)`);
+    const actualLength = workerCode.length;
+    const minLength = 5000;
+    if (actualLength < minLength) {
+      console.error(`✗ Code size check failed:`);
+      console.error(`  Expected: >= ${minLength} chars`);
+      console.error(`  Actual: ${actualLength} chars`);
+      console.error(`  First 200 chars:`, workerCode.substring(0, 200));
+    }
+    expect(actualLength).to.be.at.least(minLength, 
+      `Code too short (${actualLength} chars, expected >= ${minLength})`);
   });
   
   it('should include HTML UI', () => {
-    expect(workerCode).to.include('const HTML =', 'Missing HTML UI');
-    expect(workerCode).to.match(/<html[\s>]/, 'Missing HTML content');
+    // Check for HTML constant
+    if (!workerCode.includes('const HTML =')) {
+      console.error('✗ Missing HTML UI constant');
+      console.error('  Searching for: const HTML =');
+      console.error('  File size:', workerCode.length);
+    }
+    expect(workerCode).to.include('const HTML =', 'Missing HTML UI constant declaration');
+    
+    // Check for actual HTML content
+    const htmlMatch = workerCode.match(/<html[\s>]/);
+    if (!htmlMatch) {
+      console.error('✗ Missing HTML content');
+      console.error('  Searching for: <html tag');
+      const htmlIndex = workerCode.indexOf('const HTML =');
+      if (htmlIndex >= 0) {
+        console.error('  Found HTML constant at position:', htmlIndex);
+        console.error('  Content after HTML constant (first 500 chars):');
+        console.error('  ', workerCode.substring(htmlIndex, htmlIndex + 500));
+      }
+    }
+    expect(workerCode).to.match(/<html[\s>]/, 'Missing HTML content - <html> tag not found in code');
   });
   
   it('should not use browser-only APIs in worker code', () => {

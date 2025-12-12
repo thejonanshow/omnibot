@@ -159,12 +159,50 @@ See `.github/workflows/` for CI configuration.
 5. **Meaningful Assertions** - Test actual behavior, not implementation
 6. **Error Cases** - Test both success and failure paths
 
+## Error Diagnostics
+
+### Enhanced Error Logging (December 2024)
+
+The test suite now includes comprehensive error logging to help diagnose failures:
+
+**Load Confirmation:**
+```
+✓ Loaded worker code: 457039 characters
+```
+
+**Detailed Failure Context:**
+```
+✗ Code size check failed:
+  Expected: >= 5000 chars
+  Actual: 51 chars
+  First 200 chars: // Restored: 2025-12-09T19:39:18Z
+```
+
+**Component-Level Diagnostics:**
+```
+✗ Missing error handling component: try block
+  Expected pattern: try {
+```
+
+See `docs/TESTING_IMPROVEMENTS.md` for complete details on error diagnostics.
+
 ## Troubleshooting
+
+### Understanding processImmediate Errors
+
+If you see errors referencing `processImmediate (node:internal/timers:483:21)`, this is **not** the actual error. Node.js shows this as the location where async tests are processed. Look at the actual assertion message and enhanced logging output above it for the real cause.
+
+Common causes:
+- Missing or incomplete worker file
+- Missing HTML UI constant
+- Missing required validation strings
 
 ### Mocha Tests Failing
 - Ensure `npm install` has been run
 - Check that `cloudflare-worker/src/index.js` exists
 - Verify Node.js version (v18+)
+- Review enhanced error logging output for specific issues
+- Run pre-test validation to catch issues early
 
 ### Playwright Tests Failing
 - Run `npx playwright install` to install browsers
@@ -175,3 +213,12 @@ See `.github/workflows/` for CI configuration.
 - Increase timeout with `--timeout` flag
 - Check for slow async operations
 - Use mocks instead of real API calls
+
+### Pre-Test Validation
+
+The staging workflow includes pre-test validation that checks:
+- Worker file exists
+- File size is reasonable (>5KB)
+- Critical patterns present (HTML, exports)
+
+This catches issues before the test suite runs, providing faster feedback.
