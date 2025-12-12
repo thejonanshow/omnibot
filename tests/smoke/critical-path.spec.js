@@ -7,7 +7,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 // Import modules for smoke testing
-import { handleRequest } from '../../cloudflare-worker/src/index.js';
+import router from '../../cloudflare-worker/src/index.js';
 import { generateChallenge } from '../../cloudflare-worker/src/lib/auth.js';
 import { isCodeImplementationRequest } from '../../cloudflare-worker/src/lib/classifier.js';
 import { getSharedContext } from '../../cloudflare-worker/src/lib/context.js';
@@ -41,7 +41,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       method: 'GET'
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 200);
 
@@ -57,7 +57,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       method: 'GET'
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 200);
 
@@ -122,7 +122,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       }
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 200);
 
@@ -145,7 +145,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       })
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 401);
 
@@ -160,7 +160,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       method: 'GET'
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 404);
 
@@ -178,7 +178,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       body: 'invalid json'
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 400);
 
@@ -194,7 +194,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       method: 'GET'
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
     const endTime = Date.now();
 
     const responseTime = endTime - startTime;
@@ -212,7 +212,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
     );
 
     const responses = await Promise.all(
-      requests.map(request => handleRequest(request, mockEnv))
+      requests.map(request => router.fetch(request, mockEnv))
     );
 
     // All should succeed
@@ -277,7 +277,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       method: 'GET'
     });
 
-    const response = await handleRequest(request, minimalEnv);
+    const response = await router.fetch(request, minimalEnv);
 
     // Health endpoint should still work without API keys
     assert.equal(response.status, 200);
@@ -296,7 +296,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       })
     });
 
-    const response = await handleRequest(validRequest, mockEnv);
+    const response = await router.fetch(validRequest, mockEnv);
 
     // Should reject due to authentication, but structure should be valid
     assert.equal(response.status, 401);
@@ -311,12 +311,12 @@ describe('Smoke Tests: Critical Path Validation', () => {
 
     // GET should work
     const getRequest = new Request(baseUrl, { method: 'GET' });
-    const getResponse = await handleRequest(getRequest, mockEnv);
+    const getResponse = await router.fetch(getRequest, mockEnv);
     assert.equal(getResponse.status, 200);
 
     // POST should not work for health endpoint
     const postRequest = new Request(baseUrl, { method: 'POST' });
-    const postResponse = await handleRequest(postRequest, mockEnv);
+    const postResponse = await router.fetch(postRequest, mockEnv);
     assert.equal(postResponse.status, 405); // Method not allowed
   });
 
@@ -333,7 +333,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
       })
     });
 
-    const response = await handleRequest(request, mockEnv);
+    const response = await router.fetch(request, mockEnv);
 
     assert.equal(response.status, 401);
 
@@ -383,7 +383,7 @@ describe('Smoke Tests: Critical Path Validation', () => {
         body: JSON.stringify(edgeCase)
       });
 
-      const response = await handleRequest(request, mockEnv);
+      const response = await router.fetch(request, mockEnv);
 
       // Should handle edge cases gracefully
       assert.ok([200, 400, 401].includes(response.status));

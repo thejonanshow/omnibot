@@ -73,11 +73,13 @@ test.describe('Performance and Load Testing', () => {
       const responseTime = endTime - startTime;
       const successCount = responses.filter(r => r.ok()).length;
 
+      const successRate = successCount / (i * 2);
+      
       results.push({
         concurrent: i * 2,
         responseTime,
         successCount,
-        successRate: successCount / (i * 2)
+        successRate
       });
 
       // Each batch should have high success rate

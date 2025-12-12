@@ -107,7 +107,7 @@ describe('API Tests: Endpoint Testing', () => {
       })
     });
 
-    const response = await handleRequest(chatRequest, mockEnv);
+    const response = await router.fetch(chatRequest, mockEnv);
 
     // Should get 401 due to invalid signature, but structure should be correct
     assert.equal(response.status, 401);
@@ -268,22 +268,22 @@ describe('API Tests: Endpoint Testing', () => {
 
     // GET should work
     const getRequest = new Request(baseUrl, { method: 'GET' });
-    const getResponse = await handleRequest(getRequest, mockEnv);
+    const getResponse = await router.fetch(getRequest, mockEnv);
     assert.equal(getResponse.status, 200);
 
     // POST should not work for health endpoint
     const postRequest = new Request(baseUrl, { method: 'POST' });
-    const postResponse = await handleRequest(postRequest, mockEnv);
+    const postResponse = await router.fetch(postRequest, mockEnv);
     assert.equal(postResponse.status, 405); // Method not allowed
 
     // PUT should not work for health endpoint
     const putRequest = new Request(baseUrl, { method: 'PUT' });
-    const putResponse = await handleRequest(putRequest, mockEnv);
+    const putResponse = await router.fetch(putRequest, mockEnv);
     assert.equal(putResponse.status, 405); // Method not allowed
 
     // DELETE should not work for health endpoint
     const deleteRequest = new Request(baseUrl, { method: 'DELETE' });
-    const deleteResponse = await handleRequest(deleteRequest, mockEnv);
+    const deleteResponse = await router.fetch(deleteRequest, mockEnv);
     assert.equal(deleteResponse.status, 405); // Method not allowed
   });
 
