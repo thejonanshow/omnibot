@@ -95,7 +95,7 @@ describe('CI/CD Pipeline Validation', () => {
       );
       
       const content = readFileSync(hookPath, 'utf8');
-      assert.ok(content.includes('npm run lint'), 'Pre-commit should run linting');
+      assert.ok(content.includes('eslint'), 'Pre-commit should run linting');
       assert.ok(content.includes('exit 1'), 'Should exit with error on failure');
     });
     
