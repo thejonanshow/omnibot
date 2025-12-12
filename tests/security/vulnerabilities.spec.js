@@ -76,7 +76,7 @@ describe('Security Tests: Vulnerability Testing', () => {
       })
     });
 
-    const response1 = await handleRequest(request1, mockEnv);
+    const response1 = await router.fetch(request1, mockEnv);
     assert.equal(response1.status, 401); // Should fail due to invalid signature
 
     // Try to use the same challenge again
@@ -94,7 +94,7 @@ describe('Security Tests: Vulnerability Testing', () => {
       })
     });
 
-    const response2 = await handleRequest(request2, mockEnv);
+    const response2 = await router.fetch(request2, mockEnv);
     assert.equal(response2.status, 401); // Should also fail
   });
 
@@ -117,7 +117,7 @@ describe('Security Tests: Vulnerability Testing', () => {
       })
     });
 
-    const futureResponse = await handleRequest(futureRequest, mockEnv);
+    const futureResponse = await router.fetch(futureRequest, mockEnv);
     assert.equal(futureResponse.status, 401);
 
     // Try with very old timestamp
@@ -135,7 +135,7 @@ describe('Security Tests: Vulnerability Testing', () => {
       })
     });
 
-    const oldResponse = await handleRequest(oldRequest, mockEnv);
+    const oldResponse = await router.fetch(oldRequest, mockEnv);
     assert.equal(oldResponse.status, 401);
   });
 
@@ -361,7 +361,7 @@ describe('Security Tests: Vulnerability Testing', () => {
       })
     });
 
-    const response = await handleRequest(csrfRequest, mockEnv);
+    const response = await router.fetch(csrfRequest, mockEnv);
 
     // Should reject due to authentication, not process CSRF
     assert.equal(response.status, 401);
