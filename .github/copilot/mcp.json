@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "servers": {
+    "github": {
+      "name": "GitHub",
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+
+    "cloudflare": {
+      "name": "Cloudflare",
+      "type": "sse",
+      "url": "https://docs.mcp.cloudflare.com/sse",
+      "env": {
+        "CLOUDFLARE_API_TOKEN": "${{ secrets.CLOUDFLARE_API_TOKEN }}",
+        "CLOUDFLARE_ACCOUNT_ID": "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+      }
+    },
+
+    "playwright": {
+      "name": "Playwright",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp"]
+    },
+
+    "fetch": {
+      "name": "Web Fetch",
+      "type": "http",
+      "url": "https://mcp.fetch.tools/mcp"
+    }
+  }
+}
