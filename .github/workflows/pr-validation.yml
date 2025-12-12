@@ -1,0 +1,114 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, staging, develop ]
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  validate:
+    name: Validate PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Lint code (strict mode)
+        run: |
+          echo "Running ESLint in strict mode..."
+          npm run lint
+          LINT_EXIT_CODE=$?
+          
+          if [ $LINT_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Linting failed with errors."
+            echo "Please fix all linting errors before merging."
+            echo ""
+            echo "💡 To fix automatically fixable issues, run: npm run lint:fix"
+            exit 1
+          fi
+          
+          echo "✅ Linting passed!"
+      
+      - name: Run test suite
+        run: |
+          echo "Running full test suite..."
+          npm test
+          
+          if [ $? -ne 0 ]; then
+            echo ""
+            echo "❌ Tests failed."
+            echo "Please ensure all tests pass before merging."
+            exit 1
+          fi
+          
+          echo "✅ All tests passed!"
+      
+      - name: Build verification
+        run: |
+          echo "Verifying build process..."
+          npm run build
+          
+          if [ ! -f cloudflare-worker/src/index.js ]; then
+            echo "❌ Build failed - output file not found"
+            exit 1
+          fi
+          
+          SIZE=$(wc -c < cloudflare-worker/src/index.js)
+          echo "Built worker size: $SIZE bytes"
+          
+          if [ $SIZE -lt 100000 ]; then
+            echo "❌ Built worker is suspiciously small (< 100KB)"
+            echo "Expected size with embedded HTML should be > 100KB"
+            exit 1
+          fi
+          
+          if ! grep -q "<!DOCTYPE html>" cloudflare-worker/src/index.js; then
+            echo "❌ Built worker does not contain embedded HTML"
+            exit 1
+          fi
+          
+          echo "✅ Build verification passed!"
+          echo "   Worker size: $SIZE bytes"
+      
+      - name: Validation Summary
+        if: success()
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════╗"
+          echo "║  ✅ All PR Validation Checks Passed  ║"
+          echo "╚═══════════════════════════════════════╝"
+          echo ""
+          echo "✓ Code linting"
+          echo "✓ Test suite"
+          echo "✓ Build process"
+          echo ""
+          echo "This PR is ready for review!"
+      
+      - name: Validation Failed
+        if: failure()
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════════╗"
+          echo "║  ❌ PR Validation Checks Failed       ║"
+          echo "╚════════════════════════════════════════╝"
+          echo ""
+          echo "Please fix the issues above before merging."
+          echo "Run the following commands locally:"
+          echo "  npm run lint      # Check linting issues"
+          echo "  npm run lint:fix  # Auto-fix some issues"
+          echo "  npm test          # Run tests"
+          echo "  npm run build     # Verify build"
+          exit 1

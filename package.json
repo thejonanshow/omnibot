@@ -14,11 +14,13 @@
     "lint:fix": "eslint . --fix",
     "lint:worker": "eslint cloudflare-worker/src/",
     "complexity": "node scripts/analyze-complexity.js",
-    "complexity:worker": "node scripts/analyze-complexity.js cloudflare-worker/src"
+    "complexity:worker": "node scripts/analyze-complexity.js cloudflare-worker/src",
+    "prepare": "husky"
   },
   "devDependencies": {
     "chai": "^4.3.10",
     "eslint": "^8.57.1",
+    "husky": "^9.1.7",
     "mocha": "^10.2.0"
   },
   "dependencies": {

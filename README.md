@@ -33,7 +33,12 @@ See [BUILD_PROCESS.md](BUILD_PROCESS.md) for detailed build and deployment infor
 
 ## Development
 
+### Quick Start
+
 ```bash
+# Install dependencies (installs git hooks automatically)
+npm install
+
 # Make changes to the UI
 # Edit: frontend/index.html
 
@@ -53,44 +58,72 @@ npm run test:e2e
 cd cloudflare-worker && npx wrangler dev
 ```
 
-## Deployment Pipeline
+### Git Hooks (Automatic Quality Checks)
 
-Omnibot uses a staging-to-production deployment pipeline with comprehensive validation:
+OmniBot uses Git hooks to enforce code quality standards locally:
 
-### Staging Deployment
-- **Automatic**: Pull requests to `main` trigger staging deployment
-- **URL**: https://omnibot-staging.jonanscheffler.workers.dev
-- **Purpose**: Test changes in production-like environment before promoting
-- **Process**:
-  1. Create PR to `main`
-  2. GitHub Actions runs tests (`npm test`)
-  3. Installs dependencies (`npm install`)
-  4. Builds consolidated worker (`npm run build`)
-  5. Verifies build output (file size, HTML embedding)
-  6. Deploys to staging worker via Wrangler
-  7. Post-deployment validation:
-     - Health check with JSON validation
-     - HTML UI presence and content verification
-     - API endpoint accessibility tests
+- **Pre-commit hook**: Runs ESLint on all staged files
+  - Blocks commits with linting errors
+  - Run `npm run lint:fix` to auto-fix issues
+  - Bypass (emergency only): `git commit --no-verify`
 
-### Production Deployment
-- **Manual**: Must be explicitly promoted from staging via workflow dispatch
-- **URL**: https://omnibot.jonanscheffler.workers.dev
-- **Process**:
-  1. Verify staging works correctly
-  2. Go to Actions → "Promote Staging to Production"
-  3. Click "Run workflow" and type "promote" to confirm
-  4. Workflow validates staging deployment first
-  5. Runs smoke tests on staging
-  6. Installs dependencies and builds fresh worker
-  7. Verifies build output
-  8. Deploys to production via Wrangler
-  9. Comprehensive post-deployment validation
-- **Safety**: Staging health checks and smoke tests must pass before promotion is allowed
+- **Pre-push hook**: Runs the full test suite
+  - Blocks pushes with test failures
+  - Run `npm test` locally to see failures
+  - Bypass (emergency only): `git push --no-verify`
 
-### Verification
+**Note:** Even if you bypass local hooks, your code must still pass CI/CD validation before it can be merged.
 
-Manual deployment verification:
+### Development Workflow
+
+1. **Clone and setup**: `git clone <repo> && cd omnibot && npm install`
+2. **Create branch**: `git checkout -b feature/your-feature`
+3. **Make changes**: Edit code, add tests
+4. **Commit**: `git commit -m "Your message"` (pre-commit hook runs)
+5. **Push**: `git push origin feature/your-feature` (pre-push hook runs)
+6. **Create PR**: PR validation runs automatically
+7. **Review & merge**: Once approved and validated, merge to main
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+
+## CI/CD Pipeline
+
+OmniBot uses a comprehensive CI/CD pipeline with multiple validation gates to ensure code quality.
+
+### Pipeline Stages
+
+1. **Pull Request Validation** (Automatic)
+   - Triggers on: All PRs to main, staging, or develop
+   - Checks: Linting, full test suite, build verification
+   - **Required to pass before merging**
+
+2. **Staging Deployment** (Automatic)
+   - Triggers on: Push to staging/develop, PRs to main
+   - URL: https://omnibot-staging.jonanscheffler.workers.dev
+   - Steps: Lint → Test → Build → Deploy → Verify
+   - Purpose: Test in production-like environment
+
+3. **Production Deployment** (Automatic on main)
+   - Triggers on: Push to main branch
+   - URL: https://omnibot.jonanscheffler.workers.dev
+   - Steps: Install → Lint → Test → Build → Deploy → Verify
+   - Gates: All validation must pass
+
+4. **Production Promotion** (Manual)
+   - Requires: Manual trigger + typing "promote"
+   - Steps: Validate staging → Smoke tests → Build → Deploy
+
+### Validation Gates
+
+All deployments must pass these gates (blocks on failure):
+
+- 🛑 **Linting**: ESLint errors block commits and CI/CD
+- 🛑 **Tests**: Test failures block pushes and deployments
+- 🛑 **Build**: Build must produce valid output (>100KB with HTML)
+- 🛑 **Post-deployment**: Health checks and content verification
+
+### Manual Verification
+
 ```bash
 # Verify staging deployment
 ./scripts/verify-deployment.sh staging
@@ -99,23 +132,13 @@ Manual deployment verification:
 ./scripts/verify-deployment.sh production
 ```
 
-### Build Process Guarantees
+### Pipeline Documentation
 
-The build pipeline ensures:
-- ✅ Dependencies installed before build
-- ✅ Build output validated (>100KB with embedded HTML)
-- ✅ HTML UI properly embedded in worker
-- ✅ Deployment verified post-deploy
-- ✅ Clear error messages on any failure
-
-See [DEPLOYMENT_POSTMORTEM.md](DEPLOYMENT_POSTMORTEM.md) for details on recent pipeline improvements.
-
-### Workflow
-1. Develop and test locally (`npm test`)
-2. Push to `main` → Auto-deploys to staging (with full validation)
-3. Test staging deployment (manual or automated)
-4. Manually promote to production (requires confirmation)
-5. Verify production deployment (automated checks)
+See [docs/CI_CD_PIPELINE.md](docs/CI_CD_PIPELINE.md) for comprehensive pipeline documentation including:
+- Detailed workflow explanations
+- Troubleshooting guide
+- Historical deployment failures
+- Maintenance procedures
 
 ## LLM-Driven Contribution Guidelines
 
