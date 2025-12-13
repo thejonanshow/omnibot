@@ -15,6 +15,9 @@
  * Current: v1.0.0 "Electric Eel" - Self-editing AI with PR workflow
  */
 
+import { authenticateCliRequest, hasScope } from './lib/cli-auth.js';
+import { generateConversationId, getConversation, saveConversation, indexConversation } from './lib/conversations.js';
+
 const GITHUB_REPO = 'thejonanshow/omnibot';
 const GITHUB_API_URL = 'https://api.github.com';
 const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
@@ -3919,6 +3922,7 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -4253,6 +4257,121 @@ export default {
       return new Response(JSON.stringify(context.telemetry || {}), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
       });
+    }
+    
+    // ===== CLI Routes =====
+    
+    // CLI whoami endpoint
+    if (url.pathname === '/api/cli/whoami' && request.method === 'GET') {
+      try {
+        const user = await authenticateCliRequest(request, env);
+        
+        if (!user) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        await logTelemetry('cli_whoami', { userId: user.id }, env);
+        
+        return new Response(JSON.stringify({
+          id: user.id,
+          email: user.email,
+          source: user.source,
+          scopes: user.scopes
+        }), {
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // CLI chat endpoint
+    if (url.pathname === '/api/cli/chat' && request.method === 'POST') {
+      try {
+        const user = await authenticateCliRequest(request, env);
+        
+        if (!user) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        if (!hasScope(user, 'chat')) {
+          return new Response(JSON.stringify({ error: 'Insufficient permissions' }), {
+            status: 403,
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        const { message, conversation_id } = await request.json();
+        
+        if (!message || message.trim().length === 0) {
+          return new Response(JSON.stringify({ error: 'Message is required' }), {
+            status: 400,
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Get or create conversation
+        let convId = conversation_id;
+        if (!convId) {
+          convId = generateConversationId();
+        }
+        
+        // Load conversation history
+        const history = await getConversation(convId, env);
+        
+        // Build messages array for LLM
+        const messages = [
+          ...history,
+          { role: 'user', content: message }
+        ];
+        
+        // Call the same chat handler the web UI uses
+        const reply = await callGroq('llama', messages, env);
+        
+        // Add assistant response to history
+        const updatedHistory = [
+          ...messages,
+          { role: 'assistant', content: reply }
+        ];
+        
+        // Save conversation (24 hour TTL)
+        await saveConversation(convId, updatedHistory, env, 86400);
+        
+        // Index conversation for user
+        const firstMessage = message.substring(0, 50);
+        await indexConversation(user.id, convId, {
+          title: firstMessage + (message.length > 50 ? '...' : ''),
+          created_at: Date.now()
+        }, env);
+        
+        await logTelemetry('cli_chat', { 
+          userId: user.id, 
+          conversationId: convId,
+          messageLength: message.length
+        }, env);
+        
+        return new Response(JSON.stringify({
+          conversation_id: convId,
+          response: reply,
+          message_count: updatedHistory.length
+        }), {
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...cors, 'Content-Type': 'application/json' }
+        });
+      }
     }
     
     // Test endpoint

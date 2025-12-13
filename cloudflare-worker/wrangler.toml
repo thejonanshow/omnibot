@@ -5,3 +5,10 @@ compatibility_date = "2024-01-01"
 [[kv_namespaces]]
 binding = "CONTEXT"
 id = "1eb0446396bb4a5ba2247364e8459adf"
+
+# CLI authentication tokens
+# Note: In production, create a separate KV namespace and update the ID below
+# For development, you can use the same CONTEXT namespace or create a new one
+[[kv_namespaces]]
+binding = "CLI_TOKENS"
+id = "CLI_TOKENS_KV_ID_PLACEHOLDER"
