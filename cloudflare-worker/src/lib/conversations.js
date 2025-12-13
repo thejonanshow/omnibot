@@ -10,7 +10,8 @@
  * @returns {string} Unique conversation ID
  */
 export function generateConversationId() {
-  return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // Use crypto.randomUUID() for cryptographically secure, unpredictable IDs
+  return `conv_${crypto.randomUUID()}`;
 }
 
 /**
