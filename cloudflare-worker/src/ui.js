@@ -3,6 +3,8 @@
  * Handles HTML UI generation and rendering
  */
 
+/* eslint-disable no-undef */
+
 import { VERSION_FULL } from './config.js';
 
 // Cache for compiled themes
@@ -482,6 +484,7 @@ export function renderUI(sessionToken = null) {
         let isProcessing = false;
         
         // Initialize
+        // eslint-disable-next-line no-undef
         document.addEventListener('DOMContentLoaded', function() {
             // eslint-disable-next-line no-undef
             if (${
@@ -507,17 +510,20 @@ export function renderUI(sessionToken = null) {
         
         // Register cleanup on page unload
         // eslint-disable-next-line no-undef
+        // eslint-disable-next-line no-undef
         window.addEventListener('beforeunload', cleanup);
         
         // Register cleanup on visibility change
+        // eslint-disable-next-line no-undef
         document.addEventListener('visibilitychange', () => {
+          // eslint-disable-next-line no-undef
           if (document.hidden) {
             cleanup();
           }
         });
-sessionToken ? 'true' : 'false'}) {
-                loadPrompt();
-                updateStatus();
+        
+        loadPrompt();
+        updateStatus();
                 // Memory-optimized interval with cleanup
         const intervalId = setInterval(updateStatus, 30000);
         

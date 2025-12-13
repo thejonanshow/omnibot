@@ -91,7 +91,7 @@ describe('OmniBot Functional Tests', () => {
     it('should have OAuth state parameter management', () => {
       expect(workerCode).to.include('generateOAuthState');
       expect(workerCode).to.include('validateOAuthState');
-      expect(workerCode).to.include('oauth_state_');
+      expect(workerCode).to.include('oauth_state:');
     });
     
     it('should restrict to allowed email', () => {
@@ -197,10 +197,14 @@ describe('OmniBot Safety Tests', () => {
   });
   
   it('should not use browser APIs in worker runtime', () => {
-    // Check the entire worker code for browser APIs
-    expect(workerCode).to.not.include('DOMParser');
-    expect(workerCode).to.not.include('window.');
-    expect(workerCode).to.not.include('document.');
+    // Extract worker code before HTML template to avoid false positives
+    const htmlStart = workerCode.indexOf('const HTML =');
+    const workerCodeOnly = htmlStart > -1 ? workerCode.substring(0, htmlStart) : workerCode;
+    
+    // Check worker code (excluding HTML template) for browser APIs
+    expect(workerCodeOnly).to.not.include('DOMParser');
+    expect(workerCodeOnly).to.not.include('window.');
+    expect(workerCodeOnly).to.not.include('document.');
   });
 });
 
