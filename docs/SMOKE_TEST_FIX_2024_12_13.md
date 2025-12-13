@@ -203,13 +203,13 @@ docs/SMOKE_TEST_FIX_2024_12_13.md           (new: documentation)
 ## References
 
 - Workflow: `.github/workflows/promote-to-production.yml`
-- Worker Code: `cloudflare-worker/src/index.js` (lines 2935-3250)
+- Worker Code: `cloudflare-worker/src/index.js`
 - Public Endpoints:
-  - `/api/health` (line 2935)
-  - `/api/test` (line 3240)
+  - `/api/health` - Health check handler
+  - `/api/test` - Test/monitoring handler
 - Protected Endpoints:
-  - `/api/chat` (line 2947, requires auth line 2948)
-  - `/api/self-edit` (line 2983, requires auth line 2984)
+  - `/api/chat` - Chat handler (requires authentication via isAuthenticated check)
+  - `/api/self-edit` - Self-edit handler (requires authentication via isAuthenticated check)
 
 ## Conclusion
 
