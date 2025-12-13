@@ -674,19 +674,172 @@ export function renderUI(sessionToken = null) {
 function getThemes() {
   return {
     lcars: `
+      /* Authentic Star Trek LCARS Theme */
       :root {
-        --bg-primary: #000;
-        --bg-secondary: #1a1a2e;
-        --text-primary: #ffa500;
-        --text-secondary: #ffcc80;
-        --accent-primary: #ff6b35;
-        --accent-secondary: #f7931e;
-        --border-color: #ff6b35;
-        --user-message-bg: #2a2a3e;
-        --assistant-message-bg: #1a1a2e;
-        --system-message-bg: #2a2a3e;
-        --error-bg: #d32f2f;
-        --error-text: #fff;
+        --lcars-orange: #ff9900;
+        --lcars-yellow: #ffff00;
+        --lcars-purple: #cc99cc;
+        --lcars-blue: #9999ff;
+        --lcars-light-blue: #ccccff;
+        --lcars-pink: #ffccff;
+        --lcars-red: #ff6666;
+        --lcars-white: #ffffff;
+        --lcars-black: #000000;
+        --lcars-dark-gray: #333333;
+        --lcars-gray: #666666;
+        --lcars-light-gray: #999999;
+        
+        /* UI Colors */
+        --bg-primary: var(--lcars-black);
+        --bg-secondary: var(--lcars-dark-gray);
+        --text-primary: var(--lcars-white);
+        --text-secondary: var(--lcars-light-gray);
+        --accent-primary: var(--lcars-orange);
+        --accent-secondary: var(--lcars-yellow);
+        --border-color: var(--lcars-orange);
+        --user-message-bg: var(--lcars-blue);
+        --assistant-message-bg: var(--lcars-purple);
+        --system-message-bg: var(--lcars-pink);
+        --error-bg: var(--lcars-red);
+        --error-text: var(--lcars-white);
+      }
+      
+      /* LCARS Interface Styling */
+      body {
+        background: linear-gradient(90deg, 
+          var(--lcars-black) 0%, 
+          var(--lcars-dark-gray) 20%, 
+          var(--lcars-black) 100%);
+        font-family: 'Arial Rounded MT Bold', 'Helvetica Rounded', Arial, sans-serif;
+        color: var(--lcars-white);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      
+      .container {
+        background: var(--lcars-black);
+        border-radius: 0 25px 25px 0;
+        border-left: 15px solid var(--lcars-orange);
+        box-shadow: 0 0 20px rgba(255, 153, 0, 0.5);
+      }
+      
+      .header {
+        background: linear-gradient(90deg, 
+          var(--lcars-orange) 0%, 
+          var(--lcars-yellow) 50%, 
+          var(--lcars-orange) 100%);
+        color: var(--lcars-black);
+        border-radius: 25px 25px 0 0;
+        padding: 20px;
+        text-align: center;
+        font-size: 1.5em;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+      }
+      
+      .title {
+        color: var(--lcars-black);
+        text-shadow: 2px 2px 4px rgba(255,255,255,0.3);
+        font-size: 2.2em;
+        margin-bottom: 10px;
+      }
+      
+      /* LCARS Button Styling */
+      button {
+        background: linear-gradient(90deg, 
+          var(--lcars-purple) 0%, 
+          var(--lcars-blue) 100%);
+        color: var(--lcars-white);
+        border: none;
+        border-radius: 15px 0 15px 0;
+        padding: 10px 20px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      }
+      
+      button:hover {
+        background: linear-gradient(90deg, 
+          var(--lcars-blue) 0%, 
+          var(--lcars-light-blue) 100%);
+        box-shadow: 0 6px 12px rgba(153,153,255,0.5);
+        transform: translateY(-2px);
+      }
+      
+      /* LCARS Input Styling */
+      input, textarea {
+        background: var(--lcars-dark-gray);
+        color: var(--lcars-white);
+        border: 2px solid var(--lcars-orange);
+        border-radius: 10px;
+        padding: 10px;
+        font-family: inherit;
+        text-transform: none;
+      }
+      
+      input:focus, textarea:focus {
+        outline: none;
+        border-color: var(--lcars-yellow);
+        box-shadow: 0 0 10px rgba(255,255,0,0.5);
+      }
+      
+      /* LCARS Chat Messages */
+      .message {
+        border-radius: 15px 15px 15px 0;
+        border-left: 5px solid var(--lcars-orange);
+        margin: 10px 0;
+        padding: 15px;
+        position: relative;
+      }
+      
+      .message.user {
+        background: linear-gradient(90deg, 
+          var(--lcars-blue) 0%, 
+          var(--lcars-light-blue) 100%);
+        color: var(--lcars-black);
+        border-left-color: var(--lcars-yellow);
+        margin-left: 20%;
+        border-radius: 15px 0 15px 15px;
+      }
+      
+      .message.assistant {
+        background: linear-gradient(90deg, 
+          var(--lcars-purple) 0%, 
+          var(--lcars-pink) 100%);
+        color: var(--lcars-white);
+        border-left-color: var(--lcars-orange);
+        margin-right: 20%;
+      }
+      
+      /* LCARS Scrollbar */
+      ::-webkit-scrollbar {
+        width: 12px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: var(--lcars-black);
+        border-radius: 6px;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, 
+          var(--lcars-orange) 0%, 
+          var(--lcars-yellow) 100%);
+        border-radius: 6px;
+      }
+      
+      /* LCARS Animations */
+      @keyframes lcars-pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+      }
+      
+      .lcars-indicator {
+        animation: lcars-pulse 2s infinite;
       }
     `,
     cyberpunk: `

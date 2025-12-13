@@ -8,12 +8,18 @@
  * WARNING: This will consume API credits!
  */
 
-const https = require('https');
-const crypto = require('crypto');
+const { 
+  makeRequest, 
+  getChallenge, 
+  generateSignature, 
+  TestResults,
+  retry,
+  validateResponse,
+  DEFAULT_CONFIG 
+} = require('./test-utils');
 
-// Configuration
-const WORKER_URL = 'https://omni-agent-router.jonanscheffler.workers.dev';
-const SHARED_SECRET = process.env.SHARED_SECRET || 'test-secret-for-development-only';
+const WORKER_URL = DEFAULT_CONFIG.WORKER_URL;
+const SHARED_SECRET = DEFAULT_CONFIG.SHARED_SECRET;
 
 // Check if this is a real system test
 const isSystemTest = process.env.SYSTEM_TEST === 'true' || process.argv.includes('--system');
@@ -35,118 +41,177 @@ setTimeout(() => {
   runSystemTest();
 }, 3000);
 
-async function makeRequest(path, method = 'GET', body = null, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(path, WORKER_URL);
-    const options = {
-      hostname: url.hostname,
-      port: 443,
-      path: url.pathname + url.search,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          const jsonData = JSON.parse(data);
-          resolve({ status: res.statusCode, data: jsonData });
-        } catch (e) {
-          resolve({ status: res.statusCode, data: data });
-        }
-      });
-    });
-
-    req.on('error', reject);
-
-    if (body) {
-      req.write(JSON.stringify(body));
-    }
-    req.end();
-  });
-}
-
-async function getChallenge() {
-  const response = await makeRequest('/challenge');
-  if (response.status === 200) {
-    return response.data;
-  }
-  throw new Error(`Failed to get challenge: ${response.status}`);
-}
-
-function generateSignature(timestamp, challenge, secret) {
-  return crypto.createHmac('sha256', secret).update(timestamp + challenge).digest('hex');
-}
-
 async function runSystemTest() {
-  console.log('\n🧪 FULL SYSTEM TEST STARTING\n');
-
+  const results = new TestResults();
+  const startTime = Date.now();
+  
+  console.log('\n🚀 Starting full system test...\n');
+  
   try {
-    // Test 1: Get challenge
-    console.log('Test 1: Getting challenge...');
-    const challenge = await getChallenge();
-    console.log(`  ✓ Challenge received: ${challenge.challenge.substring(0, 10)}...`);
-
-    // Test 2: Check usage limits
-    console.log('\nTest 2: Checking usage limits...');
-    const statusResponse = await makeRequest('/status');
-    if (statusResponse.status === 200) {
-      console.log(`  ✓ Usage limits: ${JSON.stringify(statusResponse.data)}`);
-    } else {
-      console.log(`  ❌ Failed to get status: ${statusResponse.status}`);
+    // Test 1: Health check
+    await results.addTest(
+      'Health endpoint',
+      await testHealthEndpoint()
+    );
+    
+    // Test 2: Challenge endpoint
+    await results.addTest(
+      'Challenge endpoint',
+      await testChallengeEndpoint()
+    );
+    
+    // Test 3: Chat functionality
+    await results.addTest(
+      'Chat functionality',
+      await testChatFunctionality()
+    );
+    
+    // Test 4: Status endpoint
+    await results.addTest(
+      'Status endpoint',
+      await testStatusEndpoint()
+    );
+    
+    // Test 5: Edit functionality (if enabled)
+    if (process.env.TEST_EDIT === 'true') {
+      await results.addTest(
+        'Edit functionality',
+        await testEditFunctionality()
+      );
     }
-
-    // Test 3: Test general message
-    console.log('\nTest 3: Testing general message...');
-    const signature = generateSignature(challenge.timestamp, challenge.challenge, SHARED_SECRET);
-    const generalResponse = await makeRequest('/chat', 'POST', {
-      message: 'Hello, how are you today?',
-      sessionId: 'system_test_general'
-    }, {
-      'X-Timestamp': challenge.timestamp.toString(),
-      'X-Challenge': challenge.challenge,
-      'X-Signature': signature
-    });
-
-    if (generalResponse.status === 200) {
-      console.log(`  ✓ Provider: ${generalResponse.data.provider}`);
-      console.log(`  ✓ Response: ${generalResponse.data.response.substring(0, 100)}...`);
-      console.log(`  ✓ Is Code Request: ${generalResponse.data.isCodeRequest}`);
-    } else {
-      console.log(`  ❌ General message failed: ${generalResponse.status}`);
-      console.log(`  Error: ${JSON.stringify(generalResponse.data)}`);
-    }
-
-    // Test 4: Test coding message
-    console.log('\nTest 4: Testing coding message...');
-    const codingResponse = await makeRequest('/chat', 'POST', {
-      message: 'Write a Python function to calculate factorial',
-      sessionId: 'system_test_coding'
-    }, {
-      'X-Timestamp': challenge.timestamp.toString(),
-      'X-Challenge': challenge.challenge,
-      'X-Signature': signature
-    });
-
-    if (codingResponse.status === 200) {
-      console.log(`  ✓ Provider: ${codingResponse.data.provider}`);
-      console.log(`  ✓ Response: ${codingResponse.data.response.substring(0, 100)}...`);
-      console.log(`  ✓ Is Code Request: ${codingResponse.data.isCodeRequest}`);
-    } else {
-      console.log(`  ❌ Coding message failed: ${codingResponse.status}`);
-      console.log(`  Error: ${JSON.stringify(codingResponse.data)}`);
-    }
-
-    console.log('\n✅ FULL SYSTEM TEST COMPLETED');
-    console.log('⚠️  API credits were consumed during this test');
-
+    
   } catch (error) {
-    console.error('❌ System test failed:', error.message);
-    process.exit(1);
+    console.error('System test error:', error);
+    results.addTest('System test', false, error.message);
+  }
+  
+  const duration = Date.now() - startTime;
+  console.log(`\n⏱️  Test completed in ${duration}ms`);
+  
+  const success = results.summary();
+  process.exit(success ? 0 : 1);
+}
+
+async function testHealthEndpoint() {
+  try {
+    const response = await makeRequest(`${WORKER_URL}/health`);
+    
+    if (response.statusCode !== 200) {
+      throw new Error(`Unexpected status: ${response.statusCode}`);
+    }
+    
+    const validation = validateResponse(response.body, ['status', 'timestamp', 'version']);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    
+    return response.body.status === 'ok';
+  } catch (error) {
+    throw new Error(`Health check failed: ${error.message}`);
+  }
+}
+
+async function testChallengeEndpoint() {
+  try {
+    const challenge = await getChallenge(WORKER_URL);
+    
+    return challenge && 
+           typeof challenge.challenge === 'string' && 
+           typeof challenge.timestamp === 'number' &&
+           challenge.expires_in === 60;
+  } catch (error) {
+    throw new Error(`Challenge endpoint failed: ${error.message}`);
+  }
+}
+
+async function testChatFunctionality() {
+  try {
+    const challenge = await getChallenge(WORKER_URL);
+    const signature = generateSignature(challenge.challenge);
+    
+    const response = await makeRequest(`${WORKER_URL}/chat`, {
+      method: 'POST',
+      headers: {
+        'X-Challenge': challenge.challenge,
+        'X-Signature': signature,
+        'X-Timestamp': Date.now().toString()
+      }
+    }, {
+      message: 'Hello, this is a system test',
+      conversation: []
+    });
+    
+    if (response.statusCode !== 200) {
+      throw new Error(`Chat failed with status: ${response.statusCode}`);
+    }
+    
+    const validation = validateResponse(response.body, ['choices', 'provider']);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    
+    return response.body.choices && response.body.choices.length > 0;
+  } catch (error) {
+    throw new Error(`Chat functionality failed: ${error.message}`);
+  }
+}
+
+async function testStatusEndpoint() {
+  try {
+    const response = await makeRequest(`${WORKER_URL}/status`);
+    
+    if (response.statusCode !== 200) {
+      throw new Error(`Status failed with status: ${response.statusCode}`);
+    }
+    
+    const validation = validateResponse(response.body, ['llm_providers']);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    
+    const providers = response.body.llm_providers;
+    return Object.keys(providers).length >= 3; // At least 3 providers
+  } catch (error) {
+    throw new Error(`Status endpoint failed: ${error.message}`);
+  }
+}
+
+async function testEditFunctionality() {
+  try {
+    const challenge = await getChallenge(WORKER_URL);
+    const signature = generateSignature(challenge.challenge);
+    
+    const response = await makeRequest(`${WORKER_URL}/edit`, {
+      method: 'POST',
+      headers: {
+        'X-Challenge': challenge.challenge,
+        'X-Signature': signature,
+        'X-Timestamp': Date.now().toString()
+      }
+    }, {
+      instruction: 'Add a comment to the health check function',
+      options: {
+        commitMessage: 'System test: Add comment to health check'
+      }
+    });
+    
+    // Edit functionality might be disabled or rate limited
+    if (response.statusCode === 429) {
+      console.log('⚠️  Edit functionality rate limited, skipping');
+      return true;
+    }
+    
+    if (response.statusCode === 403) {
+      console.log('⚠️  Edit functionality disabled, skipping');
+      return true;
+    }
+    
+    if (response.statusCode === 200) {
+      return response.body.success === true;
+    }
+    
+    throw new Error(`Edit failed with status: ${response.statusCode}`);
+  } catch (error) {
+    throw new Error(`Edit functionality failed: ${error.message}`);
   }
 }
