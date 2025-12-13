@@ -45,28 +45,28 @@ describe('OmniBot Functional Tests', () => {
   });
   
   describe('UI', () => {
-    it('should have themed CSS variables', () => {
-      expect(workerCode).to.include('--bg-primary');
-      expect(workerCode).to.include('--text-primary');
+    it('should have LCARS CSS variables', () => {
+      expect(workerCode).to.include('--lcars-orange');
+      expect(workerCode).to.include('--lcars-blue');
     });
     
     it('should have edit mode styling', () => {
       expect(workerCode).to.include('edit-mode');
     });
     
-    it('should have LCARS theme', () => {
-      expect(workerCode).to.include('theme-lcars');
-      expect(workerCode).to.include('LCARS (Star Trek)');
+    it('should have LCARS structure', () => {
+      expect(workerCode).to.include('lcars-frame');
+      expect(workerCode).to.include('lcars-sidebar');
     });
     
-    it('should have model selector', () => {
-      expect(workerCode).to.include('id="model-selector"');
-      expect(workerCode).to.include('Editor (Code Pipeline)');
+    it('should have LCARS buttons', () => {
+      expect(workerCode).to.include('lcars-btn');
+      expect(workerCode).to.include('data-mode="chat"');
     });
     
-    it('should have environment indicator', () => {
-      expect(workerCode).to.include('id="env-indicator"');
-      expect(workerCode).to.include('env-indicator');
+    it('should have LCARS header', () => {
+      expect(workerCode).to.include('lcars-header');
+      expect(workerCode).to.include('lcars-title');
     });
   });
   
