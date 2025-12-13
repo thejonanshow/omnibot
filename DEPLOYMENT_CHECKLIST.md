@@ -72,12 +72,14 @@ curl -s https://omnibot-staging.jonanscheffler.workers.dev/ | grep "Omnibot"
 ### What Happens
 GitHub Actions:
 1. ✅ Validates staging is healthy
-2. ✅ Runs smoke tests on staging
+2. ✅ Runs smoke tests on staging (public endpoints: /api/health, /api/test, /)
 3. ✅ Installs dependencies
-4. ✅ Builds fresh consolidated worker
-5. ✅ Verifies build output
-6. ✅ Deploys to production
-7. ✅ Comprehensive post-deployment validation
+4. ✅ Lints code (must pass)
+5. ✅ Runs tests (must pass)
+6. ✅ Builds fresh consolidated worker
+7. ✅ Verifies build output
+8. ✅ Deploys to production
+9. ✅ Comprehensive post-deployment validation
 
 ### Manual Verification
 ```bash

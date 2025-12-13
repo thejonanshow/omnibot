@@ -30,26 +30,35 @@ jobs:
       
       - name: Run smoke tests on staging
         run: |
-          # Full smoke test suite
-          echo "Running smoke tests..."
+          # Smoke test suite for public endpoints only
+          # Note: /api/chat and /api/self-edit require authentication and are not suitable for smoke tests
+          echo "Running smoke tests on public endpoints..."
           
-          # Chat test
-          curl -sf -X POST \
-            https://omnibot-staging.jonanscheffler.workers.dev/api/chat \
-            -H "Content-Type: application/json" \
-            -d '{"messages":[{"role":"user","content":"test"}]}' > /dev/null
-          echo "✓ Chat endpoint"
+          # Health endpoint (primary health check)
+          HEALTH=$(curl -sf https://omnibot-staging.jonanscheffler.workers.dev/api/health)
+          if ! echo "$HEALTH" | grep -q '"ok":true'; then
+            echo "ERROR: Health endpoint failed"
+            echo "Response: $HEALTH"
+            exit 1
+          fi
+          echo "✓ Health endpoint"
           
-          # Edit validation
-          curl -sf -X POST \
-            https://omnibot-staging.jonanscheffler.workers.dev/api/self-edit \
-            -H "Content-Type: application/json" \
-            -d '{"instruction":""}' > /dev/null || true
-          echo "✓ Edit validation"
-          
-          # Test endpoint
-          curl -sf https://omnibot-staging.jonanscheffler.workers.dev/api/test > /dev/null
+          # Test endpoint (monitoring/health check)
+          TEST=$(curl -sf https://omnibot-staging.jonanscheffler.workers.dev/api/test)
+          if ! echo "$TEST" | grep -q '"ok":true'; then
+            echo "ERROR: Test endpoint failed"
+            echo "Response: $TEST"
+            exit 1
+          fi
           echo "✓ Test endpoint"
+          
+          # Verify HTML UI is accessible
+          HTML=$(curl -sf https://omnibot-staging.jonanscheffler.workers.dev/)
+          if ! echo "$HTML" | grep -q "<!DOCTYPE html>"; then
+            echo "ERROR: HTML UI not accessible"
+            exit 1
+          fi
+          echo "✓ HTML UI accessible"
           
           echo "All smoke tests passed!"
 
