@@ -74,7 +74,7 @@ function extractPlainTextBody(rawEmail) {
   // Find Content-Type: text/plain section
   const lines = rawEmail.split('\n');
   let inPlainText = false;
-  let body = [];
+  const body = [];
   
   for (const line of lines) {
     if (line.includes('Content-Type: text/plain')) {
