@@ -12,9 +12,9 @@ import {
 } from './config.js';
 
 /**
- * Generate Google OAuth URL
+ * Generate Google OAuth URL with state parameter
  */
-export function getGoogleAuthUrl(env, redirectUri) {
+export function getGoogleAuthUrl(env, redirectUri, state = null) {
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -23,6 +23,11 @@ export function getGoogleAuthUrl(env, redirectUri) {
     access_type: 'online',
     prompt: 'select_account'
   });
+  
+  if (state) {
+    params.set('state', state);
+  }
+  
   return `${GOOGLE_AUTH_URL}?${params}`;
 }
 
@@ -125,6 +130,49 @@ export async function verifySessionToken(token, env) {
   } catch (error) {
     return null;
   }
+}
+
+/**
+ * Generate OAuth state parameter
+ */
+export async function generateOAuthState(env, sessionId = null) {
+  const state = crypto.randomUUID();
+  const timestamp = Date.now();
+  const data = { state, timestamp, sessionId };
+  
+  // Store state with 10-minute expiration
+  await env.CONTEXT.put(`oauth_state:${state}`, JSON.stringify(data), {
+    expirationTtl: 600
+  });
+  
+  return state;
+}
+
+/**
+ * Validate OAuth state parameter
+ */
+export async function validateOAuthState(state, env) {
+  if (!state) {
+    throw new Error('Missing state parameter');
+  }
+  
+  const stateData = await env.CONTEXT.get(`oauth_state:${state}`);
+  if (!stateData) {
+    throw new Error('Invalid or expired state parameter');
+  }
+  
+  const data = JSON.parse(stateData);
+  
+  // Check if state is expired (10 minutes)
+  if (Date.now() - data.timestamp > 600000) {
+    await env.CONTEXT.delete(`oauth_state:${state}`);
+    throw new Error('State parameter expired');
+  }
+  
+  // Clean up used state
+  await env.CONTEXT.delete(`oauth_state:${state}`);
+  
+  return data;
 }
 
 /**

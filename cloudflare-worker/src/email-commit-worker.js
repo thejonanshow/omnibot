@@ -18,10 +18,10 @@
  * 4. Worker parses and commits to GitHub
  */
 
-async function handleEmail(message, env, ctx) {
+async function handleEmail(message, env, _ctx) {
   try {
     // Get email subject and body
-    const subject = message.headers.get('subject');
+    const _subject = message.headers.get('subject');
     const from = message.headers.get('from');
     
     // Only process emails from authorized sender
