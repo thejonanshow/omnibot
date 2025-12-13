@@ -258,9 +258,12 @@ export async function verifyRequest(request, env) {
     ['verify']
   );
   
-  const signatureBytes = new Uint8Array(
-    signature.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
-  );
+  // Optimized hex to bytes conversion
+  const hexPairs = signature.match(/.{1,2}/g) || [];
+  const signatureBytes = new Uint8Array(hexPairs.length);
+  for (let i = 0; i < hexPairs.length; i++) {
+    signatureBytes[i] = parseInt(hexPairs[i], 16);
+  }
   
   const isValid = await crypto.subtle.verify('HMAC', key, signatureBytes, encoder.encode(challenge));
   
