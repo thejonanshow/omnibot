@@ -505,32 +505,34 @@ test.describe('Button Isolation Tests', () => {
     const sendButton = page.locator('button#send-btn, button[aria-label*="Send" i]').first();
     const input = page.locator('textarea, input[type="text"]').first();
     
-    if (await sendButton.count() > 0 && await input.count() > 0) {
-      // Type a message
-      await input.fill('Test message');
-      
-      // Click send button
-      await sendButton.click();
-      
-      // Wait for any message to appear (error message should appear quickly)
-      await page.waitForSelector('.message', { timeout: 2000 }).catch(() => {});
-      
-      // Settings panel should NOT automatically open
-      // Check if settings panel is visible
-      const settingsPanel = page.locator('#settings-panel, .settings-panel');
-      const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
-      
-      // Settings should NOT be open (send button shouldn't open it)
-      expect(isPanelVisible).toBe(false);
-      
-      // Should show error message instead
-      const pageContent = await page.textContent('body');
-      const hasConfigMessage = 
-        pageContent.includes('configure') ||
-        pageContent.includes('Settings');
-      
-      expect(hasConfigMessage).toBeTruthy();
+    if (await sendButton.count() === 0 || await input.count() === 0) {
+      test.skip(true, 'Required elements not found');
     }
+    
+    // Type a message
+    await input.fill('Test message');
+    
+    // Click send button
+    await sendButton.click();
+    
+    // Wait for any message to appear (error message should appear quickly)
+    await page.waitForSelector('.message', { timeout: 2000 }).catch(() => {});
+    
+    // Settings panel should NOT automatically open
+    // Check if settings panel is visible
+    const settingsPanel = page.locator('#settings-panel, .settings-panel');
+    const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
+    
+    // Settings should NOT be open (send button shouldn't open it)
+    expect(isPanelVisible).toBe(false);
+    
+    // Should show error message instead
+    const pageContent = await page.textContent('body');
+    const hasConfigMessage = 
+      pageContent.includes('configure') ||
+      pageContent.includes('Settings');
+    
+    expect(hasConfigMessage).toBeTruthy();
   });
   
   test('send button and settings button should have distinct behavior', async ({ page }) => {
@@ -561,9 +563,6 @@ test.describe('Button Isolation Tests', () => {
     const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
     
     expect(isPanelVisible).toBe(true);
-    
-    // Take screenshot
-    await page.screenshot({ path: 'test-results/button-isolation-test.png' });
   });
   
   test('clicking send button should only trigger send logic', async ({ page }) => {
@@ -582,28 +581,30 @@ test.describe('Button Isolation Tests', () => {
     const sendButton = page.locator('button#send-btn').first();
     const input = page.locator('textarea, input[type="text"]').first();
     
-    if (await sendButton.count() > 0 && await input.count() > 0) {
-      // Type a message
-      await input.fill('Test send button isolation');
-      
-      // Click send button
-      await sendButton.click();
-      
-      // Wait for input to be cleared (happens immediately on send)
-      await page.waitForFunction(() => {
-        const input = document.querySelector('textarea, input[type="text"]');
-        return input && input.value === '';
-      }, { timeout: 2000 }).catch(() => {});
-      
-      // Settings panel should NOT open when send is clicked
-      const settingsPanel = page.locator('#settings-panel.active, .settings-panel.active');
-      const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
-      
-      expect(isPanelVisible).toBe(false);
-      
-      // Message should be cleared from input (indicating send was attempted)
-      const inputValue = await input.inputValue();
-      expect(inputValue).toBe('');
+    if (await sendButton.count() === 0 || await input.count() === 0) {
+      test.skip(true, 'Required elements not found');
     }
+    
+    // Type a message
+    await input.fill('Test send button isolation');
+    
+    // Click send button
+    await sendButton.click();
+    
+    // Wait for input to be cleared (happens immediately on send)
+    await page.waitForFunction(() => {
+      const input = document.querySelector('textarea, input[type="text"]');
+      return input && input.value === '';
+    }, { timeout: 2000 }).catch(() => {});
+    
+    // Settings panel should NOT open when send is clicked
+    const settingsPanel = page.locator('#settings-panel.active, .settings-panel.active');
+    const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
+    
+    expect(isPanelVisible).toBe(false);
+    
+    // Message should be cleared from input (indicating send was attempted)
+    const inputValue = await input.inputValue();
+    expect(inputValue).toBe('');
   });
 });
