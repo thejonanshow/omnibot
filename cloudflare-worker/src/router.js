@@ -27,11 +27,41 @@ import {
   LOCK_RETRY_DELAY_MS
 } from './config.js';
 import { callAI } from './ai.js';
-import { selfEdit } from './editor.js';
-import { getSharedContext, saveContext } from './context.js';
 import { getUsage } from './usage.js';
-import { logTelemetry } from './telemetry.js';
-import { renderUI } from './ui.js';
+
+// Lazy loaded modules
+let editorModule = null;
+let contextModule = null;
+let telemetryModule = null;
+let uiModule = null;
+
+async function getEditorModule() {
+  if (!editorModule) {
+    editorModule = await import('./editor.js');
+  }
+  return editorModule;
+}
+
+async function getContextModule() {
+  if (!contextModule) {
+    contextModule = await import('./context.js');
+  }
+  return contextModule;
+}
+
+async function getTelemetryModule() {
+  if (!telemetryModule) {
+    telemetryModule = await import('./telemetry.js');
+  }
+  return telemetryModule;
+}
+
+async function getUIModule() {
+  if (!uiModule) {
+    uiModule = await import('./ui.js');
+  }
+  return uiModule;
+}
 
 // Initialize rate limiters
 const rateLimiter = new RateLimiter(RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS);
@@ -249,6 +279,7 @@ async function handleOAuthCallback(url, env, redirectUri, _cors) {
   // Create session
   const sessionToken = await createSessionToken(userInfo.email, env);
   
+  const { logTelemetry } = await getTelemetryModule();
   await logTelemetry('login', { email: userInfo.email }, env);
   
   // Redirect to app with session (email not included in URL for security)
@@ -354,6 +385,7 @@ async function handleEdit(request, env, cors) {
   
   try {
     const result = await lock.withLock(lockKey, ownerId, async () => {
+      const { selfEdit } = await getEditorModule();
       return await selfEdit(instruction, options, env);
     });
     
@@ -463,6 +495,7 @@ async function handleUI(sessionToken, env, cors) {
     }
   }
   
+  const { renderUI } = await getUIModule();
   const html = renderUI(sessionToken);
   return new Response(html, {
     headers: { 
