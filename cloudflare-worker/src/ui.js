@@ -477,6 +477,7 @@ export function renderUI(sessionToken = null) {
     
     <script>
         let conversation = [];
+        let sendMessageDebounce = null;
         let isProcessing = false;
         
         // Initialize
@@ -544,10 +545,20 @@ sessionToken ? 'true' : 'false'}) {
         async function sendMessage() {
             if (isProcessing) return;
             
+            // Clear previous debounce
+            if (sendMessageDebounce) {
+                clearTimeout(sendMessageDebounce);
+            }
+            
             const input = document.getElementById('chat-input');
             const message = input.value.trim();
             
             if (!message) return;
+            
+            // Debounce rapid sends
+            sendMessageDebounce = setTimeout(() => {
+                sendMessageDebounce = null;
+            }, 300);
             
             input.value = '';
             addMessage('user', message);
