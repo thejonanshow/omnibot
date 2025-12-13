@@ -44,7 +44,11 @@ export async function handleRequest(request, env) {
   const cors = { 
     'Access-Control-Allow-Origin': '*', 
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Challenge, X-Signature, X-Timestamp' 
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Challenge, X-Signature, X-Timestamp',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Referrer-Policy': 'strict-origin-when-cross-origin'
   };
   
   if (request.method === 'OPTIONS') {
@@ -74,12 +78,39 @@ export async function handleRequest(request, env) {
     
     // Health check
     if (url.pathname === '/health') {
-      return new Response(JSON.stringify({
+      const health = {
         status: 'ok',
         timestamp: new Date().toISOString(),
         version: VERSION_FULL,
-        capabilities: ['function_calling', 'shared_context', 'voice_services']
-      }), {
+        uptime: Math.floor(Date.now() / 1000),
+        checks: {}
+      };
+      
+      // Check KV stores
+      try {
+        await env.CONTEXT.get('health-check');
+        health.checks.kv_context = 'ok';
+      } catch (e) {
+        health.checks.kv_context = 'error';
+        health.status = 'degraded';
+      }
+      
+      try {
+        await env.CHALLENGES.get('health-check');
+        health.checks.kv_challenges = 'ok';
+      } catch (e) {
+        health.checks.kv_challenges = 'error';
+        health.status = 'degraded';
+      }
+      
+      // Check required environment variables
+      health.checks.env = {
+        has_session_secret: !!env.SESSION_SECRET,
+        has_google_client_id: !!env.GOOGLE_CLIENT_ID,
+        has_ai_providers: !!(env.GROQ_API_KEY || env.GEMINI_API_KEY || env.ANTHROPIC_API_KEY)
+      };
+      
+      return new Response(JSON.stringify(health), {
         headers: { ...cors, 'Content-Type': 'application/json' }
       });
     }
@@ -143,7 +174,19 @@ export async function handleRequest(request, env) {
     
   } catch (error) {
     console.error('Router error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const errorResponse = {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      path: url.pathname,
+      method: request.method
+    };
+    
+    // Add stack trace in development
+    if (env.ENVIRONMENT === 'development') {
+      errorResponse.stack = error.stack;
+    }
+    
+    return new Response(JSON.stringify(errorResponse), {
       status: 500,
       headers: { ...cors, 'Content-Type': 'application/json' }
     });

@@ -176,56 +176,7 @@ throw new Error(`Qwen OpenAI-compat error: ${response.status}`);
 return response.json();
 }
 
-/**
- * Call Groq API for general-purpose tasks
- * 
- * @param {string} message - User message
- * @param {Array} conversation - Conversation history
- * @param {Object} env - Environment bindings
- * @param {string} sessionId - Session identifier
- * @returns {Promise<Object>} Response in OpenAI-compatible format
- */
-export async function callGroq(message, conversation, env, sessionId) {
-  if (!env.GROQ_API_KEY) {
-    throw new Error('Groq API key not configured');
-  }
 
-  const messages = [
-    {
-      role: 'system',
-      content: `You are a helpful AI assistant. Current session: ${sessionId}`
-    },
-    ...conversation.map(m => ({
-      role: m.role,
-      content: m.content
-    })),
-    {
-      role: 'user',
-      content: message
-    }
-  ];
-
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.GROQ_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'llama-3.1-70b-versatile',
-      messages: messages,
-      max_tokens: 4096,
-      temperature: 0.7
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq failed: ${response.status} - ${errorText}`);
-  }
-
-  return response.json();
-}
 
 /**
  * Call Gemini API for general-purpose tasks
