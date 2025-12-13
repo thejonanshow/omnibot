@@ -121,7 +121,7 @@ export async function handleRequest(request, env) {
       };
       
       return new Response(JSON.stringify(health), {
-        headers: { ...cors, 'Content-Type': 'application/json' }
+        headers: { ...cors, 'Content-Type': 'application/json', 'Vary': 'Accept-Encoding' }
       });
     }
     
