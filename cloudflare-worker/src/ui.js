@@ -27,6 +27,8 @@ export function renderUI(sessionToken = null) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="//api.groq.com">
+    <link rel="preconnect" href="//generativelanguage.googleapis.com">
     <link rel="dns-prefetch" href="//api.groq.com">
     <link rel="dns-prefetch" href="//generativelanguage.googleapis.com">
     <link rel="preload" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" as="image">
@@ -479,10 +481,53 @@ export function renderUI(sessionToken = null) {
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            if (${sessionToken ? 'true' : 'false'}) {
+            if (${
+        // Cleanup function for memory management
+        function cleanup() {
+          // Clear any intervals
+          const intervals = window._omnibotIntervals || [];
+          intervals.forEach(id => clearInterval(id));
+          
+          // Remove event listeners
+          const listeners = window._omnibotListeners || [];
+          listeners.forEach(({ element, event, handler }) => {
+            element.removeEventListener(event, handler);
+          });
+          
+          // Clear global references
+          if (window._omnibotGlobals) {
+            window._omnibotGlobals.forEach(key => {
+              delete window[key];
+            });
+          }
+        }
+        
+        // Register cleanup on page unload
+        window.addEventListener('beforeunload', cleanup);
+        
+        // Register cleanup on visibility change
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            cleanup();
+          }
+        });
+sessionToken ? 'true' : 'false'}) {
                 loadPrompt();
                 updateStatus();
-                setInterval(updateStatus, 30000); // Update every 30 seconds
+                // Memory-optimized interval with cleanup
+        const intervalId = setInterval(updateStatus, 30000);
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+          clearInterval(intervalId);
+        });
+        
+        // Also cleanup on visibility change (tab hidden)
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            clearInterval(intervalId);
+          }
+        }); // Update every 30 seconds
             }
         });
         
