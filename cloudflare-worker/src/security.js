@@ -5,6 +5,44 @@
 
 import { REQUIRED_FUNCTIONS } from './config.js';
 
+// Precompile regex patterns for performance
+const MALICIOUS_PATTERNS = [
+  /eval\s*\(/gi,
+  /Function\s*\(/gi,
+  /setTimeout\s*\(/gi,
+  /setInterval\s*\(/gi,
+  /require\s*\(\s*['"`].*child_process/gi,
+  /spawn\s*\(/gi,
+  /exec\s*\(/gi,
+  /execSync\s*\(/gi
+];
+
+const DANGEROUS_PATTERNS = [
+  /process\.exit/gi,
+  /require\s*\(\s*['"`][fs]['"`]\s*\)/gi,
+  /require\s*\(\s*['"`][child_process]['"`]\s*\)/gi,
+  /fs\.unlink/gi,
+  /fs\.rmdir/gi,
+  /eval\s*\(/gi,
+  /Function\s*\(/gi,
+  /setTimeout\s*\(\s*['"`]\s*['"`]\s*,\s*0\s*\)/gi
+];
+
+const INFINITE_LOOP_PATTERNS = [
+  /while\s*\(\s*true\s*\)/gi,
+  /for\s*\(\s*;\s*;\s*\)/gi,
+  /do\s*{[^}]*}\s*while\s*\(\s*true\s*\)/gi
+];
+
+const SECRET_PATTERNS = [
+  /['"`]?[A-Za-z0-9]{40}['"`]?/gi,
+  /['"`]?sk-[A-Za-z0-9]{48}['"`]?/gi,
+  /['"`]?AIza[0-9A-Za-z\-_]{35}['"`]?/gi,
+  /password\s*=\s*['"`][^'"`]+['"`]/gi,
+  /api[_-]?key\s*=\s*['"`][^'"`]+['"`]/gi,
+  /secret\s*=\s*['"`][^'"`]+['"`]/gi
+];
+
 /**
  * Validate user input for code editing
  */
@@ -21,20 +59,7 @@ export function validateEditInput(instruction, options = {}) {
   }
   
   // Check for potentially malicious patterns
-  const maliciousPatterns = [
-    /eval\s*\(/gi,
-    /Function\s*\(/gi,
-    /setTimeout\s*\(/gi,
-    /setInterval\s*\(/gi,
-    /require\s*\(\s*['"`].*child_process/gi,
-    /spawn\s*\(/gi,
-    /exec\s*\(/gi,
-    /process\.exit/gi,
-    /while\s*\(\s*true\s*\)/gi,
-    /for\s*\(\s*;\s*;\s*\)/gi
-  ];
-  
-  for (const pattern of maliciousPatterns) {
+  for (const pattern of MALICIOUS_PATTERNS) {
     if (pattern.test(instruction)) {
       errors.push(`Potentially malicious pattern detected: ${pattern.source}`);
     }
@@ -102,47 +127,21 @@ export function validateGeneratedCode(code, originalCode) {
   }
   
   // Check for dangerous patterns
-  const dangerousPatterns = [
-    /process\.exit/gi,
-    /require\s*\(\s*['"`]fs['"`]\s*\)/gi,
-    /require\s*\(\s*['"`]child_process['"`]\s*\)/gi,
-    /fs\.unlink/gi,
-    /fs\.rmdir/gi,
-    /eval\s*\(/gi,
-    /Function\s*\(/gi,
-    /setTimeout\s*\(\s*['"`]\s*['"`]\s*,\s*0\s*\)/gi // setTimeout('', 0) - common injection
-  ];
-  
-  for (const pattern of dangerousPatterns) {
+  for (const pattern of DANGEROUS_PATTERNS) {
     if (pattern.test(code)) {
       errors.push(`Dangerous pattern detected: ${pattern.source}`);
     }
   }
   
   // Check for infinite loops
-  const infiniteLoopPatterns = [
-    /while\s*\(\s*true\s*\)/gi,
-    /for\s*\(\s*;\s*;\s*\)/gi,
-    /do\s*{[^}]*}\s*while\s*\(\s*true\s*\)/gi
-  ];
-  
-  for (const pattern of infiniteLoopPatterns) {
+  for (const pattern of INFINITE_LOOP_PATTERNS) {
     if (pattern.test(code)) {
       warnings.push(`Potential infinite loop detected: ${pattern.source}`);
     }
   }
   
   // Check for hardcoded secrets
-  const secretPatterns = [
-    /['"`]?[A-Za-z0-9]{40}['"`]?/gi, // Potential API key
-    /['"`]?sk-[A-Za-z0-9]{48}['"`]?/gi, // OpenAI API key format
-    /['"`]?AIza[0-9A-Za-z\-_]{35}['"`]?/gi, // Google API key format
-    /password\s*=\s*['"`][^'"`]+['"`]/gi,
-    /api[_-]?key\s*=\s*['"`][^'"`]+['"`]/gi,
-    /secret\s*=\s*['"`][^'"`]+['"`]/gi
-  ];
-  
-  for (const pattern of secretPatterns) {
+  for (const pattern of SECRET_PATTERNS) {
     if (pattern.test(code)) {
       warnings.push(`Potential hardcoded secret detected: ${pattern.source}`);
     }
