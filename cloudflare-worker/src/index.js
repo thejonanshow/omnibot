@@ -4100,7 +4100,7 @@ const HTML = `<!DOCTYPE html>
                 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
                     // Only auto-switch if user hasn't manually set a theme
                     if (!localStorage.getItem('themeManuallySet')) {
-                        const newTheme = e.matches ? 'cyberpunk' : 'portal';
+                        const newTheme = e.matches ? 'lcars' : 'portal';
                         applyTheme(newTheme);
                     }
                 });
@@ -4218,6 +4218,7 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
 
 
 
