@@ -270,37 +270,35 @@ export class RateLimiter {
     const now = Date.now();
     const windowStart = now - this.windowMs;
     
-    // Get current request count from KV store
+    // Get current request timestamps from KV store
     const key = `rate_limit:${identifier}`;
     const data = await env.USAGE.get(key);
-    let requestData = data ? JSON.parse(data) : { count: 0, windowStart: now };
+    let timestamps = data ? JSON.parse(data) : [];
     
-    // Reset if window has passed
-    if (requestData.windowStart < windowStart) {
-      requestData = { count: 0, windowStart: now };
-    }
+    // Remove old timestamps outside window
+    timestamps = timestamps.filter(ts => ts > windowStart);
     
     // Check if limit exceeded
-    if (requestData.count >= this.maxRequests) {
+    if (timestamps.length >= this.maxRequests) {
       return {
         allowed: false,
         remaining: 0,
-        resetTime: requestData.windowStart + this.windowMs
+        resetTime: timestamps[0] + this.windowMs
       };
     }
     
-    // Increment count
-    requestData.count++;
+    // Add current timestamp
+    timestamps.push(now);
     
     // Store updated data
-    await env.USAGE.put(key, JSON.stringify(requestData), {
+    await env.USAGE.put(key, JSON.stringify(timestamps), {
       expirationTtl: Math.ceil(this.windowMs / 1000)
     });
     
     return {
       allowed: true,
-      remaining: this.maxRequests - requestData.count,
-      resetTime: requestData.windowStart + this.windowMs
+      remaining: this.maxRequests - timestamps.length,
+      resetTime: timestamps[0] + this.windowMs
     };
   }
 }
