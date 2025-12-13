@@ -11,8 +11,14 @@ describe('OmniBot Functional Tests', () => {
   
   before(() => {
     try {
-      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
-      console.log(`✓ Loaded worker code for functional tests: ${workerCode.length} characters`);
+      // Load all the modular components for testing
+      const indexCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      const routerCode = fs.readFileSync('./cloudflare-worker/src/router.js', 'utf-8');
+      const uiCode = fs.readFileSync('./cloudflare-worker/src/ui.js', 'utf-8');
+      const authCode = fs.readFileSync('./cloudflare-worker/src/auth.js', 'utf-8');
+      
+      workerCode = indexCode + routerCode + uiCode + authCode;
+      console.log(`✓ Loaded modular worker code: ${workerCode.length} characters`);
     } catch (error) {
       console.error('✗ Failed to load worker code:', error.message);
       console.error('  Stack:', error.stack);
