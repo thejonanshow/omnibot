@@ -177,6 +177,7 @@ export async function handleRequest(request, env) {
     console.error('Router error:', error);
     const errorResponse = {
       error: error.message,
+      code: 'INTERNAL_ERROR',
       timestamp: new Date().toISOString(),
       path: url.pathname,
       method: request.method

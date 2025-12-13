@@ -153,12 +153,16 @@ export async function generateOAuthState(env, sessionId = null) {
  */
 export async function validateOAuthState(state, env) {
   if (!state) {
-    throw new Error('Missing state parameter');
+    const error = new Error('Missing state parameter');
+    error.code = 'OAUTH_STATE_MISSING';
+    throw error;
   }
   
   const stateData = await env.CONTEXT.get(`oauth_state:${state}`);
   if (!stateData) {
-    throw new Error('Invalid or expired state parameter');
+    const error = new Error('Invalid or expired state parameter');
+    error.code = 'OAUTH_STATE_INVALID';
+    throw error;
   }
   
   const data = JSON.parse(stateData);
@@ -166,7 +170,9 @@ export async function validateOAuthState(state, env) {
   // Check if state is expired (10 minutes)
   if (Date.now() - data.timestamp > 600000) {
     await env.CONTEXT.delete(`oauth_state:${state}`);
-    throw new Error('State parameter expired');
+    const error = new Error('State parameter expired');
+    error.code = 'OAUTH_STATE_EXPIRED';
+    throw error;
   }
   
   // Clean up used state
