@@ -1,0 +1,29 @@
+{
+  "name": "omnibot-cli",
+  "version": "1.0.0",
+  "description": "Command-line interface for Omnibot",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "omnibot": "bin/omnibot.js"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [
+    "omnibot",
+    "cli",
+    "ai",
+    "chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "node-fetch": "^3.3.2",
+    "chalk": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
