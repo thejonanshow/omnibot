@@ -8,6 +8,10 @@ import { CircuitBreaker } from './security.js';
 import { getUsage, incrementUsage } from './usage.js';
 import { callQwen } from './llm-providers.js';
 
+// Micro-cache for AI responses (5 second TTL)
+const responseCache = new Map();
+const CACHE_TTL = 5000;
+
 // Initialize circuit breakers for each provider
 const circuitBreakers = {
   groq: new CircuitBreaker(5, 60000),
@@ -20,6 +24,15 @@ const circuitBreakers = {
  * Call AI with provider fallback
  */
 export async function callAI(message, conversation, env, purpose = 'chat') {
+  // Create cache key from message and conversation hash
+  const cacheKey = `${purpose}:${message}:${JSON.stringify(conversation)}`;
+  
+  // Check cache first
+  const cached = responseCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.response;
+  }
+  
   const providers = AI_PROVIDERS[purpose] || AI_PROVIDERS.chat;
   const attemptedProviders = [];
   
@@ -81,11 +94,20 @@ export async function callAI(message, conversation, env, purpose = 'chat') {
       await incrementUsage(env, provider);
       
       console.log(`[AI] Success with ${provider} (${model})`);
-      return {
+      
+      // Cache successful response
+      const response = {
         ...result,
         provider,
         model
       };
+      
+      responseCache.set(cacheKey, {
+        response,
+        timestamp: Date.now()
+      });
+      
+      return response;
       
     } catch (error) {
       console.error(`[${provider}] Failed: ${error.message}`);
