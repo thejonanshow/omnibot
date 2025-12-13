@@ -71,12 +71,8 @@ describe('OAuth Flow', () => {
       assert.equal(response.status, 302, 'Should redirect');
       const location = response.headers.get('Location');
       assert.ok(location, 'Should have Location header');
-<<<<<<< HEAD
       const parsedUrl = new URL(location);
       assert.equal(parsedUrl.hostname, 'accounts.google.com', 'Should redirect to Google');
-=======
-      assert.ok(location.includes('accounts.google.com'), 'Should redirect to Google');
->>>>>>> aabdce7 (Add OAuth state parameter validation and redirect loop prevention)
       assert.ok(location.includes('state='), 'Should include state parameter');
     });
 
@@ -125,7 +121,6 @@ describe('OAuth Flow', () => {
       const text = await response.text();
       assert.ok(text.includes('Invalid state parameter'), 'Should have error message');
     });
-<<<<<<< HEAD
 
     it('should reject callback when KV is unavailable (no CSRF protection)', async () => {
       const mockEnv = {
@@ -145,8 +140,6 @@ describe('OAuth Flow', () => {
       const text = await response.text();
       assert.ok(text.includes('Invalid state parameter'), 'Should reject without CSRF protection');
     });
-=======
->>>>>>> aabdce7 (Add OAuth state parameter validation and redirect loop prevention)
   });
 
   describe('Session Validation', () => {
@@ -197,11 +190,7 @@ describe('OAuth Flow', () => {
       assert.ok(text.includes('Try again'), 'Should have retry option');
     });
 
-<<<<<<< HEAD
     it('should serve HTML for unauthenticated GET requests', async () => {
-=======
-    it('should redirect to OAuth when no session exists', async () => {
->>>>>>> aabdce7 (Add OAuth state parameter validation and redirect loop prevention)
       const mockEnv = {
         GOOGLE_CLIENT_ID: 'test-client-id',
         SESSION_SECRET: 'test-session-secret',
@@ -215,16 +204,10 @@ describe('OAuth Flow', () => {
 
       const response = await router.fetch(request, mockEnv);
       
-<<<<<<< HEAD
       assert.equal(response.status, 200, 'Should return HTML');
       const text = await response.text();
       assert.ok(text.includes('<!DOCTYPE html>'), 'Should include HTML doctype');
       assert.ok(text.toLowerCase().includes('omnibot'), 'Should include app name');
-=======
-      assert.equal(response.status, 302, 'Should redirect');
-      const location = response.headers.get('Location');
-      assert.ok(location.includes('/auth/google'), 'Should redirect to OAuth');
->>>>>>> aabdce7 (Add OAuth state parameter validation and redirect loop prevention)
     });
   });
 
