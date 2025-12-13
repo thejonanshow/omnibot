@@ -127,7 +127,7 @@ OmniBot uses GitHub Actions for CI/CD with multiple workflows that enforce code 
 4. **Build consolidated worker**
 5. **Verify build output:**
    - File exists
-   - Size > 100KB
+   - Size > 40KB
    - Contains HTML DOCTYPE
 6. **Install Wrangler**
 7. **Deploy to staging**
@@ -158,7 +158,7 @@ OmniBot uses GitHub Actions for CI/CD with multiple workflows that enforce code 
 6. **Build consolidated worker** - `npm run build`
 7. **Verify build output:**
    - File: `cloudflare-worker/src/index.js` exists
-   - Size: > 100KB (ensures HTML is embedded)
+   - Size: > 40KB (ensures HTML is embedded)
    - Content: Contains `<!DOCTYPE html>`
 8. **Install Wrangler** - Global installation
 9. **Deploy to Cloudflare Workers**
@@ -266,7 +266,7 @@ error  'handleRequest' is not defined  no-undef
 
 **Steps:**
 1. Check `cloudflare-worker/src/index.js` exists
-2. Verify file size > 100KB
+2. Verify file size > 40KB
 3. Verify HTML embedding (grep for `<!DOCTYPE html>`)
 
 **Fails on:**
@@ -278,7 +278,7 @@ error  'handleRequest' is not defined  no-undef
 
 **Example failure:**
 ```
-ERROR: Built worker is too small (expected >100KB with embedded HTML)
+ERROR: Built worker is too small (expected >40KB with embedded HTML)
 Built worker size: 5432 bytes
 ```
 

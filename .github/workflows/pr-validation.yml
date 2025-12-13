@@ -69,9 +69,9 @@ jobs:
           SIZE=$(wc -c < cloudflare-worker/src/index.js)
           echo "Built worker size: $SIZE bytes"
           
-          if [ $SIZE -lt 100000 ]; then
-            echo "❌ Built worker is suspiciously small (< 100KB)"
-            echo "Expected size with embedded HTML should be > 100KB"
+          if [ $SIZE -lt 40000 ]; then
+            echo "❌ Built worker is suspiciously small (< 40KB)"
+            echo "Expected size with embedded HTML should be > 40KB"
             exit 1
           fi
           

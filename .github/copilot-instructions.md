@@ -94,7 +94,7 @@ git add cloudflare-worker/src/index.js
   1. Run tests (`npm test`)
   2. Install dependencies (`npm install`)
   3. Build consolidated worker (`npm run build`)
-  4. Verify build output (file size >100KB, HTML embedded)
+  4. Verify build output (file size >40KB, HTML embedded)
   5. Deploy to staging via Wrangler
   6. Post-deployment validation (health check, HTML presence, API accessibility)
 
@@ -111,7 +111,7 @@ git add cloudflare-worker/src/index.js
 ### Critical CI/CD Rules
 - **ALWAYS** run `npm install` before `npm run build` in workflows
 - **ALWAYS** run `npm run lint` before deployment (blocks on errors)
-- Verify build output: file exists, size >100KB, contains `<!DOCTYPE html>`
+- Verify build output: file exists, size >40KB, contains `<!DOCTYPE html>`
 - Post-deployment validation checks content freshness, not just endpoint availability
 - See `docs/DEPLOYMENT_FAILURE_2024_12_12.md` for lessons learned
 
@@ -201,7 +201,7 @@ node --test tests/ci-validation.test.js
 # Check if HTML is embedded
 grep -c "<!DOCTYPE html>" cloudflare-worker/src/index.js
 
-# Check file size (should be >100KB)
+# Check file size (should be >40KB)
 wc -c cloudflare-worker/src/index.js
 
 # Verify required functions exist

@@ -119,7 +119,7 @@ All deployments must pass these gates (blocks on failure):
 
 - 🛑 **Linting**: ESLint errors block commits and CI/CD
 - 🛑 **Tests**: Test failures block pushes and deployments
-- 🛑 **Build**: Build must produce valid output (>100KB with HTML)
+- 🛑 **Build**: Build must produce valid output (>40KB with HTML)
 - 🛑 **Post-deployment**: Health checks and content verification
 
 ### Manual Verification
