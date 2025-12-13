@@ -15,7 +15,7 @@
   */
   export function getDateKey() {
   const now = new Date();
-  return now.toISOString().split(‘T’)[0];
+  return now.toISOString().split('T')[0];
   }
 
 /**
@@ -38,12 +38,10 @@ try {
 const value = await usageKV.get(key);
 const usage = value ? parseInt(value, 10) : 0;
 
-```
 // Log for observability
 console.log(`[Usage] ${provider}: ${usage} requests today (key: ${key})`);
 
 return usage;
-```
 
 } catch (error) {
 console.error(`[Usage] Error getting usage for ${provider}:`, error.message);
@@ -71,7 +69,6 @@ try {
 const current = await getUsage(usageKV, provider);
 const newValue = current + 1;
 
-```
 // Store with 24-hour TTL (auto-cleanup)
 await usageKV.put(key, newValue.toString(), {
   expirationTtl: 86400 // 24 hours in seconds
@@ -80,7 +77,6 @@ await usageKV.put(key, newValue.toString(), {
 console.log(`[Usage] Incremented ${provider}: ${current} -> ${newValue}`);
 
 return newValue;
-```
 
 } catch (error) {
 console.error(`[Usage] Error incrementing usage for ${provider}:`, error.message);
@@ -96,7 +92,7 @@ return 0;
 - @returns {Promise<Object>} Usage counts for all providers
   */
   export async function getAllUsage(usageKV) {
-  const providers = [‘groq’, ‘gemini’, ‘claude’, ‘qwen’];
+  const providers = ['groq', 'gemini', 'claude', 'qwen'];
   const limits = { groq: 30, gemini: 15, claude: 50, qwen: 1000 };
 
 const usage = {};

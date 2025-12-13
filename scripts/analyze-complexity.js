@@ -41,7 +41,7 @@ function analyzeFunctionComplexity(code) {
     
     // Find function body
     let braceCount = 0;
-    let funcStart = code.indexOf('{', startPos);
+    const funcStart = code.indexOf('{', startPos);
     if (funcStart === -1) continue;
     
     let funcEnd = funcStart;
@@ -65,7 +65,7 @@ function analyzeFunctionComplexity(code) {
     const caseCount = (funcBody.match(/\bcase\s+/g) || []).length;
     const catchCount = (funcBody.match(/\bcatch\s*\(/g) || []).length;
     const ternaryCount = (funcBody.match(/\?[^:]+:/g) || []).length;
-    const andOrCount = (funcBody.match(/\&\&|\|\|/g) || []).length;
+    const andOrCount = (funcBody.match(/&&|\|\|/g) || []).length;
     
     const complexity = 1 + ifCount + forCount + whileCount + switchCount + caseCount + catchCount + ternaryCount + andOrCount;
     
