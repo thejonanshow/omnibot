@@ -423,8 +423,10 @@ async function handleEdit(request, env, cors) {
  * Handle context management
  */
 async function handleContext(request, env, cors) {
+  const contextModule = await getContextModule();
+  
   if (request.method === 'GET') {
-    const context = await getSharedContext(env);
+    const context = await contextModule.getSharedContext(env);
     return new Response(JSON.stringify({ prompt: context.masterPrompt || '' }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
@@ -433,7 +435,7 @@ async function handleContext(request, env, cors) {
   if (request.method === 'POST') {
     await verifyRequest(request, env);
     const { prompt } = await request.json();
-    await saveContext('masterPrompt', prompt, env);
+    await contextModule.saveContext('masterPrompt', prompt, env);
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });
@@ -446,10 +448,12 @@ async function handleContext(request, env, cors) {
  * Handle prompt management
  */
 async function handlePrompt(request, env, cors) {
+  const contextModule = await getContextModule();
+  
   if (request.method === 'POST') {
     await verifyRequest(request, env);
     const { prompt } = await request.json();
-    await saveContext('masterPrompt', prompt, env);
+    await contextModule.saveContext('masterPrompt', prompt, env);
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...cors, 'Content-Type': 'application/json' }
     });

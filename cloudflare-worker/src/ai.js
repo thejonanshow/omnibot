@@ -156,10 +156,6 @@ export async function callAI(message, conversation, env, purpose = 'chat') {
     // Always clean up pending request
     pendingRequests.delete(cacheKey);
   }
-  }
-  
-  // All providers failed
-  throw new ProviderRotationError('All AI providers failed', attemptedProviders);
 }
 
 /**
