@@ -158,7 +158,7 @@ To create a token that expires in 30 days:
 
 ```bash
 # Calculate expiry timestamp (30 days from now)
-EXPIRY=$(($(date +%s) * 1000 + 30 * 24 * 60 * 60 * 1000))
+EXPIRY=$((($(date +%s) + 30 * 24 * 60 * 60) * 1000))
 
 # Provision token
 wrangler kv:key put --namespace-id="YOUR_KV_NAMESPACE_ID" \
