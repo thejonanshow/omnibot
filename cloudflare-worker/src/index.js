@@ -3341,6 +3341,14 @@ const HTML = `<!DOCTYPE html>
                 document.getElementById('voice-btn').classList.add('recording');
                 document.getElementById('voice-btn').textContent = '⏹';
                 updateSendButton();
+
+                // Show live transcription overlay while recording
+                const overlay = document.getElementById('transcription-overlay');
+                const overlayText = document.getElementById('transcription-text');
+                if (overlay && overlayText) {
+                    overlay.classList.add('active');
+                    overlayText.textContent = 'Listening...';
+                }
                 
                 // Start 10-second timeout
                 if (microphoneTimeoutId) {
@@ -3363,6 +3371,12 @@ const HTML = `<!DOCTYPE html>
                 isVoiceInput = true;
                 autoResize();
                 updateSendButton();
+
+                // Update overlay text with the recognized speech
+                const overlayText = document.getElementById('transcription-text');
+                if (overlayText) {
+                    overlayText.textContent = text;
+                }
             };
             
             recognition.onend = () => {
@@ -3376,6 +3390,12 @@ const HTML = `<!DOCTYPE html>
                 document.getElementById('voice-btn').classList.remove('recording');
                 document.getElementById('voice-btn').textContent = '🎤';
                 updateSendButton();
+
+                // Hide transcription overlay when recording stops
+                const overlay = document.getElementById('transcription-overlay');
+                if (overlay) {
+                    overlay.classList.remove('active');
+                }
                 
                 const text = document.getElementById('message-input').value.trim();
                 if (text) {
@@ -3396,6 +3416,12 @@ const HTML = `<!DOCTYPE html>
                 document.getElementById('voice-btn').classList.remove('recording');
                 document.getElementById('voice-btn').textContent = '🎤';
                 updateSendButton();
+
+                // Hide transcription overlay on error
+                const overlay = document.getElementById('transcription-overlay');
+                if (overlay) {
+                    overlay.classList.remove('active');
+                }
                 
                 if (event.error === 'no-speech') {
                     addMessage('system', '🎤 No speech detected. Please try again.');
@@ -3453,6 +3479,12 @@ const HTML = `<!DOCTYPE html>
             document.getElementById('voice-btn').classList.remove('recording');
             document.getElementById('voice-btn').textContent = '🎤';
             updateSendButton();
+
+            // Hide transcription overlay when timing out
+            const overlay = document.getElementById('transcription-overlay');
+            if (overlay) {
+                overlay.classList.remove('active');
+            }
             
             // Notify user with system message
             addMessage('system', '🎤 Microphone closed after 10 seconds of inactivity.');
@@ -4187,6 +4219,7 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
 
 
 
