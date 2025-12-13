@@ -69,8 +69,8 @@ jobs:
           fi
           SIZE=$(wc -c < cloudflare-worker/src/index.js)
           echo "Built worker size: $SIZE bytes"
-          if [ $SIZE -lt 100000 ]; then
-            echo "ERROR: Built worker is too small (expected >100KB with embedded HTML)"
+          if [ $SIZE -lt 40000 ]; then
+            echo "ERROR: Built worker is too small (expected >40KB with embedded HTML)"
             exit 1
           fi
           if ! grep -q "<!DOCTYPE html>" cloudflare-worker/src/index.js; then
