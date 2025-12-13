@@ -13,7 +13,7 @@ function getValidationResult() {
   return validationPool.pop() || { isValid: true, errors: [], warnings: [] };
 }
 
-function releaseValidationResult(result) {
+function _releaseValidationResult(result) {
   if (validationPool.length < MAX_POOL_SIZE) {
     result.errors.length = 0;
     result.warnings.length = 0;
@@ -22,8 +22,8 @@ function releaseValidationResult(result) {
   }
 }
 
-// Precompile regex patterns for performance
-const MALICIOUS_PATTERNS = [
+// Precompile regex patterns for performance (with freeze to prevent modification)
+const MALICIOUS_PATTERNS = Object.freeze([
   /eval\s*\(/gi,
   /Function\s*\(/gi,
   /setTimeout\s*\(/gi,
@@ -32,9 +32,9 @@ const MALICIOUS_PATTERNS = [
   /spawn\s*\(/gi,
   /exec\s*\(/gi,
   /execSync\s*\(/gi
-];
+]);
 
-const DANGEROUS_PATTERNS = [
+const DANGEROUS_PATTERNS = Object.freeze([
   /process\.exit/gi,
   /require\s*\(\s*['"`][fs]['"`]\s*\)/gi,
   /require\s*\(\s*['"`][child_process]['"`]\s*\)/gi,
@@ -43,27 +43,27 @@ const DANGEROUS_PATTERNS = [
   /eval\s*\(/gi,
   /Function\s*\(/gi,
   /setTimeout\s*\(\s*['"`]\s*['"`]\s*,\s*0\s*\)/gi
-];
+]);
 
-const INFINITE_LOOP_PATTERNS = [
+const INFINITE_LOOP_PATTERNS = Object.freeze([
   /while\s*\(\s*true\s*\)/gi,
   /for\s*\(\s*;\s*;\s*\)/gi,
   /do\s*{[^}]*}\s*while\s*\(\s*true\s*\)/gi
-];
+]);
 
-const SECRET_PATTERNS = [
+const SECRET_PATTERNS = Object.freeze([
   /['"`]?[A-Za-z0-9]{40}['"`]?/gi,
   /['"`]?sk-[A-Za-z0-9]{48}['"`]?/gi,
   /['"`]?AIza[0-9A-Za-z\-_]{35}['"`]?/gi,
   /password\s*=\s*['"`][^'"`]+['"`]/gi,
   /api[_-]?key\s*=\s*['"`][^'"`]+['"`]/gi,
   /secret\s*=\s*['"`][^'"`]+['"`]/gi
-];
+]);
 
 /**
  * Validate user input for code editing
  */
-export function validateEditInput(instruction, options = {}) {
+export function validateEditInput(instruction, _options = {}) {
   const errors = [];
   
   // Check instruction length
@@ -124,7 +124,7 @@ export function validateEditInput(instruction, options = {}) {
 /**
  * Validate generated code before applying
  */
-export function validateGeneratedCode(code, originalCode) {
+export function validateGeneratedCode(code, _originalCode) {
   const result = getValidationResult();
   const { errors, warnings } = result;
   
