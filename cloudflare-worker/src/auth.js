@@ -228,12 +228,17 @@ export async function generateChallenge(env) {
  * Verify request authentication
  */
 export async function verifyRequest(request, env) {
-  const challenge = request.headers.get('X-Challenge');
-  const signature = request.headers.get('X-Signature');
-  const timestamp = request.headers.get('X-Timestamp');
+  // Batch header extraction for better performance
+  const headers = request.headers;
+  const challenge = headers.get('X-Challenge');
+  const signature = headers.get('X-Signature');
+  const timestamp = headers.get('X-Timestamp');
   
-  if (!challenge || !signature || !timestamp) {
-    throw new Error('Missing auth headers');
+  // Early validation with minimal branching
+  if (!(challenge && signature && timestamp)) {
+    const error = new Error('Missing auth headers');
+    error.code = 'MISSING_HEADERS';
+    throw error;
   }
   
   const now = Date.now();
