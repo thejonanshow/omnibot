@@ -57,6 +57,7 @@ const SECURITY_HEADERS = {
 const CORS_HEADERS = { ...BASE_CORS, ...SECURITY_HEADERS };
 
 export async function handleRequest(request, env) {
+  const requestId = crypto.randomUUID();
   const url = new URL(request.url);
   const cors = CORS_HEADERS;
   
@@ -186,6 +187,7 @@ export async function handleRequest(request, env) {
     const errorResponse = {
       error: error.message,
       code: 'INTERNAL_ERROR',
+      requestId,
       timestamp: new Date().toISOString(),
       path: url.pathname,
       method: request.method
