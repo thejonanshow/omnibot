@@ -103,12 +103,28 @@ export async function resetUsage(env, provider) {
   }
 }
 
+// Date caching for performance
+let cachedDateKey = null;
+let lastDateCheck = 0;
+const DATE_CACHE_TTL = 1000; // 1 second
+
 /**
- * Get date key for usage tracking (YYYY-MM-DD)
+ * Get date key for usage tracking (YYYY-MM-DD) with caching
  */
 export function getDateKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const now = Date.now();
+  
+  // Return cached value if still valid
+  if (cachedDateKey && (now - lastDateCheck) < DATE_CACHE_TTL) {
+    return cachedDateKey;
+  }
+  
+  // Generate new date key
+  const date = new Date();
+  cachedDateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  lastDateCheck = now;
+  
+  return cachedDateKey;
 }
 
 /**
