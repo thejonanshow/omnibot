@@ -87,6 +87,10 @@ const SECURITY_HEADERS = {
 
 const CORS_HEADERS = { ...BASE_CORS, ...SECURITY_HEADERS };
 
+// Static asset cache
+const assetCache = new Map();
+const ASSET_CACHE_TTL = 300000; // 5 minutes
+
 export async function handleRequest(request, env) {
   const requestId = crypto.randomUUID();
   const url = new URL(request.url);
@@ -518,6 +522,20 @@ async function handleUI(sessionToken, env, cors) {
  * Handle static assets
  */
 async function handleStaticAsset(pathname, cors) {
+  // Check cache first
+  const cacheKey = pathname;
+  const cached = assetCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < ASSET_CACHE_TTL) {
+    return new Response(cached.content, {
+      headers: { 
+        ...cors, 
+        'Content-Type': cached.contentType,
+        'Cache-Control': 'public, max-age=300'
+      }
+    });
+  }
+  
   // For now, return 404 for static assets
   // In a real implementation, you'd serve these from a CDN or KV store
   return new Response('Not Found', { status: 404, headers: cors });
