@@ -5,6 +5,23 @@
 
 import { REQUIRED_FUNCTIONS } from './config.js';
 
+// Object pool for validation results
+const validationPool = [];
+const MAX_POOL_SIZE = 10;
+
+function getValidationResult() {
+  return validationPool.pop() || { isValid: true, errors: [], warnings: [] };
+}
+
+function releaseValidationResult(result) {
+  if (validationPool.length < MAX_POOL_SIZE) {
+    result.errors.length = 0;
+    result.warnings.length = 0;
+    result.isValid = true;
+    validationPool.push(result);
+  }
+}
+
 // Precompile regex patterns for performance
 const MALICIOUS_PATTERNS = [
   /eval\s*\(/gi,
@@ -108,8 +125,8 @@ export function validateEditInput(instruction, options = {}) {
  * Validate generated code before applying
  */
 export function validateGeneratedCode(code, originalCode) {
-  const errors = [];
-  const warnings = [];
+  const result = getValidationResult();
+  const { errors, warnings } = result;
   
   // Basic syntax validation
   try {
@@ -152,11 +169,10 @@ export function validateGeneratedCode(code, originalCode) {
     errors.push('Generated code too large (max 100KB)');
   }
   
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings
-  };
+  result.isValid = errors.length === 0;
+  
+  // Return pooled result (caller should release when done)
+  return result;
 }
 
 /**
