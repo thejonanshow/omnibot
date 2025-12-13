@@ -12,6 +12,16 @@ import { callQwen } from './llm-providers.js';
 const responseCache = new Map();
 const CACHE_TTL = 5000;
 
+// Periodic cache cleanup
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of responseCache.entries()) {
+    if (now - value.timestamp > CACHE_TTL * 2) {
+      responseCache.delete(key);
+    }
+  }
+}, CACHE_TTL);
+
 // Initialize circuit breakers for each provider
 const circuitBreakers = {
   groq: new CircuitBreaker(5, 60000),
@@ -112,6 +122,12 @@ export async function callAI(message, conversation, env, purpose = 'chat') {
     } catch (error) {
       console.error(`[${provider}] Failed: ${error.message}`);
       attemptedProviders.push({ provider, error: error.message });
+      
+      // Clear cache on error to prevent stale data
+      if (responseCache.size > 100) {
+        responseCache.clear();
+      }
+      
       continue;
     }
   }
