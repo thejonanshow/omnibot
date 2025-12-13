@@ -16,14 +16,11 @@ import {
 } from './auth.js';
 import { 
   validateEditInput, 
-  validateGeneratedCode, 
   DistributedLock,
   RateLimiter
 } from './security.js';
 import { 
   VERSION_FULL, 
-  AI_PROVIDERS, 
-  DEFAULT_MASTER_PROMPT,
   RATE_LIMIT_WINDOW_MS,
   RATE_LIMIT_MAX_REQUESTS,
   LOCK_TIMEOUT_MS,
@@ -32,7 +29,7 @@ import {
 import { callAI } from './ai.js';
 import { selfEdit } from './editor.js';
 import { getSharedContext, saveContext } from './context.js';
-import { getUsage, incrementUsage } from './usage.js';
+import { getUsage } from './usage.js';
 import { logTelemetry } from './telemetry.js';
 import { renderUI } from './ui.js';
 
@@ -156,7 +153,7 @@ export async function handleRequest(request, env) {
 /**
  * Handle OAuth callback
  */
-async function handleOAuthCallback(url, env, redirectUri, cors) {
+async function handleOAuthCallback(url, env, redirectUri, _cors) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   const error = url.searchParams.get('error');
@@ -367,7 +364,7 @@ async function handlePrompt(request, env, cors) {
 async function handleTTS(request, env, cors) {
   await verifyRequest(request, env);
   
-  const { text } = await request.json();
+  const { text: _text } = await request.json();
   
   if (env.RUNLOOP_URL) {
     return new Response('mock-audio-data', {

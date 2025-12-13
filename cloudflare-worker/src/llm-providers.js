@@ -136,7 +136,7 @@ throw error;
 - @param {string} sessionId - Session identifier
 - @returns {Promise<Object>} Response in OpenAI-compatible format
   */
-  export async function callQwenOpenAI(message, conversation, env, sessionId) {
+  export async function callQwenOpenAI(message, conversation, env, _sessionId) {
   const apiKey = env.QWEN_API_KEY || env.DASHSCOPE_API_KEY;
 
 if (!apiKey) {
