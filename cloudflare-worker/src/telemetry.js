@@ -3,6 +3,8 @@
  * Handles logging and metrics collection
  */
 
+import { paginateKV } from './utils/async-iterator.js';
+
 // Telemetry batching
 const telemetryBatch = [];
 const BATCH_SIZE = 10;
@@ -60,6 +62,33 @@ export async function logTelemetry(event, data, env) {
     console.log(`[Telemetry] Queued ${event}:`, JSON.stringify(data));
   } catch (error) {
     console.error('Error logging telemetry:', error);
+  }
+}
+
+/**
+ * Query telemetry events efficiently with async iterator
+ */
+export async function* queryTelemetry(env, eventFilter = null, startTime = null, endTime = null) {
+  if (!env.TELEMETRY) {
+    return;
+  }
+  
+  const prefix = eventFilter ? `telemetry:${eventFilter}:` : 'telemetry:';
+  
+  for await (const { key, value } of paginateKV(env.TELEMETRY, prefix, 50)) {
+    if (!value) continue;
+    
+    try {
+      const data = JSON.parse(value);
+      
+      // Apply time filters if specified
+      if (startTime && data.timestamp < startTime) continue;
+      if (endTime && data.timestamp > endTime) continue;
+      
+      yield data;
+    } catch (error) {
+      console.error('Error parsing telemetry data:', error);
+    }
   }
 }
 
