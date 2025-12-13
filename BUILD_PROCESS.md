@@ -55,8 +55,10 @@ All deployments automatically build the consolidated worker with comprehensive v
 2. Manually trigger "Promote Staging to Production" workflow
 3. Type "promote" to confirm
 4. GitHub Actions:
-   - Validates staging is healthy (smoke tests)
+   - Validates staging is healthy (smoke tests on public endpoints: /api/health, /api/test, /)
    - Installs dependencies (`npm install`)
+   - Lints code (`npm run lint`)
+   - Runs tests (`npm test`)
    - Builds consolidated worker (`npm run build`)
    - Verifies build output (same checks as staging)
    - Deploys to production via Wrangler
