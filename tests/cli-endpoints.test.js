@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 
 describe('CLI Endpoints', () => {
-  let router;
   
   before(async () => {
     // Dynamically import the worker to get the router
