@@ -122,9 +122,13 @@ async function getGoogleUserInfo(accessToken) {
   return res.json();
 }
 
+// Session configuration
+const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const SESSION_DURATION_SECONDS = 86400; // 24 hours
+
 function createSessionToken(email) {
   // Simple session: base64 of email + timestamp + expiry
-  const expiry = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+  const expiry = Date.now() + SESSION_DURATION_MS;
   const payload = JSON.stringify({ email, expiry });
   return btoa(payload);
 }
@@ -2960,11 +2964,14 @@ const HTML = `<!DOCTYPE html>
 })();
 // ==================== END ERROR LOGGING ====================
         // Configuration
+        // Constants
+        const SESSION_TOKEN_KEY = 'sessionToken';
+        
         let config = {
             routerUrl: localStorage.getItem('routerUrl') || '',
             secret: localStorage.getItem('secret') || '',
             theme: localStorage.getItem('theme') || detectSystemTheme(),
-            sessionToken: localStorage.getItem('sessionToken') || ''
+            sessionToken: localStorage.getItem(SESSION_TOKEN_KEY) || ''
         };
         
         // Detect system theme preference
@@ -2982,7 +2989,7 @@ const HTML = `<!DOCTYPE html>
             const sessionParam = urlParams.get('session');
             if (sessionParam) {
                 // Store in localStorage and clean URL
-                localStorage.setItem('sessionToken', sessionParam);
+                localStorage.setItem(SESSION_TOKEN_KEY, sessionParam);
                 config.sessionToken = sessionParam;
                 // Clean URL without reloading
                 window.history.replaceState({}, document.title, window.location.pathname);
@@ -2994,11 +3001,13 @@ const HTML = `<!DOCTYPE html>
         }
         
         function clearSession() {
-            localStorage.removeItem('sessionToken');
+            localStorage.removeItem(SESSION_TOKEN_KEY);
             config.sessionToken = '';
         }
         
         // Get session token on load
+        // This is extracted from URL (after OAuth) and stored in localStorage
+        // The actual authentication is handled by the server via cookies
         const sessionToken = getSessionToken();
         
         // State
@@ -3981,6 +3990,8 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -4084,16 +4095,20 @@ export default {
       // Check for session parameter (from OAuth callback)
       const sessionParam = url.searchParams.get('session');
       if (sessionParam) {
-        // Validate and set as cookie
+        // Validate session parameter
         const result = validateSession(sessionParam);
         if (result.valid) {
-          // Set cookie and redirect to clean URL
-          return new Response(HTML, { 
+          // Set cookie and redirect to clean URL (removes session from query params)
+          return new Response('', { 
+            status: 302,
             headers: { 
-              'Content-Type': 'text/html',
-              'Set-Cookie': `session=${sessionParam}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`
+              'Location': baseUrl + '/',
+              'Set-Cookie': `session=${sessionParam}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_DURATION_SECONDS}`
             } 
           });
+        } else {
+          // Invalid session parameter - redirect to OAuth
+          return Response.redirect(`${baseUrl}/auth/google`, 302);
         }
       }
       
