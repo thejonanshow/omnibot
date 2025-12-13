@@ -1121,6 +1121,7 @@ async function selfEdit(instruction, env, streamCallback = null) {
 
 // ============== HTML UI ==============
 /* eslint-disable no-useless-escape */
+// ============== HTML UI ==============
 const HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3824,6 +3825,7 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
