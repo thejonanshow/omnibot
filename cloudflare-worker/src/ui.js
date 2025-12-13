@@ -422,7 +422,7 @@ export function renderUI(sessionToken = null) {
         ${sessionToken ? `
         <div class="status-bar">
             <div class="status-item">
-                <div class="status-indicator online"></div>
+                <div class="status-indicator online" loading="lazy"></div>
                 <span>System Online</span>
             </div>
             <div class="status-item">
