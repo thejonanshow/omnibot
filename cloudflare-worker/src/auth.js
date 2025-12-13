@@ -193,6 +193,13 @@ export async function validateOAuthState(state, env) {
 const uuidPool = [];
 const UUID_POOL_SIZE = 10;
 
+// Fast random for non-crypto uses
+let seed = Date.now() ^ 0xDEADBEEF;
+function fastRandom() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
 // Pre-fill UUID pool
 for (let i = 0; i < UUID_POOL_SIZE; i++) {
   uuidPool.push(crypto.randomUUID());
@@ -204,6 +211,13 @@ function getUUID() {
     uuidPool.push(crypto.randomUUID());
   }
   return uuidPool.pop();
+}
+
+/**
+ * Generate fast random ID for non-cryptographic purposes
+ */
+export function fastRandomId() {
+  return Math.floor(fastRandom() * 0xFFFFFFFF).toString(36);
 }
 
 /**
