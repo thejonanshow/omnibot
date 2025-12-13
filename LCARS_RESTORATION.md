@@ -48,7 +48,7 @@ Successfully restored the Star Trek LCARS-themed UI from commit 1238720 while in
 - "Sign in with Google" button using Google Identity Services
 - Session token stored and verified with backend
 - Only `jonanscheffler@gmail.com` has access
-- Dev bypass available with `?skipauth=1` parameter
+- OAuth required for all access (no bypass)
 
 **Authentication Flow**:
 1. User visits site → sees auth overlay

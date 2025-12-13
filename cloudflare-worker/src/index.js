@@ -1603,15 +1603,8 @@ const HTML = `<!DOCTYPE html>
           initGoogleAuth();
         });
       } else {
-        // No session, check for dev bypass
-        const skipAuth = urlParams.get('skipauth') === '1';
-        if (skipAuth) {
-          $authOverlay.classList.add('hidden');
-          addMessage('system', '🚀 LCARS System Online - Voice Mode Ready (Dev Mode)');
-        } else {
-          // Show auth overlay
-          initGoogleAuth();
-        }
+        // No session, show auth overlay
+        initGoogleAuth();
       }
       
       // Initialize speech recognition
@@ -1775,6 +1768,7 @@ const HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
 
 
 
