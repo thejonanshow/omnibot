@@ -486,3 +486,125 @@ test.describe('UI Error Handling', () => {
     }
   });
 });
+
+test.describe('Button Isolation Tests', () => {
+  test('send button should not open settings when clicked without config', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // Clear any stored settings to test missing config scenario
+    await page.evaluate(() => {
+      localStorage.removeItem('routerUrl');
+      localStorage.removeItem('secret');
+    });
+    
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    
+    // Find send button
+    const sendButton = page.locator('button#send-btn, button[aria-label*="Send" i]').first();
+    const input = page.locator('textarea, input[type="text"]').first();
+    
+    if (await sendButton.count() === 0 || await input.count() === 0) {
+      test.skip(true, 'Required elements not found');
+    }
+    
+    // Type a message
+    await input.fill('Test message');
+    
+    // Click send button
+    await sendButton.click();
+    
+    // Wait for any message to appear (error message should appear quickly)
+    await page.waitForSelector('.message', { timeout: 2000 }).catch(() => {});
+    
+    // Settings panel should NOT automatically open
+    // Check if settings panel is visible
+    const settingsPanel = page.locator('#settings-panel, .settings-panel');
+    const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
+    
+    // Settings should NOT be open (send button shouldn't open it)
+    expect(isPanelVisible).toBe(false);
+    
+    // Should show error message instead
+    const pageContent = await page.textContent('body');
+    const hasConfigMessage = 
+      pageContent.includes('configure') ||
+      pageContent.includes('Settings');
+    
+    expect(hasConfigMessage).toBeTruthy();
+  });
+  
+  test('send button and settings button should have distinct behavior', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // Find both buttons
+    const sendButton = page.locator('button#send-btn, button[aria-label*="Send" i]').first();
+    const settingsButton = page.locator('button#settings-btn, button[aria-label*="Settings" i]').first();
+    
+    if (await sendButton.count() === 0 || await settingsButton.count() === 0) {
+      test.skip(true, 'Required buttons not found');
+    }
+    
+    // Verify buttons are different elements
+    const sendButtonId = await sendButton.getAttribute('id');
+    const settingsButtonId = await settingsButton.getAttribute('id');
+    
+    expect(sendButtonId).not.toBe(settingsButtonId);
+    
+    // Click settings button - should open settings
+    await settingsButton.click();
+    
+    // Wait for settings panel to appear with active class
+    const settingsPanel = page.locator('#settings-panel.active, .settings-panel.active');
+    await settingsPanel.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+    
+    const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
+    
+    expect(isPanelVisible).toBe(true);
+  });
+  
+  test('clicking send button should only trigger send logic', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // Set configuration so send can work
+    await page.evaluate(() => {
+      localStorage.setItem('routerUrl', 'https://test.example.com');
+      localStorage.setItem('secret', 'test-secret');
+    });
+    
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    
+    const sendButton = page.locator('button#send-btn').first();
+    const input = page.locator('textarea, input[type="text"]').first();
+    
+    if (await sendButton.count() === 0 || await input.count() === 0) {
+      test.skip(true, 'Required elements not found');
+    }
+    
+    // Type a message
+    await input.fill('Test send button isolation');
+    
+    // Click send button
+    await sendButton.click();
+    
+    // Wait for input to be cleared (happens immediately on send)
+    await page.waitForFunction(() => {
+      const input = document.querySelector('textarea, input[type="text"]');
+      return input && input.value === '';
+    }, { timeout: 2000 }).catch(() => {});
+    
+    // Settings panel should NOT open when send is clicked
+    const settingsPanel = page.locator('#settings-panel.active, .settings-panel.active');
+    const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
+    
+    expect(isPanelVisible).toBe(false);
+    
+    // Message should be cleared from input (indicating send was attempted)
+    const inputValue = await input.inputValue();
+    expect(inputValue).toBe('');
+  });
+});
