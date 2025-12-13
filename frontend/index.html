@@ -1804,11 +1804,14 @@
 })();
 // ==================== END ERROR LOGGING ====================
         // Configuration
+        // Constants
+        const SESSION_TOKEN_KEY = 'sessionToken';
+        
         let config = {
             routerUrl: localStorage.getItem('routerUrl') || '',
             secret: localStorage.getItem('secret') || '',
             theme: localStorage.getItem('theme') || detectSystemTheme(),
-            sessionToken: localStorage.getItem('sessionToken') || ''
+            sessionToken: localStorage.getItem(SESSION_TOKEN_KEY) || ''
         };
         
         // Detect system theme preference
@@ -1826,7 +1829,7 @@
             const sessionParam = urlParams.get('session');
             if (sessionParam) {
                 // Store in localStorage and clean URL
-                localStorage.setItem('sessionToken', sessionParam);
+                localStorage.setItem(SESSION_TOKEN_KEY, sessionParam);
                 config.sessionToken = sessionParam;
                 // Clean URL without reloading
                 window.history.replaceState({}, document.title, window.location.pathname);
@@ -1838,11 +1841,13 @@
         }
         
         function clearSession() {
-            localStorage.removeItem('sessionToken');
+            localStorage.removeItem(SESSION_TOKEN_KEY);
             config.sessionToken = '';
         }
         
         // Get session token on load
+        // This is extracted from URL (after OAuth) and stored in localStorage
+        // The actual authentication is handled by the server via cookies
         const sessionToken = getSessionToken();
         
         // State
