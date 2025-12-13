@@ -183,6 +183,12 @@ export function sanitizeInput(input) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;');
   
+  // Prevent script injection patterns
+  sanitized = sanitized
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .replace(/<script[^>]*>.*?<\/script>/gi, '');
+  
   return sanitized;
 }
 
