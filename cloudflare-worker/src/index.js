@@ -1128,6 +1128,9 @@ const HTML = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OmniBot - LCARS Interface</title>
+  <!-- Google Fonts for authentic Star Trek LCARS aesthetic -->
+  <!-- Antonio: Display font, Orbitron: Technical font -->
+  <!-- Using display=swap for better performance -->
   <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -1148,7 +1151,8 @@ const HTML = `<!DOCTYPE html>
     
     html, body {
       height: 100%;
-      font-family: 'Antonio', sans-serif;
+      /* Antonio font with system fallbacks for Star Trek aesthetic */
+      font-family: 'Antonio', 'Arial Narrow', 'Impact', sans-serif;
       background: var(--lcars-bg);
       color: var(--lcars-text);
       overflow: hidden;
@@ -1226,7 +1230,8 @@ const HTML = `<!DOCTYPE html>
     }
     
     .lcars-title {
-      font-family: 'Orbitron', sans-serif;
+      /* Orbitron font with monospace fallback for technical aesthetic */
+      font-family: 'Orbitron', 'Courier New', monospace;
       font-size: 28px;
       font-weight: 700;
       color: #000;
@@ -1551,9 +1556,9 @@ const HTML = `<!DOCTYPE html>
           } else if (event.error === 'not-allowed') {
             addMessage('error', '🔒 Microphone access denied.');
           } else if (event.error !== 'aborted') {
-            // Sanitize error message to prevent XSS
-            const sanitizedError = String(event.error).replace(/[<>]/g, '');
-            addMessage('system', '⚠️ Voice error: ' + sanitizedError);
+            // Use escapeHtml for robust sanitization
+            const errorMessage = '⚠️ Voice error: ' + String(event.error);
+            addMessage('system', errorMessage);
           }
         };
       }
@@ -1663,6 +1668,7 @@ const HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
 
 
 
