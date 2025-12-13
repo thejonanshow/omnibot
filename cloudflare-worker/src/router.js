@@ -51,7 +51,8 @@ const SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '1; mode=block',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'Keep-Alive': 'timeout=5, max=100'
 };
 
 const CORS_HEADERS = { ...BASE_CORS, ...SECURITY_HEADERS };
