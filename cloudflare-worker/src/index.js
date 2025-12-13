@@ -141,6 +141,38 @@ function validateSession(token) {
   return { valid: false };
 }
 
+// Extract session token from request (Authorization header or Cookie)
+function getSessionFromRequest(request) {
+  // Check Authorization header first
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  
+  // Check Cookie header
+  const cookieHeader = request.headers.get('Cookie');
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(';').map(c => c.trim());
+    for (const cookie of cookies) {
+      if (cookie.startsWith('session=')) {
+        return cookie.substring(8);
+      }
+    }
+  }
+  
+  return null;
+}
+
+// Check if request is authenticated
+function isAuthenticated(request) {
+  const token = getSessionFromRequest(request);
+  if (!token) {
+    return false;
+  }
+  const result = validateSession(token);
+  return result.valid;
+}
+
 // ============== KV CONTEXT ==============
 async function getContext(env) {
   if (!env.CONTEXT) return { prompt: DEFAULT_MASTER_PROMPT, data: {} };
@@ -2931,7 +2963,8 @@ const HTML = `<!DOCTYPE html>
         let config = {
             routerUrl: localStorage.getItem('routerUrl') || '',
             secret: localStorage.getItem('secret') || '',
-            theme: localStorage.getItem('theme') || detectSystemTheme()
+            theme: localStorage.getItem('theme') || detectSystemTheme(),
+            sessionToken: localStorage.getItem('sessionToken') || ''
         };
         
         // Detect system theme preference
@@ -2941,6 +2974,32 @@ const HTML = `<!DOCTYPE html>
             }
             return 'cyberpunk'; // Default dark cyberpunk theme
         }
+        
+        // Authentication helpers
+        function getSessionToken() {
+            // Check URL parameter first (from OAuth callback)
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionParam = urlParams.get('session');
+            if (sessionParam) {
+                // Store in localStorage and clean URL
+                localStorage.setItem('sessionToken', sessionParam);
+                config.sessionToken = sessionParam;
+                // Clean URL without reloading
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return sessionParam;
+            }
+            
+            // Otherwise use stored token
+            return config.sessionToken;
+        }
+        
+        function clearSession() {
+            localStorage.removeItem('sessionToken');
+            config.sessionToken = '';
+        }
+        
+        // Get session token on load
+        const sessionToken = getSessionToken();
         
         // State
         let conversation = [];
@@ -3919,6 +3978,9 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
+
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -4001,8 +4063,46 @@ export default {
     
     // ===== Main Routes =====
     
-    // Main UI
+    // Main UI - requires authentication
     if (url.pathname === '/' || url.pathname === '/chat') {
+      // Handle POST requests to /chat (legacy API endpoint)
+      if (request.method === 'POST') {
+        if (!isAuthenticated(request)) {
+          return new Response(JSON.stringify({ error: 'authentication required' }), { 
+            status: 401,
+            headers: { ...cors, 'Content-Type': 'application/json' } 
+          });
+        }
+        // If authenticated, return error as this endpoint is deprecated
+        return new Response(JSON.stringify({ error: 'This endpoint is deprecated. Use /api/chat instead.' }), { 
+          status: 410,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
+      // Handle GET requests for UI
+      // Check for session parameter (from OAuth callback)
+      const sessionParam = url.searchParams.get('session');
+      if (sessionParam) {
+        // Validate and set as cookie
+        const result = validateSession(sessionParam);
+        if (result.valid) {
+          // Set cookie and redirect to clean URL
+          return new Response(HTML, { 
+            headers: { 
+              'Content-Type': 'text/html',
+              'Set-Cookie': `session=${sessionParam}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`
+            } 
+          });
+        }
+      }
+      
+      // Check existing authentication
+      if (!isAuthenticated(request)) {
+        // Redirect to Google OAuth
+        return Response.redirect(`${baseUrl}/auth/google`, 302);
+      }
+      
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
     }
     
@@ -4018,8 +4118,15 @@ export default {
       });
     }
     
-    // Chat endpoint
+    // Chat endpoint - requires authentication
     if (url.pathname === '/api/chat' && request.method === 'POST') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       try {
         const { messages } = await request.json();
         await logTelemetry('chat', { messageCount: messages.length }, env);
@@ -4047,8 +4154,15 @@ export default {
       }
     }
     
-    // Self-edit endpoint - now returns plan for approval
+    // Self-edit endpoint - requires authentication
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       try {
         const { instruction } = await request.json();
         const stream = url.searchParams.get('stream') === '1';
@@ -4096,8 +4210,15 @@ export default {
       }
     }
     
-    // Approve and execute edit
+    // Approve and execute edit - requires authentication
     if (url.pathname === '/api/approve-edit' && request.method === 'POST') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       try {
         const { editId, directMerge } = await request.json();
         
@@ -4122,6 +4243,13 @@ export default {
     
     // Merge an existing PR
     if (url.pathname === '/api/merge-pr' && request.method === 'POST') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       try {
         const { editId, prNumber } = await request.json();
         
@@ -4177,6 +4305,13 @@ export default {
     
     // Review edit with external AI (Claude -> Gemini fallback)
     if (url.pathname === '/api/review-edit' && request.method === 'POST') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       try {
         const { editId } = await request.json();
         
@@ -4218,8 +4353,15 @@ export default {
       }
     }
     
-    // Context endpoints
+    // Context endpoints - require authentication
     if (url.pathname === '/api/context') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       if (request.method === 'GET') {
         const context = await getContext(env);
         return new Response(JSON.stringify(context), { 
@@ -4237,8 +4379,15 @@ export default {
       }
     }
     
-    // Prompt endpoint
+    // Prompt endpoint - requires authentication
     if (url.pathname === '/api/prompt' && request.method === 'POST') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       const { prompt } = await request.json();
       await setContext('master_prompt', prompt, env);
       await logTelemetry('prompt_update', { size: prompt.length }, env);
@@ -4247,8 +4396,15 @@ export default {
       });
     }
     
-    // Telemetry endpoint
+    // Telemetry endpoint - requires authentication
     if (url.pathname === '/api/telemetry') {
+      if (!isAuthenticated(request)) {
+        return new Response(JSON.stringify({ error: 'authentication required' }), { 
+          status: 401,
+          headers: { ...cors, 'Content-Type': 'application/json' } 
+        });
+      }
+      
       const context = await getContext(env);
       return new Response(JSON.stringify(context.telemetry || {}), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
