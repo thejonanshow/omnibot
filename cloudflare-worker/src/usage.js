@@ -3,6 +3,10 @@
  * Tracks API usage across different providers
  */
 
+// Buffer for batching usage updates
+const usageBuffer = new Map();
+let bufferTimeout = null;
+
 /**
  * Get usage for a specific provider
  */
@@ -22,7 +26,26 @@ export async function getUsage(env, provider) {
 }
 
 /**
- * Increment usage for a specific provider
+ * Flush usage buffer to KV
+ */
+async function flushUsageBuffer(env) {
+  if (usageBuffer.size === 0) return;
+  
+  const updates = [];
+  for (const [key, count] of usageBuffer.entries()) {
+    updates.push(getUsage(env, key.split(':')[1]).then(current => {
+      const newUsage = current + count;
+      return env.USAGE.put(key, newUsage.toString(), { expirationTtl: 86400 });
+    }));
+  }
+  
+  await Promise.all(updates);
+  usageBuffer.clear();
+  bufferTimeout = null;
+}
+
+/**
+ * Increment usage for a specific provider (batched)
  */
 export async function incrementUsage(env, provider, increment = 1) {
   if (!env.USAGE) {
@@ -32,14 +55,16 @@ export async function incrementUsage(env, provider, increment = 1) {
   
   try {
     const key = `usage:${provider}:${getDateKey()}`;
-    const currentUsage = await getUsage(env, provider);
-    const newUsage = currentUsage + increment;
     
-    await env.USAGE.put(key, newUsage.toString(), {
-      expirationTtl: 86400 // 24 hours
-    });
+    // Add to buffer
+    usageBuffer.set(key, (usageBuffer.get(key) || 0) + increment);
     
-    return newUsage;
+    // Schedule buffer flush if not already scheduled
+    if (!bufferTimeout) {
+      bufferTimeout = setTimeout(() => flushUsageBuffer(env), 1000); // Flush after 1 second
+    }
+    
+    return (await getUsage(env, provider)) + increment;
   } catch (error) {
     console.error(`Error incrementing usage for ${provider}:`, error);
     return 0;
