@@ -189,11 +189,28 @@ export async function validateOAuthState(state, env) {
   return data;
 }
 
+// UUID pool for better performance
+const uuidPool = [];
+const UUID_POOL_SIZE = 10;
+
+// Pre-fill UUID pool
+for (let i = 0; i < UUID_POOL_SIZE; i++) {
+  uuidPool.push(crypto.randomUUID());
+}
+
+function getUUID() {
+  // Return from pool and refill
+  if (uuidPool.length === 0) {
+    uuidPool.push(crypto.randomUUID());
+  }
+  return uuidPool.pop();
+}
+
 /**
  * Generate authentication challenge
  */
 export async function generateChallenge(env) {
-  const challenge = crypto.randomUUID();
+  const challenge = getUUID();
   const timestamp = Date.now();
   
   await env.CHALLENGES.put(challenge, JSON.stringify({ timestamp }), {
