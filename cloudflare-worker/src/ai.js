@@ -12,6 +12,9 @@ import { callQwen } from './llm-providers.js';
 const responseCache = new Map();
 const CACHE_TTL = 5000;
 
+// Request coalescing to prevent duplicate calls
+const pendingRequests = new Map();
+
 // Periodic cache cleanup
 setInterval(() => {
   const now = Date.now();
@@ -43,8 +46,15 @@ export async function callAI(message, conversation, env, purpose = 'chat') {
     return cached.response;
   }
   
-  const providers = AI_PROVIDERS[purpose] || AI_PROVIDERS.chat;
-  const attemptedProviders = [];
+  // Check if identical request is already in flight
+  if (pendingRequests.has(cacheKey)) {
+    return pendingRequests.get(cacheKey);
+  }
+  
+  // Create promise for this request
+  const requestPromise = (async () => {
+    const providers = AI_PROVIDERS[purpose] || AI_PROVIDERS.chat;
+    const attemptedProviders = [];
   
   for (const providerConfig of providers) {
     const { provider, model } = providerConfig;
@@ -130,6 +140,22 @@ export async function callAI(message, conversation, env, purpose = 'chat') {
       
       continue;
     }
+  }
+  
+  // All providers failed
+  throw new Error(`All AI providers failed: ${attemptedProviders.map(p => `${p.provider}: ${p.error}`).join(', ')}`);
+  })();
+  
+  // Store promise for coalescing
+  pendingRequests.set(cacheKey, requestPromise);
+  
+  try {
+    const result = await requestPromise;
+    return result;
+  } finally {
+    // Always clean up pending request
+    pendingRequests.delete(cacheKey);
+  }
   }
   
   // All providers failed
