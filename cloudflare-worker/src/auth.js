@@ -83,7 +83,7 @@ export async function createSessionToken(email, env) {
   );
   
   const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
-  const signatureHex = Array.from(new Uint8Array(signature))
+  const signatureHex = [...new Uint8Array(signature)]
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
   
