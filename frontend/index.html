@@ -1807,7 +1807,8 @@
         let config = {
             routerUrl: localStorage.getItem('routerUrl') || '',
             secret: localStorage.getItem('secret') || '',
-            theme: localStorage.getItem('theme') || detectSystemTheme()
+            theme: localStorage.getItem('theme') || detectSystemTheme(),
+            sessionToken: localStorage.getItem('sessionToken') || ''
         };
         
         // Detect system theme preference
@@ -1817,6 +1818,32 @@
             }
             return 'cyberpunk'; // Default dark cyberpunk theme
         }
+        
+        // Authentication helpers
+        function getSessionToken() {
+            // Check URL parameter first (from OAuth callback)
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionParam = urlParams.get('session');
+            if (sessionParam) {
+                // Store in localStorage and clean URL
+                localStorage.setItem('sessionToken', sessionParam);
+                config.sessionToken = sessionParam;
+                // Clean URL without reloading
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return sessionParam;
+            }
+            
+            // Otherwise use stored token
+            return config.sessionToken;
+        }
+        
+        function clearSession() {
+            localStorage.removeItem('sessionToken');
+            config.sessionToken = '';
+        }
+        
+        // Get session token on load
+        const sessionToken = getSessionToken();
         
         // State
         let conversation = [];
