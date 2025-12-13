@@ -126,16 +126,50 @@ async function getGoogleUserInfo(accessToken) {
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 const SESSION_DURATION_SECONDS = 86400; // 24 hours
 
-function createSessionToken(email) {
-  // Simple session: base64 of email + timestamp + expiry
-  const expiry = Date.now() + SESSION_DURATION_MS;
-  const payload = JSON.stringify({ email, expiry });
-  return btoa(payload);
+// Create HMAC signature for session token
+async function signToken(payload, secret) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(payload);
+  const keyData = encoder.encode(secret || 'default-secret');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, data);
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
-function validateSession(token) {
+async function createSessionToken(email, env) {
+  // Session token: base64(payload) + '.' + HMAC(payload)
+  const expiry = Date.now() + SESSION_DURATION_MS;
+  const payload = JSON.stringify({ email, expiry });
+  const payloadB64 = btoa(payload);
+  const secret = env?.SESSION_SECRET || 'default-session-secret';
+  const signature = await signToken(payloadB64, secret);
+  return `${payloadB64}.${signature}`;
+}
+
+async function validateSession(token, env) {
   try {
-    const payload = JSON.parse(atob(token));
+    const [payloadB64, signature] = token.split('.');
+    if (!payloadB64 || !signature) {
+      return { valid: false };
+    }
+    
+    // Verify signature
+    const secret = env?.SESSION_SECRET || 'default-session-secret';
+    const expectedSignature = await signToken(payloadB64, secret);
+    if (signature !== expectedSignature) {
+      return { valid: false };
+    }
+    
+    // Verify payload
+    const payload = JSON.parse(atob(payloadB64));
     if (payload.expiry > Date.now() && payload.email === ALLOWED_EMAIL) {
       return { valid: true, email: payload.email };
     }
@@ -168,12 +202,12 @@ function getSessionFromRequest(request) {
 }
 
 // Check if request is authenticated
-function isAuthenticated(request) {
+async function isAuthenticated(request, env) {
   const token = getSessionFromRequest(request);
   if (!token) {
     return false;
   }
-  const result = validateSession(token);
+  const result = await validateSession(token, env);
   return result.valid;
 }
 
@@ -3992,6 +4026,7 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -4051,12 +4086,12 @@ export default {
         }
         
         // Create session
-        const sessionToken = createSessionToken(userInfo.email);
+        const sessionToken = await createSessionToken(userInfo.email, env);
         
         await logTelemetry('login', { email: userInfo.email }, env);
         
-        // Redirect to app with session
-        return Response.redirect(`${baseUrl}/?session=${encodeURIComponent(sessionToken)}&email=${encodeURIComponent(userInfo.email)}`, 302);
+        // Redirect to app with session (email not included in URL for security)
+        return Response.redirect(`${baseUrl}/?session=${encodeURIComponent(sessionToken)}`, 302);
         
       } catch (e) {
         return new Response(`Auth error: ${e.message}`, { status: 500 });
@@ -4066,7 +4101,7 @@ export default {
     // Verify session
     if (url.pathname === '/api/verify-session' && request.method === 'POST') {
       const { token } = await request.json();
-      const result = validateSession(token);
+      const result = await validateSession(token, env);
       return new Response(JSON.stringify(result), { 
         headers: { ...cors, 'Content-Type': 'application/json' } 
       });
@@ -4096,7 +4131,7 @@ export default {
       const sessionParam = url.searchParams.get('session');
       if (sessionParam) {
         // Validate session parameter
-        const result = validateSession(sessionParam);
+        const result = await validateSession(sessionParam, env);
         if (result.valid) {
           // Set cookie and redirect to clean URL (removes session from query params)
           return new Response('', { 
@@ -4426,7 +4461,7 @@ export default {
       });
     }
     
-    // Test endpoint
+    // Test endpoint (public for monitoring/health checks)
     if (url.pathname === '/api/test') {
       return new Response(JSON.stringify({
         ok: true,
