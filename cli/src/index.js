@@ -32,8 +32,17 @@ program
         process.exit(1);
       }
 
+      // Basic access token validation
+      const token = options.token;
+      // Example: at least 20 chars, alphanumeric plus dash/underscore
+      const tokenPattern = /^[A-Za-z0-9\-_]{20,}$/;
+      if (typeof token !== 'string' || !tokenPattern.test(token)) {
+        console.error(chalk.red('Error: Invalid access token. Tokens must be at least 20 characters and contain only letters, numbers, dashes, or underscores.'));
+        process.exit(1);
+      }
+
       const config = loadConfig();
-      config.accessToken = options.token;
+      config.accessToken = token;
 
       if (options.baseUrl) {
         config.baseUrl = options.baseUrl;
