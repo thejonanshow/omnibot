@@ -9,6 +9,8 @@ import {
   getGoogleUserInfo, 
   createSessionToken, 
   verifySessionToken,
+  generateOAuthState,
+  validateOAuthState,
   generateChallenge,
   verifyRequest
 } from './auth.js';
@@ -60,7 +62,9 @@ export async function handleRequest(request, env) {
     
     // Start Google OAuth
     if (url.pathname === '/auth/google') {
-      const authUrl = getGoogleAuthUrl(env, redirectUri);
+      // Generate state parameter for CSRF protection
+      const state = await generateOAuthState(env);
+      const authUrl = getGoogleAuthUrl(env, redirectUri, state);
       return Response.redirect(authUrl, 302);
     }
     
@@ -154,6 +158,7 @@ export async function handleRequest(request, env) {
  */
 async function handleOAuthCallback(url, env, redirectUri, cors) {
   const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
   const error = url.searchParams.get('error');
   
   if (error) {
@@ -162,6 +167,13 @@ async function handleOAuthCallback(url, env, redirectUri, cors) {
   
   if (!code) {
     return new Response('No code provided', { status: 400 });
+  }
+  
+  // Validate state parameter for CSRF protection
+  try {
+    await validateOAuthState(state, env);
+  } catch (stateError) {
+    return new Response(`State validation error: ${stateError.message}`, { status: 400 });
   }
   
   // Exchange code for token

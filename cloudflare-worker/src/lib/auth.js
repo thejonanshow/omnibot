@@ -57,6 +57,26 @@ export async function verifyRequest(request, challengeStore, secret) {
     throw new Error('Invalid challenge');
   }
 
+  // Verify HMAC signature
+  const message = `${challenge}:${timestamp}:${request.url}`;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  if (signature !== expectedSignature) {
+    throw new Error('Invalid signature');
+  }
+
   await challengeStore.delete(challenge);
 
   return true;
