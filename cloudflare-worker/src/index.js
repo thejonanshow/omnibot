@@ -1551,7 +1551,9 @@ const HTML = `<!DOCTYPE html>
           } else if (event.error === 'not-allowed') {
             addMessage('error', '🔒 Microphone access denied.');
           } else if (event.error !== 'aborted') {
-            addMessage('system', \`⚠️ Voice error: \$\{event.error}\`);
+            // Sanitize error message to prevent XSS
+            const sanitizedError = String(event.error).replace(/[<>]/g, '');
+            addMessage('system', '⚠️ Voice error: ' + sanitizedError);
           }
         };
       }
@@ -1587,7 +1589,9 @@ const HTML = `<!DOCTYPE html>
       function render() {
         let html = '';
         for (const m of messages) {
-          html += \`<div class="msg \$\{m.role}">\$\{escapeHtml(m.content)}</div>\`;
+          // Sanitize role to prevent CSS class injection (only allow known roles)
+          const safeRole = ['user', 'assistant', 'system', 'error'].includes(m.role) ? m.role : 'system';
+          html += \`<div class="msg \$\{safeRole}">\$\{escapeHtml(m.content)}</div>\`;
         }
         if (loading) {
           html += '<div class="msg system">⏳ Processing...</div>';
@@ -1605,6 +1609,12 @@ const HTML = `<!DOCTYPE html>
       async function sendMessage() {
         const text = $input.value.trim();
         if (!text || loading) return;
+        
+        // Basic client-side validation
+        if (text.length > 10000) {
+          addMessage('error', 'Message too long (max 10000 characters)');
+          return;
+        }
         
         $input.value = '';
         autoResize();
@@ -1653,6 +1663,7 @@ const HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
 
 
 /* eslint-enable no-useless-escape */
