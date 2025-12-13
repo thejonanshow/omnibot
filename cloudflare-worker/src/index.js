@@ -4312,7 +4312,15 @@ export default {
           });
         }
         
-        const { message, conversation_id } = await request.json();
+        let message, conversation_id;
+        try {
+          ({ message, conversation_id } = await request.json());
+        } catch (err) {
+          return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+            status: 400,
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
         
         if (!message || message.trim().length === 0) {
           return new Response(JSON.stringify({ error: 'Message is required' }), {
