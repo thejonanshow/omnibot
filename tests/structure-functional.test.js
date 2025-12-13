@@ -81,6 +81,12 @@ describe('OmniBot Functional Tests', () => {
       expect(workerCode).to.include('validateSession');
     });
     
+    it('should have OAuth state parameter management', () => {
+      expect(workerCode).to.include('generateOAuthState');
+      expect(workerCode).to.include('validateOAuthState');
+      expect(workerCode).to.include('oauth_state_');
+    });
+    
     it('should restrict to allowed email', () => {
       expect(workerCode).to.include('ALLOWED_EMAIL');
     });

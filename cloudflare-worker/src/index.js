@@ -88,14 +88,55 @@ Rules:
 - Validate all changes before committing`;
 
 // ============== GOOGLE OAUTH ==============
-function getGoogleAuthUrl(env, redirectUri) {
+
+// Generate and store OAuth state parameter for CSRF protection
+async function generateOAuthState(env) {
+  const state = crypto.randomUUID();
+  const timestamp = Date.now();
+  
+  // Store state in KV with 5-minute TTL
+  if (env.CONTEXT) {
+    await env.CONTEXT.put(`oauth_state_${state}`, JSON.stringify({ timestamp }), {
+      expirationTtl: 300 // 5 minutes
+    });
+  }
+  
+  return state;
+}
+
+// Validate OAuth state parameter
+async function validateOAuthState(state, env) {
+  if (!state) {
+    return false;
+  }
+  
+  if (!env.CONTEXT) {
+    // CRITICAL SECURITY: Without KV, we cannot validate state (no CSRF protection)
+    // Reject OAuth requests when CONTEXT is unavailable
+    console.error('OAuth state validation failed: no KV namespace (CSRF protection unavailable)');
+    return false;
+  }
+  
+  const stateData = await env.CONTEXT.get(`oauth_state_${state}`);
+  if (!stateData) {
+    return false;
+  }
+  
+  // Delete state after use (one-time use token)
+  await env.CONTEXT.delete(`oauth_state_${state}`);
+  
+  return true;
+}
+
+function getGoogleAuthUrl(env, redirectUri, state) {
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'email profile',
     access_type: 'online',
-    prompt: 'select_account'
+    prompt: 'select_account',
+    state: state
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
@@ -158,25 +199,33 @@ async function validateSession(token, env) {
   try {
     const [payloadB64, signature] = token.split('.');
     if (!payloadB64 || !signature) {
-      return { valid: false };
+      console.warn('Session validation failed: missing payload or signature');
+      return { valid: false, reason: 'malformed' };
     }
     
     // Verify signature
     const secret = env?.SESSION_SECRET || 'default-session-secret';
     const expectedSignature = await signToken(payloadB64, secret);
     if (signature !== expectedSignature) {
-      return { valid: false };
+      console.warn('Session validation failed: signature mismatch');
+      return { valid: false, reason: 'invalid_signature' };
     }
     
     // Verify payload
     const payload = JSON.parse(atob(payloadB64));
-    if (payload.expiry > Date.now() && payload.email === ALLOWED_EMAIL) {
-      return { valid: true, email: payload.email };
+    if (payload.expiry <= Date.now()) {
+      console.warn('Session validation failed: token expired');
+      return { valid: false, reason: 'expired' };
     }
+    if (payload.email !== ALLOWED_EMAIL) {
+      console.warn('Session validation failed: email mismatch');
+      return { valid: false, reason: 'unauthorized' };
+    }
+    return { valid: true, email: payload.email };
   } catch (e) {
-    // Invalid token format
+    console.error('Session validation error:', e.message);
+    return { valid: false, reason: 'error' };
   }
-  return { valid: false };
 }
 
 // Extract session token from request (Authorization header or Cookie)
@@ -2732,6 +2781,9 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
+
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -2755,7 +2807,8 @@ export default {
     
     // Start Google OAuth
     if (url.pathname === '/auth/google') {
-      const authUrl = getGoogleAuthUrl(env, redirectUri);
+      const state = await generateOAuthState(env);
+      const authUrl = getGoogleAuthUrl(env, redirectUri, state);
       return Response.redirect(authUrl, 302);
     }
     
@@ -2763,6 +2816,7 @@ export default {
     if (url.pathname === '/auth/callback') {
       const code = url.searchParams.get('code');
       const error = url.searchParams.get('error');
+      const state = url.searchParams.get('state');
       
       if (error) {
         return new Response(`Auth error: ${error}`, { status: 400 });
@@ -2770,6 +2824,13 @@ export default {
       
       if (!code) {
         return new Response('No code provided', { status: 400 });
+      }
+      
+      // Validate state parameter (CSRF protection)
+      const stateValid = await validateOAuthState(state, env);
+      if (!stateValid) {
+        console.error('OAuth state validation failed:', { stateProvided: !!state, hasContext: !!env.CONTEXT });
+        return new Response('Invalid state parameter. Please try again.', { status: 400 });
       }
       
       try {
@@ -2814,25 +2875,24 @@ export default {
     
     // ===== Main Routes =====
     
-    // Main UI - requires authentication
-    if (url.pathname === '/' || url.pathname === '/chat') {
-      // Handle POST requests to /chat (legacy API endpoint)
-      if (request.method === 'POST') {
-        if (!(await isAuthenticated(request, env))) {
-          return new Response(JSON.stringify({ error: 'authentication required' }), { 
-            status: 401,
-            headers: { ...cors, 'Content-Type': 'application/json' } 
-          });
-        }
-        // If authenticated, return error as this endpoint is deprecated
-        return new Response(JSON.stringify({ error: 'This endpoint is deprecated. Use /api/chat instead.' }), { 
-          status: 410,
+    // Legacy /chat POST API (still requires auth)
+    if ((url.pathname === '/' || url.pathname === '/chat') && request.method === 'POST') {
+      if (!(await isAuthenticated(request, env))) {
+        return new Response(JSON.stringify({ error: 'authentication required' }), { 
+          status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
       }
-      
-      // Handle GET requests for UI
-      // Check for session parameter (from OAuth callback)
+      // If authenticated, return error as this endpoint is deprecated
+      return new Response(JSON.stringify({ error: 'This endpoint is deprecated. Use /api/chat instead.' }), { 
+        status: 410,
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Main UI for GET - allow unauthenticated (needed for staging health checks)
+    if ((url.pathname === '/' || url.pathname === '/chat') && request.method === 'GET') {
+      // Handle session parameter from OAuth callback
       const sessionParam = url.searchParams.get('session');
       if (sessionParam) {
         // Validate session parameter
@@ -2847,17 +2907,27 @@ export default {
             } 
           });
         } else {
-          // Invalid session parameter - redirect to OAuth
-          return Response.redirect(`${baseUrl}/auth/google`, 302);
+          // Invalid session parameter - show error instead of redirecting to prevent loop
+          console.error('Invalid session from OAuth callback:', result.reason);
+          return new Response(`
+            <html>
+              <head><title>Authentication Error</title></head>
+              <body style="font-family: monospace; padding: 2rem; background: #000; color: #ff9900;">
+                <h1>⚠️ Authentication Error</h1>
+                <p>Your session could not be validated (${result.reason || 'unknown'}).</p>
+                <p><a href="${baseUrl}/auth/google" style="color: #ff9900;">Try again</a></p>
+                <p style="color: #666; font-size: 0.8em;">If this problem persists, please contact support.</p>
+              </body>
+            </html>
+          `, { 
+            status: 401,
+            headers: { 'Content-Type': 'text/html' }
+          });
         }
       }
       
-      // Check existing authentication
-      if (!(await isAuthenticated(request, env))) {
-        // Redirect to Google OAuth
-        return Response.redirect(`${baseUrl}/auth/google`, 302);
-      }
-      
+      // For normal unauthenticated GETs (like staging workflow health checks),
+      // serve the HTML UI. OAuth enforcement is client-side via JavaScript.
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
     }
     
