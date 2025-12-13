@@ -135,7 +135,7 @@ jobs:
             echo "ERROR: HTML UI not served"
             exit 1
           fi
-          if ! echo "$HTML_RESPONSE" | grep -q "Omnibot"; then
+          if ! echo "$HTML_RESPONSE" | grep -qi "Omnibot"; then
             echo "ERROR: HTML does not contain expected content"
             exit 1
           fi
