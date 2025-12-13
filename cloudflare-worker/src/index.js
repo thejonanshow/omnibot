@@ -4320,6 +4320,13 @@ export default {
             headers: { ...cors, 'Content-Type': 'application/json' }
           });
         }
+        // Enforce max message length (10,000 chars, same as web UI)
+        if (message.length > 10000) {
+          return new Response(JSON.stringify({ error: 'Message exceeds maximum length of 10,000 characters' }), {
+            status: 400,
+            headers: { ...cors, 'Content-Type': 'application/json' }
+          });
+        }
         
         // Get or create conversation
         let convId = conversation_id;
