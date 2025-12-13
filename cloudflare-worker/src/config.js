@@ -76,10 +76,21 @@ export const REQUIRED_FUNCTIONS = [
   'export default'
 ];
 
-// API Endpoints
-export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-export const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
+// String interning for performance
+const stringPool = new Map();
+
+export function internString(str) {
+  if (stringPool.has(str)) {
+    return stringPool.get(str);
+  }
+  stringPool.set(str, str);
+  return str;
+}
+
+// API Endpoints (pre-interned)
+export const GOOGLE_AUTH_URL = internString('https://accounts.google.com/o/oauth2/v2/auth');
+export const GOOGLE_TOKEN_URL = internString('https://oauth2.googleapis.com/token');
+export const GOOGLE_USERINFO_URL = internString('https://www.googleapis.com/oauth2/v2/userinfo');
 
 // Qwen API configuration
 export const QWEN_API_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation';
