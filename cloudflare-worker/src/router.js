@@ -39,18 +39,26 @@ const rateLimiter = new RateLimiter(RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUEST
 /**
  * Main router function
  */
+// Precompute CORS headers for performance
+const BASE_CORS = {
+  'Access-Control-Allow-Origin': '*', 
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Challenge, X-Signature, X-Timestamp'
+};
+
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+};
+
+const CORS_HEADERS = { ...BASE_CORS, ...SECURITY_HEADERS };
+
 export async function handleRequest(request, env) {
   const url = new URL(request.url);
-  const cors = { 
-    'Access-Control-Allow-Origin': '*', 
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Challenge, X-Signature, X-Timestamp',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
-    'X-XSS-Protection': '1; mode=block',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
-  };
+  const cors = CORS_HEADERS;
   
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: cors });
