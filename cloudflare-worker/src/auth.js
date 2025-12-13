@@ -240,7 +240,11 @@ export async function verifyRequest(request, env) {
   const isValid = await crypto.subtle.verify('HMAC', key, signatureBytes, encoder.encode(challenge));
   
   if (!isValid) {
-    throw new Error('Invalid signature');
+    // Add small delay to prevent timing attacks
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const error = new Error('Invalid signature');
+    error.code = 'INVALID_SIGNATURE';
+    throw error;
   }
   
   return true;
