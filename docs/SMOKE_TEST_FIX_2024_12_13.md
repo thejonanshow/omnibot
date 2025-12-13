@@ -70,8 +70,10 @@ Replaced authentication-required endpoint tests with public endpoint tests:
     # Note: /api/chat and /api/self-edit require authentication and are not suitable for smoke tests
     echo "Running smoke tests on public endpoints..."
     
+    BASE_URL="https://omnibot-staging.jonanscheffler.workers.dev"
+    
     # Health endpoint (primary health check)
-    HEALTH=$(curl -sf https://omnibot-staging.jonanscheffler.workers.dev/api/health)
+    HEALTH=$(curl -sf "$BASE_URL/api/health")
     if ! echo "$HEALTH" | grep -q '"ok":true'; then
       echo "ERROR: Health endpoint failed"
       echo "Response: $HEALTH"
@@ -80,7 +82,7 @@ Replaced authentication-required endpoint tests with public endpoint tests:
     echo "✓ Health endpoint"
     
     # Test endpoint (monitoring/health check)
-    TEST=$(curl -sf https://omnibot-staging.jonanscheffler.workers.dev/api/test)
+    TEST=$(curl -sf "$BASE_URL/api/test")
     if ! echo "$TEST" | grep -q '"ok":true'; then
       echo "ERROR: Test endpoint failed"
       echo "Response: $TEST"
@@ -89,7 +91,7 @@ Replaced authentication-required endpoint tests with public endpoint tests:
     echo "✓ Test endpoint"
     
     # Verify HTML UI is accessible
-    HTML=$(curl -sf https://omnibot-staging.jonanscheffler.workers.dev/)
+    HTML=$(curl -sf "$BASE_URL/")
     if ! echo "$HTML" | grep -q "<!DOCTYPE html>"; then
       echo "ERROR: HTML UI not accessible"
       exit 1
