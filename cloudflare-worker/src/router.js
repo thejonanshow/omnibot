@@ -452,7 +452,11 @@ async function handleUI(sessionToken, env, cors) {
   
   const html = renderUI(sessionToken);
   return new Response(html, {
-    headers: { ...cors, 'Content-Type': 'text/html' }
+    headers: { 
+      ...cors, 
+      'Content-Type': 'text/html',
+      'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
+    }
   });
 }
 

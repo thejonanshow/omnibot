@@ -841,6 +841,67 @@ function getThemes() {
       .lcars-indicator {
         animation: lcars-pulse 2s infinite;
       }
+      
+      /* Mobile Responsiveness */
+      @media (max-width: 768px) {
+        .container {
+          padding: 10px;
+          margin: 10px;
+          border-left-width: 10px;
+        }
+        
+        .header {
+          font-size: 1.2em;
+          padding: 15px;
+          border-radius: 15px 15px 0 0;
+        }
+        
+        .title {
+          font-size: 1.8em;
+        }
+        
+        button {
+          padding: 8px 16px;
+          font-size: 0.9em;
+        }
+        
+        .message.user,
+        .message.assistant {
+          margin-left: 5%;
+          margin-right: 5%;
+        }
+        
+        .controls {
+          font-size: 0.9em;
+        }
+        
+        input, textarea {
+          padding: 8px;
+          font-size: 0.9em;
+        }
+      }
+      
+      @media (max-width: 480px) {
+        .header {
+          font-size: 1em;
+        }
+        
+        .title {
+          font-size: 1.5em;
+        }
+        
+        .chat-input {
+          flex-direction: column;
+        }
+        
+        .chat-input input {
+          margin-bottom: 10px;
+        }
+        
+        button {
+          width: 100%;
+        }
+      }
     `,
     cyberpunk: `
       :root {
