@@ -72,14 +72,28 @@ export async function incrementUsage(env, provider, increment = 1) {
 }
 
 /**
- * Get usage for all providers
+ * Get usage for all providers (parallel execution)
  */
 export async function getAllUsage(env) {
   const providers = ['groq', 'gemini', 'qwen', 'claude'];
-  const usage = {};
   
-  for (const provider of providers) {
-    usage[provider] = await getUsage(env, provider);
+  // Execute all requests in parallel
+  const usagePromises = providers.map(async (provider) => {
+    try {
+      const count = await getUsage(env, provider);
+      return { provider, count };
+    } catch (error) {
+      console.error(`Error getting usage for ${provider}:`, error);
+      return { provider, count: 0 };
+    }
+  });
+  
+  const results = await Promise.all(usagePromises);
+  
+  // Convert to object format
+  const usage = {};
+  for (const { provider, count } of results) {
+    usage[provider] = count;
   }
   
   return usage;
