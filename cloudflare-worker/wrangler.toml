@@ -7,8 +7,12 @@ binding = "CONTEXT"
 id = "1eb0446396bb4a5ba2247364e8459adf"
 
 # CLI authentication tokens
-# Note: In production, create a separate KV namespace and update the ID below
-# For development, you can use the same CONTEXT namespace or create a new one
+# IMPORTANT: Before deploying, create a KV namespace and replace the placeholder:
+#   1. Run: wrangler kv:namespace create "CLI_TOKENS"
+#   2. Copy the namespace ID from the output
+#   3. Replace CLI_TOKENS_KV_ID_PLACEHOLDER below with the actual ID
+#   4. For staging: wrangler kv:namespace create "CLI_TOKENS" --env staging
+# See docs/CLI_SETUP.md for detailed instructions
 [[kv_namespaces]]
 binding = "CLI_TOKENS"
-id = "CLI_TOKENS_KV_ID_PLACEHOLDER"
+id = "CLI_TOKENS_KV_ID_PLACEHOLDER"  # REPLACE THIS BEFORE DEPLOYING

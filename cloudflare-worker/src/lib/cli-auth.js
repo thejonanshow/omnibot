@@ -35,7 +35,13 @@ export async function authenticateCliRequest(request, env) {
       return null;
     }
 
-    const tokenData = JSON.parse(tokenDataJson);
+    let tokenData;
+    try {
+      tokenData = JSON.parse(tokenDataJson);
+    } catch (parseError) {
+      console.error('Invalid JSON in token data:', parseError);
+      return null;
+    }
     
     // Check if token is expired
     if (tokenData.expires_at && tokenData.expires_at < Date.now()) {
