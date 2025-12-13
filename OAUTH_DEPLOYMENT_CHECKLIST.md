@@ -117,7 +117,7 @@ If issues occur:
 ## Known Limitations
 
 1. **KV Dependency**: State validation requires CONTEXT KV namespace
-   - Graceful degradation if KV unavailable (logs warning)
+   - ⚠️ **Critical**: OAuth requests are rejected when KV is unavailable (no CSRF protection without KV)
    
 2. **State TTL**: 5-minute window for OAuth completion
    - User must complete OAuth within 5 minutes

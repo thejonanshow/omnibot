@@ -121,6 +121,25 @@ describe('OAuth Flow', () => {
       const text = await response.text();
       assert.ok(text.includes('Invalid state parameter'), 'Should have error message');
     });
+
+    it('should reject callback when KV is unavailable (no CSRF protection)', async () => {
+      const mockEnv = {
+        GOOGLE_CLIENT_ID: 'test-client-id',
+        GOOGLE_CLIENT_SECRET: 'test-secret',
+        SESSION_SECRET: 'test-session-secret',
+        CONTEXT: null // KV unavailable - degraded mode
+      };
+
+      const request = new Request('https://test.workers.dev/auth/callback?code=test-code&state=some-state', {
+        method: 'GET'
+      });
+
+      const response = await router.fetch(request, mockEnv);
+      
+      assert.equal(response.status, 400, 'Should reject when KV unavailable');
+      const text = await response.text();
+      assert.ok(text.includes('Invalid state parameter'), 'Should reject without CSRF protection');
+    });
   });
 
   describe('Session Validation', () => {
@@ -171,7 +190,7 @@ describe('OAuth Flow', () => {
       assert.ok(text.includes('Try again'), 'Should have retry option');
     });
 
-    it('should redirect to OAuth when no session exists', async () => {
+    it('should serve HTML for unauthenticated GET requests', async () => {
       const mockEnv = {
         GOOGLE_CLIENT_ID: 'test-client-id',
         SESSION_SECRET: 'test-session-secret',
@@ -185,9 +204,10 @@ describe('OAuth Flow', () => {
 
       const response = await router.fetch(request, mockEnv);
       
-      assert.equal(response.status, 302, 'Should redirect');
-      const location = response.headers.get('Location');
-      assert.ok(location.includes('/auth/google'), 'Should redirect to OAuth');
+      assert.equal(response.status, 200, 'Should return HTML');
+      const text = await response.text();
+      assert.ok(text.includes('<!DOCTYPE html>'), 'Should include HTML doctype');
+      assert.ok(text.toLowerCase().includes('omnibot'), 'Should include app name');
     });
   });
 

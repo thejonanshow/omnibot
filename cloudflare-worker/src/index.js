@@ -111,10 +111,10 @@ async function validateOAuthState(state, env) {
   }
   
   if (!env.CONTEXT) {
-    // If no KV, we can't validate state properly - this is a degraded mode
-    // In production, this should never happen
-    console.warn('OAuth state validation skipped: no KV namespace');
-    return true;
+    // CRITICAL SECURITY: Without KV, we cannot validate state (no CSRF protection)
+    // Reject OAuth requests when CONTEXT is unavailable
+    console.error('OAuth state validation failed: no KV namespace (CSRF protection unavailable)');
+    return false;
   }
   
   const stateData = await env.CONTEXT.get(`oauth_state_${state}`);
@@ -2783,6 +2783,7 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -2828,7 +2829,7 @@ export default {
       // Validate state parameter (CSRF protection)
       const stateValid = await validateOAuthState(state, env);
       if (!stateValid) {
-        console.error('OAuth state validation failed:', { state, hasContext: !!env.CONTEXT });
+        console.error('OAuth state validation failed:', { stateProvided: !!state, hasContext: !!env.CONTEXT });
         return new Response('Invalid state parameter. Please try again.', { status: 400 });
       }
       
@@ -2874,25 +2875,24 @@ export default {
     
     // ===== Main Routes =====
     
-    // Main UI - requires authentication
-    if (url.pathname === '/' || url.pathname === '/chat') {
-      // Handle POST requests to /chat (legacy API endpoint)
-      if (request.method === 'POST') {
-        if (!(await isAuthenticated(request, env))) {
-          return new Response(JSON.stringify({ error: 'authentication required' }), { 
-            status: 401,
-            headers: { ...cors, 'Content-Type': 'application/json' } 
-          });
-        }
-        // If authenticated, return error as this endpoint is deprecated
-        return new Response(JSON.stringify({ error: 'This endpoint is deprecated. Use /api/chat instead.' }), { 
-          status: 410,
+    // Legacy /chat POST API (still requires auth)
+    if ((url.pathname === '/' || url.pathname === '/chat') && request.method === 'POST') {
+      if (!(await isAuthenticated(request, env))) {
+        return new Response(JSON.stringify({ error: 'authentication required' }), { 
+          status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
         });
       }
-      
-      // Handle GET requests for UI
-      // Check for session parameter (from OAuth callback)
+      // If authenticated, return error as this endpoint is deprecated
+      return new Response(JSON.stringify({ error: 'This endpoint is deprecated. Use /api/chat instead.' }), { 
+        status: 410,
+        headers: { ...cors, 'Content-Type': 'application/json' } 
+      });
+    }
+    
+    // Main UI for GET - allow unauthenticated (needed for staging health checks)
+    if ((url.pathname === '/' || url.pathname === '/chat') && request.method === 'GET') {
+      // Handle session parameter from OAuth callback
       const sessionParam = url.searchParams.get('session');
       if (sessionParam) {
         // Validate session parameter
@@ -2926,12 +2926,8 @@ export default {
         }
       }
       
-      // Check existing authentication
-      if (!(await isAuthenticated(request, env))) {
-        // Redirect to Google OAuth
-        return Response.redirect(`${baseUrl}/auth/google`, 302);
-      }
-      
+      // For normal unauthenticated GETs (like staging workflow health checks),
+      // serve the HTML UI. OAuth enforcement is client-side via JavaScript.
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
     }
     
