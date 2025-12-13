@@ -511,7 +511,9 @@ test.describe('Button Isolation Tests', () => {
       
       // Click send button
       await sendButton.click();
-      await page.waitForTimeout(500);
+      
+      // Wait for any message to appear (error message should appear quickly)
+      await page.waitForSelector('.message', { timeout: 2000 }).catch(() => {});
       
       // Settings panel should NOT automatically open
       // Check if settings panel is visible
@@ -551,9 +553,11 @@ test.describe('Button Isolation Tests', () => {
     
     // Click settings button - should open settings
     await settingsButton.click();
-    await page.waitForTimeout(500);
     
-    const settingsPanel = page.locator('#settings-panel, .settings-panel');
+    // Wait for settings panel to appear with active class
+    const settingsPanel = page.locator('#settings-panel.active, .settings-panel.active');
+    await settingsPanel.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+    
     const isPanelVisible = await settingsPanel.isVisible().catch(() => false);
     
     expect(isPanelVisible).toBe(true);
@@ -584,7 +588,12 @@ test.describe('Button Isolation Tests', () => {
       
       // Click send button
       await sendButton.click();
-      await page.waitForTimeout(500);
+      
+      // Wait for input to be cleared (happens immediately on send)
+      await page.waitForFunction(() => {
+        const input = document.querySelector('textarea, input[type="text"]');
+        return input && input.value === '';
+      }, { timeout: 2000 }).catch(() => {});
       
       // Settings panel should NOT open when send is clicked
       const settingsPanel = page.locator('#settings-panel.active, .settings-panel.active');
