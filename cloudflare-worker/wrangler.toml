@@ -15,4 +15,4 @@ id = "1eb0446396bb4a5ba2247364e8459adf"
 # See docs/CLI_SETUP.md for detailed instructions
 [[kv_namespaces]]
 binding = "CLI_TOKENS"
-id = "CLI_TOKENS_KV_ID_PLACEHOLDER"  # REPLACE THIS BEFORE DEPLOYING
+id = "1a2b3c4d5e6f7g8h9i0jklmnopqrstuv"  # <-- REPLACE with your actual KV namespace ID
