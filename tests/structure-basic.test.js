@@ -106,14 +106,17 @@ describe('OmniBot Config Tests', () => {
   let workerCode;
   
   before(() => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    workerCode = fs.readFileSync('./cloudflare-worker/src/config.js', 'utf-8');
   });
   
   it('should have GitHub repo', () => {
-    expect(workerCode).to.include("const GITHUB_REPO = 'thejonanshow/omnibot'");
+    expect(workerCode).to.include("export const GITHUB_REPO");
+    expect(workerCode).to.include("thejonanshow/omnibot");
   });
   
   it('should use Groq', () => {
-    expect(workerCode).to.include('env.GROQ_API_KEY');
+    // Load AI module to check for Groq usage
+    const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+    expect(aiCode).to.include('env.GROQ_API_KEY');
   });
 });
