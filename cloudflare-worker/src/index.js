@@ -1587,7 +1587,9 @@ const HTML = `<!DOCTYPE html>
           if (data.valid) {
             $authOverlay.classList.add('hidden');
             if (urlEmail) {
-              addMessage('system', '🚀 LCARS System Online - Authorized: ' + urlEmail);
+              // Email is already sanitized by escapeHtml in addMessage, but make it explicit
+              const safeEmail = String(urlEmail);
+              addMessage('system', '🚀 LCARS System Online - Authorized: ' + safeEmail);
             }
             // Clean up URL
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -1773,6 +1775,7 @@ const HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
 
 
 
