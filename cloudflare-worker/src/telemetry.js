@@ -3,6 +3,31 @@
  * Handles logging and metrics collection
  */
 
+// Telemetry batching
+const telemetryBatch = [];
+const BATCH_SIZE = 10;
+const BATCH_TIMEOUT = 1000; // 1 second
+let batchTimer = null;
+
+function flushTelemetryBatch(env) {
+  if (telemetryBatch.length === 0) return;
+  
+  const batch = [...telemetryBatch];
+  telemetryBatch.length = 0;
+  batchTimer = null;
+  
+  // Send batch
+  const batchData = {
+    events: batch,
+    batchId: crypto.randomUUID(),
+    timestamp: Date.now()
+  };
+  
+  env.TELEMETRY.put(`batch:${Date.now()}`, JSON.stringify(batchData), {
+    expirationTtl: 86400 // 24 hours
+  }).catch(err => console.error('Batch telemetry error:', err));
+}
+
 /**
  * Log telemetry event
  */
@@ -21,12 +46,18 @@ export async function logTelemetry(event, data, env) {
       date: new Date().toISOString()
     };
     
-    const key = `telemetry:${event}:${Date.now()}`;
-    await env.TELEMETRY.put(key, JSON.stringify(telemetryData), {
-      expirationTtl: 86400 * 7 // 7 days
-    });
+    // Add to batch
+    telemetryBatch.push(telemetryData);
     
-    console.log(`[Telemetry] Logged ${event}:`, JSON.stringify(data));
+    // Flush if batch is full
+    if (telemetryBatch.length >= BATCH_SIZE) {
+      flushTelemetryBatch(env);
+    } else if (!batchTimer) {
+      // Schedule flush if not already scheduled
+      batchTimer = setTimeout(() => flushTelemetryBatch(env), BATCH_TIMEOUT);
+    }
+    
+    console.log(`[Telemetry] Queued ${event}:`, JSON.stringify(data));
   } catch (error) {
     console.error('Error logging telemetry:', error);
   }
