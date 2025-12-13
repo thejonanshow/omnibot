@@ -177,6 +177,193 @@ return response.json();
 }
 
 /**
+ * Call Groq API for general-purpose tasks
+ * 
+ * @param {string} message - User message
+ * @param {Array} conversation - Conversation history
+ * @param {Object} env - Environment bindings
+ * @param {string} sessionId - Session identifier
+ * @returns {Promise<Object>} Response in OpenAI-compatible format
+ */
+export async function callGroq(message, conversation, env, sessionId) {
+  if (!env.GROQ_API_KEY) {
+    throw new Error('Groq API key not configured');
+  }
+
+  const messages = [
+    {
+      role: 'system',
+      content: `You are a helpful AI assistant. Current session: ${sessionId}`
+    },
+    ...conversation.map(m => ({
+      role: m.role,
+      content: m.content
+    })),
+    {
+      role: 'user',
+      content: message
+    }
+  ];
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-70b-versatile',
+      messages: messages,
+      max_tokens: 4096,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq failed: ${response.status} - ${errorText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Call Gemini API for general-purpose tasks
+ * 
+ * @param {string} message - User message
+ * @param {Array} conversation - Conversation history
+ * @param {Object} env - Environment bindings
+ * @param {string} sessionId - Session identifier
+ * @returns {Promise<Object>} Response in OpenAI-compatible format
+ */
+export async function callGemini(message, conversation, env, sessionId) {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error('Gemini API key not configured');
+  }
+
+  const messages = [
+    {
+      role: 'user',
+      parts: [{ text: `You are a helpful AI assistant. Current session: ${sessionId}` }]
+    },
+    ...conversation.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    })),
+    {
+      role: 'user',
+      parts: [{ text: message }]
+    }
+  ];
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: messages,
+      generationConfig: {
+        maxOutputTokens: 4096,
+        temperature: 0.7
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini failed: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  
+  // Convert to OpenAI-compatible format
+  return {
+    choices: [{
+      message: {
+        role: 'assistant',
+        content: data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response'
+      },
+      finish_reason: 'stop'
+    }],
+    usage: {
+      prompt_tokens: data.usageMetadata?.promptTokenCount || 0,
+      completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+      total_tokens: data.usageMetadata?.totalTokenCount || 0
+    },
+    provider: 'gemini'
+  };
+}
+
+/**
+ * Call Claude API for general-purpose tasks
+ * 
+ * @param {string} message - User message
+ * @param {Array} conversation - Conversation history
+ * @param {Object} env - Environment bindings
+ * @param {string} sessionId - Session identifier
+ * @returns {Promise<Object>} Response in OpenAI-compatible format
+ */
+export async function callClaude(message, conversation, env, sessionId) {
+  if (!env.ANTHROPIC_API_KEY) {
+    throw new Error('Anthropic API key not configured');
+  }
+
+  const messages = [
+    {
+      role: 'user',
+      content: `You are a helpful AI assistant. Current session: ${sessionId}`
+    },
+    ...conversation.map(m => ({
+      role: m.role,
+      content: m.content
+    })),
+    {
+      role: 'user',
+      content: message
+    }
+  ];
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 4096,
+      messages: messages
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Claude failed: ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  
+  // Convert to OpenAI-compatible format
+  return {
+    choices: [{
+      message: {
+        role: 'assistant',
+        content: data.content?.[0]?.text || 'No response'
+      },
+      finish_reason: 'stop'
+    }],
+    usage: {
+      prompt_tokens: data.usage?.input_tokens || 0,
+      completion_tokens: data.usage?.output_tokens || 0,
+      total_tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0)
+    },
+    provider: 'claude'
+  };
+}
+
+/**
 
 - Test if Qwen API is available and working
 - 
