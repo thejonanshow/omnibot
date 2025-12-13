@@ -4027,6 +4027,7 @@ const HTML = `<!DOCTYPE html>
 
 
 
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
@@ -4113,7 +4114,7 @@ export default {
     if (url.pathname === '/' || url.pathname === '/chat') {
       // Handle POST requests to /chat (legacy API endpoint)
       if (request.method === 'POST') {
-        if (!isAuthenticated(request)) {
+        if (!(await isAuthenticated(request, env))) {
           return new Response(JSON.stringify({ error: 'authentication required' }), { 
             status: 401,
             headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4148,7 +4149,7 @@ export default {
       }
       
       // Check existing authentication
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         // Redirect to Google OAuth
         return Response.redirect(`${baseUrl}/auth/google`, 302);
       }
@@ -4170,7 +4171,7 @@ export default {
     
     // Chat endpoint - requires authentication
     if (url.pathname === '/api/chat' && request.method === 'POST') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4206,7 +4207,7 @@ export default {
     
     // Self-edit endpoint - requires authentication
     if (url.pathname === '/api/self-edit' && request.method === 'POST') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4262,7 +4263,7 @@ export default {
     
     // Approve and execute edit - requires authentication
     if (url.pathname === '/api/approve-edit' && request.method === 'POST') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4293,7 +4294,7 @@ export default {
     
     // Merge an existing PR
     if (url.pathname === '/api/merge-pr' && request.method === 'POST') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4355,7 +4356,7 @@ export default {
     
     // Review edit with external AI (Claude -> Gemini fallback)
     if (url.pathname === '/api/review-edit' && request.method === 'POST') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4405,7 +4406,7 @@ export default {
     
     // Context endpoints - require authentication
     if (url.pathname === '/api/context') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4431,7 +4432,7 @@ export default {
     
     // Prompt endpoint - requires authentication
     if (url.pathname === '/api/prompt' && request.method === 'POST') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ success: false, error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
@@ -4448,7 +4449,7 @@ export default {
     
     // Telemetry endpoint - requires authentication
     if (url.pathname === '/api/telemetry') {
-      if (!isAuthenticated(request)) {
+      if (!(await isAuthenticated(request, env))) {
         return new Response(JSON.stringify({ error: 'authentication required' }), { 
           status: 401,
           headers: { ...cors, 'Content-Type': 'application/json' } 
