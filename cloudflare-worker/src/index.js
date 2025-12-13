@@ -2814,7 +2814,7 @@ export default {
     
     // ===== Main Routes =====
     
-    // Main UI - requires authentication
+    // Main UI - Allow unauthenticated GET requests for health checks
     if (url.pathname === '/' || url.pathname === '/chat') {
       // Handle POST requests to /chat (legacy API endpoint)
       if (request.method === 'POST') {
@@ -2852,12 +2852,7 @@ export default {
         }
       }
       
-      // Check existing authentication
-      if (!(await isAuthenticated(request, env))) {
-        // Redirect to Google OAuth
-        return Response.redirect(`${baseUrl}/auth/google`, 302);
-      }
-      
+      // Serve HTML for GET requests (no authentication required for health checks)
       return new Response(HTML, { headers: { 'Content-Type': 'text/html' } });
     }
     

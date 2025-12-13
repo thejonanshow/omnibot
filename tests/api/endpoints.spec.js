@@ -308,4 +308,78 @@ describe('API Tests: Endpoint Testing', () => {
     assert.ok(headers.get('Content-Type'));
     assert.ok(headers.get('Content-Type').includes('application/json'));
   });
+
+  test('should serve HTML UI for unauthenticated GET request to /', async () => {
+    const mockEnv = createMockEnv();
+    const request = new Request('https://example.com/', {
+      method: 'GET'
+    });
+
+    const response = await router.fetch(request, mockEnv);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Type'), 'text/html');
+
+    const html = await response.text();
+    assert.ok(html.includes('<!DOCTYPE html>'));
+    assert.ok(html.includes('OmniBot'));
+  });
+
+  test('should serve HTML UI for unauthenticated GET request to /chat', async () => {
+    const mockEnv = createMockEnv();
+    const request = new Request('https://example.com/chat', {
+      method: 'GET'
+    });
+
+    const response = await router.fetch(request, mockEnv);
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Type'), 'text/html');
+
+    const html = await response.text();
+    assert.ok(html.includes('<!DOCTYPE html>'));
+    assert.ok(html.includes('OmniBot'));
+  });
+
+  test('should require authentication for POST request to /chat', async () => {
+    const mockEnv = createMockEnv();
+    const request = new Request('https://example.com/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: 'Hello',
+        conversation: []
+      })
+    });
+
+    const response = await router.fetch(request, mockEnv);
+
+    assert.equal(response.status, 401);
+    const data = await response.json();
+    assert.ok(data.error);
+    assert.ok(data.error.includes('authentication required'));
+  });
+
+  test('should require authentication for POST request to /', async () => {
+    const mockEnv = createMockEnv();
+    const request = new Request('https://example.com/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: 'Hello',
+        conversation: []
+      })
+    });
+
+    const response = await router.fetch(request, mockEnv);
+
+    assert.equal(response.status, 401);
+    const data = await response.json();
+    assert.ok(data.error);
+    assert.ok(data.error.includes('authentication required'));
+  });
 });
