@@ -118,6 +118,9 @@ The Omnibot UI is a fully polished, modern web interface for interacting with th
 - Error handling for permission issues
 - Text-to-speech for responses
 - Automatic form submission after voice input
+- 10-second inactivity timeout with automatic microphone closure
+- AI-prompted response on timeout with spoken feedback
+- Timeout event logging for debugging
 
 ### 8. Error Handling
 - Network error detection
@@ -229,10 +232,12 @@ Method 2 (Specific Theme):
 ### Voice Input
 1. Click microphone button (🎤)
 2. Grant microphone permissions (first time)
-3. Speak your message
+3. Speak your message within 10 seconds
 4. Transcription appears in input
 5. Message sends automatically
 6. Response is read aloud
+
+**Note:** If no speech is detected within 10 seconds, the microphone automatically closes and the AI will prompt you to try again with a spoken response.
 
 ## Future Enhancements
 - [ ] Conversation export/import

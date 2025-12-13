@@ -1121,6 +1121,7 @@ async function selfEdit(instruction, env, streamCallback = null) {
 
 // ============== HTML UI ==============
 /* eslint-disable no-useless-escape */
+// ============== HTML UI ==============
 const HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2956,6 +2957,8 @@ const HTML = `<!DOCTYPE html>
         let editMode = false;
         let editingMessageIndex = null;
         let editingMessageElement = null;
+        let microphoneTimeoutId = null;
+        const MICROPHONE_TIMEOUT_MS = 10000; // 10 seconds
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -3069,9 +3072,23 @@ const HTML = `<!DOCTYPE html>
                 document.getElementById('voice-btn').classList.add('recording');
                 document.getElementById('voice-btn').textContent = '⏹';
                 updateSendButton();
+                
+                // Start 10-second timeout
+                if (microphoneTimeoutId) {
+                    clearTimeout(microphoneTimeoutId);
+                }
+                microphoneTimeoutId = setTimeout(() => {
+                    handleMicrophoneTimeout();
+                }, MICROPHONE_TIMEOUT_MS);
             };
             
             recognition.onresult = (event) => {
+                // Clear timeout since we got speech
+                if (microphoneTimeoutId) {
+                    clearTimeout(microphoneTimeoutId);
+                    microphoneTimeoutId = null;
+                }
+                
                 const text = event.results[0][0].transcript;
                 document.getElementById('message-input').value = text;
                 isVoiceInput = true;
@@ -3080,6 +3097,12 @@ const HTML = `<!DOCTYPE html>
             };
             
             recognition.onend = () => {
+                // Clear timeout
+                if (microphoneTimeoutId) {
+                    clearTimeout(microphoneTimeoutId);
+                    microphoneTimeoutId = null;
+                }
+                
                 isRecording = false;
                 document.getElementById('voice-btn').classList.remove('recording');
                 document.getElementById('voice-btn').textContent = '🎤';
@@ -3093,6 +3116,13 @@ const HTML = `<!DOCTYPE html>
             
             recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
+                
+                // Clear timeout
+                if (microphoneTimeoutId) {
+                    clearTimeout(microphoneTimeoutId);
+                    microphoneTimeoutId = null;
+                }
+                
                 isRecording = false;
                 document.getElementById('voice-btn').classList.remove('recording');
                 document.getElementById('voice-btn').textContent = '🎤';
@@ -3115,6 +3145,11 @@ const HTML = `<!DOCTYPE html>
             }
 
             if (isRecording) {
+                // Clear timeout when manually stopping
+                if (microphoneTimeoutId) {
+                    clearTimeout(microphoneTimeoutId);
+                    microphoneTimeoutId = null;
+                }
                 recognition.stop();
             } else {
                 try {
@@ -3123,6 +3158,63 @@ const HTML = `<!DOCTYPE html>
                 } catch (error) {
                     console.error('Recognition start error:', error);
                 }
+            }
+        }
+
+        // Handle microphone timeout after 10 seconds of inactivity
+        async function handleMicrophoneTimeout() {
+            console.log('🎤 Microphone timeout after 10 seconds of inactivity');
+            
+            // Log the timeout event
+            if (window.debugLog) {
+                debugLog('Microphone timeout', {
+                    timeout_duration: MICROPHONE_TIMEOUT_MS,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            
+            // Stop the recognition
+            if (recognition && isRecording) {
+                recognition.stop();
+            }
+            
+            // Clean up state
+            isRecording = false;
+            microphoneTimeoutId = null;
+            document.getElementById('voice-btn').classList.remove('recording');
+            document.getElementById('voice-btn').textContent = '🎤';
+            updateSendButton();
+            
+            // Notify user with system message
+            addMessage('system', '🎤 Microphone closed after 10 seconds of inactivity.');
+            
+            // Trigger AI prompt to generate a response
+            if (config.routerUrl && config.secret) {
+                // Add a timeout event to conversation for AI context
+                const timeoutMessage = 'The user activated the microphone but did not speak within 10 seconds. Please acknowledge and prompt them to try again.';
+                
+                showTypingIndicator();
+                isLoading = true;
+                
+                try {
+                    currentChallenge = await getChallenge();
+                    const response = await sendChat(timeoutMessage);
+                    handleChatResponse(response);
+                    
+                    // Speak the response
+                    if (response.response) {
+                        speak(response.response);
+                    }
+                } catch (error) {
+                    console.error('Timeout response error:', error);
+                    addMessage('system', '💬 Ready when you are. Click the microphone to try again.');
+                } finally {
+                    hideTypingIndicator();
+                    isLoading = false;
+                }
+            } else {
+                // No router configured, just provide a helpful message
+                addMessage('system', '💬 Ready when you are. Click the microphone to try again.');
             }
         }
 
@@ -3824,6 +3916,9 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
+
+
 /* eslint-enable no-useless-escape */
 
 // ============== MAIN HANDLER ==============
