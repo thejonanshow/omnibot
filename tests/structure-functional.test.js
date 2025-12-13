@@ -53,6 +53,21 @@ describe('OmniBot Functional Tests', () => {
     it('should have edit mode styling', () => {
       expect(workerCode).to.include('edit-mode');
     });
+    
+    it('should have LCARS theme', () => {
+      expect(workerCode).to.include('theme-lcars');
+      expect(workerCode).to.include('LCARS (Star Trek)');
+    });
+    
+    it('should have model selector', () => {
+      expect(workerCode).to.include('id="model-selector"');
+      expect(workerCode).to.include('Editor (Code Pipeline)');
+    });
+    
+    it('should have environment indicator', () => {
+      expect(workerCode).to.include('id="env-indicator"');
+      expect(workerCode).to.include('env-indicator');
+    });
   });
   
   describe('OAuth', () => {
