@@ -7,6 +7,12 @@
  */
 
 import { handleRequest } from './router.js';
+import { 
+  ALLOWED_EMAIL, 
+  GITHUB_API_URL, 
+  GITHUB_REPO,
+  VERSION_FULL 
+} from './config.js';
 
 // Semantic version
 const VERSION = {
