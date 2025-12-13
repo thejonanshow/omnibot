@@ -24,6 +24,11 @@ export const VERSION = {
 export const VERSION_STRING = `v${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
 export const VERSION_FULL = `${VERSION.emoji} ${VERSION.codename} ${VERSION_STRING}`;
 
+// Precompute version string for performance
+const VERSION_CACHE = new Map();
+VERSION_CACHE.set('string', VERSION_STRING);
+VERSION_CACHE.set('full', VERSION_FULL);
+
 // AI Provider configuration
 export const AI_PROVIDERS = {
   // Purpose-based model chains (will try in order)
@@ -51,26 +56,16 @@ export const AI_PROVIDERS = {
   ]
 };
 
+// Precompute master prompt parts for better performance
+const MASTER_PROMPT_PARTS = [
+  'You are OmniBot, a self-editing AI assistant.',
+  `Project Context:\n- Repository: ${GITHUB_REPO}\n- Platform: Cloudflare Workers\n- LLM Provider: Groq (Llama 3.3 70B, Qwen 2.5)\n- Version: ${VERSION_STRING}`,
+  'Capabilities:\n- Chat with users\n- Edit your own source code\n- Access shared context via KV\n- Full safety validation before commits',
+  'Rules:\n- Never remove required functions\n- Always preserve HTML UI\n- Code must work in Cloudflare Workers (no browser APIs in runtime)\n- Validate all changes before committing'
+];
+
 // Master prompt
-export const DEFAULT_MASTER_PROMPT = `You are OmniBot, a self-editing AI assistant.
-
-Project Context:
-- Repository: ${GITHUB_REPO}
-- Platform: Cloudflare Workers
-- LLM Provider: Groq (Llama 3.3 70B, Qwen 2.5)
-- Version: ${VERSION}
-
-Capabilities:
-- Chat with users
-- Edit your own source code
-- Access shared context via KV
-- Full safety validation before commits
-
-Rules:
-- Never remove required functions
-- Always preserve HTML UI
-- Code must work in Cloudflare Workers (no browser APIs in runtime)
-- Validate all changes before committing`;
+export const DEFAULT_MASTER_PROMPT = MASTER_PROMPT_PARTS.join('\n\n');
 
 // Required functions for self-editing
 export const REQUIRED_FUNCTIONS = [
