@@ -18,6 +18,7 @@ npm test         # Run tests
 - Self-upgrade via voice commands ("upgrade mode")
 - HMAC authentication
 - Modern UI with 14 sci-fi themes
+- **CLI**: Command-line interface for terminal-based interaction (see [CLI README](cli/README.md))
 
 ## Architecture
 
@@ -26,10 +27,57 @@ npm test         # Run tests
   - Built worker: `cloudflare-worker/src/index.js` (contains embedded HTML)
   - Build process: `npm run build` embeds frontend into worker
 - **LLM Integration**: Routes requests to Groq/Gemini/Claude/GPT with auto-rotation
-- **Storage**: KV stores for context and telemetry
+- **Storage**: KV stores for context, telemetry, CLI tokens, and conversations
 - **Deployment**: GitHub Actions with staging → production promotion workflow
+- **CLI**: Node.js-based command-line interface in `cli/` directory
 
 See [BUILD_PROCESS.md](BUILD_PROCESS.md) for detailed build and deployment information.
+See [CLI README](cli/README.md) for CLI installation and usage.
+
+## CLI Usage
+
+Omnibot includes a command-line interface for terminal-based interaction.
+
+### Installation
+
+```bash
+cd cli
+npm install
+npm link  # Makes 'omnibot' available globally
+```
+
+### Quick Start
+
+```bash
+# 1. Login with your CLI token
+omnibot login --token YOUR_TOKEN
+
+# 2. Verify credentials
+omnibot whoami
+
+# 3. Check API health
+omnibot health
+
+# 4. Interactive chat
+omnibot chat
+
+# 5. One-shot query
+omnibot chat -m "What is the weather today?"
+```
+
+### CLI Commands
+
+- `omnibot login --token <TOKEN> [--base-url <URL>]` - Configure access credentials
+- `omnibot whoami` - Show current user information
+- `omnibot chat` - Interactive REPL for conversations
+- `omnibot chat -m "message" [-c conversation-id]` - Send single message
+- `omnibot health` - Check API health status
+
+See [cli/README.md](cli/README.md) for detailed CLI documentation including:
+- Token provisioning
+- Configuration management
+- Advanced usage examples
+- Troubleshooting
 
 ## Development
 
