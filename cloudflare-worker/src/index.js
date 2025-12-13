@@ -1232,6 +1232,103 @@ const HTML = `<!DOCTYPE html>
         }
         
         /* ========================================
+           LCARS THEME (Star Trek Interface)
+           ======================================== */
+        body.theme-lcars {
+            --bg-primary: #000000;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #FFAA55;
+            --text-secondary: #FF9966;
+            --text-muted: #CC8844;
+            --accent-primary: #FF9900;
+            --accent-secondary: #9999FF;
+            --accent-tertiary: #6688CC;
+            --accent-quaternary: #CC99FF;
+            --border-color: #FF9900;
+            --message-user-bg: linear-gradient(135deg, #663399 0%, #553388 100%);
+            --message-ai-bg: #1a1a1a;
+            --message-system-bg: #2a1a00;
+            --input-bg: #000000;
+            --button-bg: #FF9900;
+            --button-hover-bg: #FFAA55;
+            --button-hover-text: #000000;
+            --shadow-sm: 0 2px 8px rgba(255, 153, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(255, 153, 0, 0.4);
+            --shadow-lg: 0 6px 24px rgba(255, 153, 0, 0.5);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Antonio', 'Orbitron', 'Arial Narrow', sans-serif;
+        }
+
+        body.theme-lcars .header {
+            background: linear-gradient(90deg, #FF9900 0%, #CC7700 100%);
+            border-bottom: 3px solid #FFAA55;
+            border-radius: 0 0 20px 0;
+        }
+
+        body.theme-lcars h1 {
+            color: #000000;
+            text-transform: uppercase;
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+
+        body.theme-lcars button {
+            background: var(--accent-secondary);
+            color: #000000;
+            border: none;
+            border-radius: 20px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s ease;
+        }
+
+        body.theme-lcars button:hover {
+            background: var(--accent-quaternary);
+            transform: scale(1.05);
+        }
+
+        body.theme-lcars .message.user {
+            background: var(--message-user-bg);
+            border-left: 4px solid var(--accent-quaternary);
+            border-radius: 0 20px 20px 0;
+        }
+
+        body.theme-lcars .message.assistant {
+            background: var(--message-ai-bg);
+            border-left: 4px solid var(--accent-primary);
+            border-radius: 0 20px 20px 0;
+        }
+
+        body.theme-lcars .input-container {
+            background: var(--bg-secondary);
+            border-top: 3px solid var(--accent-primary);
+            border-radius: 20px 20px 0 0;
+        }
+
+        body.theme-lcars textarea {
+            background: var(--input-bg);
+            border: 2px solid var(--accent-tertiary);
+            color: var(--text-primary);
+            border-radius: 15px;
+        }
+
+        body.theme-lcars textarea:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 15px rgba(255, 153, 0, 0.4);
+        }
+
+        body.theme-lcars .status-item {
+            background: var(--accent-tertiary);
+            color: #000000;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 700;
+        }
+        
+        /* ========================================
            MATRIX THEME (Updated Modern Style)
            ======================================== */
         body.theme-matrix {
@@ -1814,6 +1911,53 @@ const HTML = `<!DOCTYPE html>
         
         .theme-toggle-btn:hover {
             box-shadow: 0 0 20px var(--accent-primary);
+        }
+        
+        /* Model Selector */
+        .model-selector {
+            padding: 8px 12px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--border-radius-sm);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            min-width: 150px;
+        }
+        
+        .model-selector:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent-primary);
+        }
+        
+        .model-selector:focus {
+            outline: 3px solid var(--accent-primary);
+            outline-offset: 2px;
+        }
+        
+        /* Environment Indicator */
+        .env-indicator {
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 2px solid;
+        }
+        
+        .env-indicator.staging {
+            background: rgba(255, 170, 0, 0.2);
+            color: #ffaa00;
+            border-color: #ffaa00;
+        }
+        
+        .env-indicator.production {
+            background: rgba(0, 200, 100, 0.2);
+            color: #00cc66;
+            border-color: #00cc66;
         }
         
         /* ========================================
@@ -2713,14 +2857,24 @@ const HTML = `<!DOCTYPE html>
         }
     </style>
 </head>
-<body class="theme-matrix">
+<body class="theme-lcars">
     <!-- Header -->
     <div class="header">
         <div class="header-left">
             <div class="connection-status" id="connection-status" title="Connected"></div>
             <h1>🤖 Omnibot</h1>
+            <div class="env-indicator" id="env-indicator">ENV</div>
         </div>
         <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">Model:</span>
+                <select id="model-selector" class="model-selector" aria-label="Select model" title="Select AI model">
+                    <option value="groq">Groq (Llama)</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="claude">Claude</option>
+                    <option value="editor">Editor (Code Pipeline)</option>
+                </select>
+            </div>
             <div class="status-item">
                 <span class="status-label">LLM:</span>
                 <span class="status-value" id="llm-status">---</span>
@@ -2728,10 +2882,6 @@ const HTML = `<!DOCTYPE html>
             <div class="status-item">
                 <span class="status-label">Usage:</span>
                 <span class="status-value" id="usage-status">0/0</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Mode:</span>
-                <span class="status-value" id="mode-status">Normal</span>
             </div>
         </div>
         <div class="controls">
@@ -2831,6 +2981,7 @@ const HTML = `<!DOCTYPE html>
             <div class="setting-group">
                 <label class="setting-label" for="theme-select">Visual Theme</label>
                 <select id="theme-select">
+                    <option value="lcars">LCARS (Star Trek)</option>
                     <option value="matrix">Matrix (Green Terminal)</option>
                     <option value="cyberpunk">Cyberpunk (Neon Pink/Cyan)</option>
                     <option value="borg">Borg (Assimilation Green)</option>
@@ -2849,32 +3000,9 @@ const HTML = `<!DOCTYPE html>
             </div>
         </div>
         
-        <!-- Connection Settings Section -->
-        <div class="settings-section">
-            <div class="settings-section-header">
-                <span class="settings-section-icon">🔌</span>
-                <span>Connection Settings</span>
-            </div>
-            <div class="setting-group">
-                <label class="setting-label" for="router-url">Router URL</label>
-                <input 
-                    type="text" 
-                    id="router-url" 
-                    placeholder="https://your-worker.workers.dev"
-                    aria-label="Router URL"
-                >
-            </div>
-            
-            <div class="setting-group">
-                <label class="setting-label" for="secret">Shared Secret</label>
-                <input 
-                    type="password" 
-                    id="secret" 
-                    placeholder="Your shared secret key"
-                    aria-label="Shared secret"
-                >
-            </div>
-        </div>
+        <!-- Hidden fields for backwards compatibility -->
+        <input type="hidden" id="router-url" value="">
+        <input type="hidden" id="secret" value="">
         
         <div class="settings-actions">
             <button onclick="saveSettings()">💾 Save</button>
@@ -3002,7 +3130,7 @@ const HTML = `<!DOCTYPE html>
         const SESSION_TOKEN_KEY = 'sessionToken';
         
         let config = {
-            routerUrl: localStorage.getItem('routerUrl') || '',
+            routerUrl: localStorage.getItem('routerUrl') || window.location.origin,
             secret: localStorage.getItem('secret') || '',
             theme: localStorage.getItem('theme') || detectSystemTheme(),
             sessionToken: localStorage.getItem(SESSION_TOKEN_KEY) || ''
@@ -3013,7 +3141,7 @@ const HTML = `<!DOCTYPE html>
             if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
                 return 'portal'; // Light theme
             }
-            return 'cyberpunk'; // Default dark cyberpunk theme
+            return 'lcars'; // Default LCARS theme
         }
         
         // Authentication helpers
@@ -3060,7 +3188,26 @@ const HTML = `<!DOCTYPE html>
         let editingMessageIndex = null;
         let editingMessageElement = null;
         let microphoneTimeoutId = null;
+        let selectedModel = 'groq'; // Default model
         const MICROPHONE_TIMEOUT_MS = 10000; // 10 seconds
+
+        // Initialize environment indicator
+        function initEnvironmentIndicator() {
+            const indicator = document.getElementById('env-indicator');
+            const hostname = window.location.hostname;
+            
+            // Determine environment based on hostname
+            let environment = 'production';
+            let envClass = 'production';
+            
+            if (hostname.includes('staging') || hostname.includes('pages.dev') || hostname.includes('localhost')) {
+                environment = 'staging';
+                envClass = 'staging';
+            }
+            
+            indicator.textContent = environment.toUpperCase();
+            indicator.className = \`env-indicator \$\{envClass}\`;
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -3069,9 +3216,17 @@ const HTML = `<!DOCTYPE html>
             setupEventListeners();
             setupScrollBehavior();
             setupThemeToggle();
+            initEnvironmentIndicator();
             autoResize();
             applyTheme(config.theme);
             updateThemeToggleIcon();
+            
+            // Load saved model selection
+            const savedModel = localStorage.getItem('selectedModel');
+            if (savedModel) {
+                selectedModel = savedModel;
+                document.getElementById('model-selector').value = savedModel;
+            }
             
             if (config.routerUrl) {
                 updateStatus();
@@ -3112,6 +3267,13 @@ const HTML = `<!DOCTYPE html>
             document.getElementById('settings-btn').addEventListener('click', openSettings);
             document.getElementById('settings-overlay').addEventListener('click', closeSettings);
             document.getElementById('scroll-to-bottom').addEventListener('click', scrollToBottom);
+            
+            // Model selector
+            document.getElementById('model-selector').addEventListener('change', (e) => {
+                selectedModel = e.target.value;
+                localStorage.setItem('selectedModel', selectedModel);
+                addMessage('system', \`🤖 Switched to \$\{selectedModel === 'editor' ? 'Editor (Code Pipeline)' : selectedModel.charAt(0).toUpperCase() + selectedModel.slice(1)} model\`);
+            });
             
             // Secondary action buttons
             document.getElementById('code-btn').addEventListener('click', toggleCodeMode);
@@ -3368,15 +3530,17 @@ const HTML = `<!DOCTYPE html>
                 currentChallenge = await getChallenge();
                 
                 let response;
-                if (upgradeMode) {
+                // Check if Editor model is selected OR upgrade mode is active
+                if (selectedModel === 'editor' || upgradeMode) {
                     response = await sendUpgrade(text);
                     handleUpgradeResponse(response);
                 } else {
-                    response = await sendChat(text);
+                    // For other models, include model preference in the chat request
+                    response = await sendChat(text, selectedModel);
                     handleChatResponse(response);
                 }
                 
-                if (isVoiceInput && !upgradeMode) {
+                if (isVoiceInput && selectedModel !== 'editor' && !upgradeMode) {
                     speak(response.response);
                 }
                 
@@ -3420,7 +3584,7 @@ const HTML = `<!DOCTYPE html>
             return response.json();
         }
 
-        async function sendChat(message) {
+        async function sendChat(message, model = 'groq') {
             const timestamp = Date.now();
             const signature = await computeSignature(currentChallenge.challenge, timestamp, message);
             
@@ -3432,7 +3596,7 @@ const HTML = `<!DOCTYPE html>
                     'X-Timestamp': timestamp.toString(),
                     'X-Signature': signature
                 },
-                body: JSON.stringify({ message, conversation })
+                body: JSON.stringify({ message, conversation, model })
             });
             
             if (!response.ok) {
@@ -3909,7 +4073,7 @@ const HTML = `<!DOCTYPE html>
         
         // Quick theme toggle between light and dark
         function toggleThemeQuick() {
-            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const darkThemes = ['lcars', 'matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
             const lightThemes = ['portal'];
             
             const isDark = darkThemes.includes(config.theme);
@@ -3919,8 +4083,8 @@ const HTML = `<!DOCTYPE html>
                 // Switch to light
                 newTheme = 'portal';
             } else {
-                // Switch to dark cyberpunk
-                newTheme = 'cyberpunk';
+                // Switch to dark (default to LCARS)
+                newTheme = 'lcars';
             }
             
             localStorage.setItem('themeManuallySet', 'true');
@@ -3949,7 +4113,7 @@ const HTML = `<!DOCTYPE html>
         // Update theme toggle button icon
         function updateThemeToggleIcon() {
             const btn = document.getElementById('theme-toggle-btn');
-            const darkThemes = ['matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
+            const darkThemes = ['lcars', 'matrix', 'cyberpunk', 'borg', 'hal', 'wargames', 'modern', 'tron', 'neuromancer', 'alien', 'dune', 'ghost', 'interstellar', 'synthwave'];
             
             if (darkThemes.includes(config.theme)) {
                 btn.textContent = '☀️'; // Sun icon for switching to light
@@ -4018,6 +4182,7 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
 
 
 
