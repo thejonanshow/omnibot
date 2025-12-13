@@ -3533,8 +3533,7 @@ const HTML = `<!DOCTYPE html>
             }
             
             if (!config.routerUrl || !config.secret) {
-                addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first.');
-                openSettings();
+                addMessage('system', '⚙️ Please configure Router URL and Secret in Settings first. Click the Settings button (⚙️) in the top right.');
                 return;
             }
 
@@ -4219,6 +4218,7 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
 
 
 
