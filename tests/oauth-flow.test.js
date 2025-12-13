@@ -71,7 +71,8 @@ describe('OAuth Flow', () => {
       assert.equal(response.status, 302, 'Should redirect');
       const location = response.headers.get('Location');
       assert.ok(location, 'Should have Location header');
-      assert.ok(location.includes('accounts.google.com'), 'Should redirect to Google');
+      const parsedUrl = new URL(location);
+      assert.equal(parsedUrl.hostname, 'accounts.google.com', 'Should redirect to Google');
       assert.ok(location.includes('state='), 'Should include state parameter');
     });
 
