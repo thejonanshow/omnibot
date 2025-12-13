@@ -3200,7 +3200,12 @@ const HTML = `<!DOCTYPE html>
             let environment = 'production';
             let envClass = 'production';
             
-            if (hostname.includes('staging') || hostname.includes('pages.dev') || hostname.includes('localhost')) {
+            // More specific patterns for staging detection
+            if (hostname === 'localhost' || 
+                hostname === '127.0.0.1' ||
+                hostname.endsWith('.pages.dev') ||
+                hostname.endsWith('-staging.workers.dev') ||
+                hostname.includes('omnibot-staging')) {
                 environment = 'staging';
                 envClass = 'staging';
             }
@@ -4182,6 +4187,7 @@ const HTML = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
 
 
 
