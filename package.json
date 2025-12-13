@@ -4,7 +4,7 @@
   "description": "OmniBot test suite",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-consolidated-worker.js",
+    "build": "node scripts/build-modular-worker.js",
     "test": "mocha tests/structure-*.test.js --timeout 10000",
     "test:structure": "mocha tests/structure-basic.test.js --grep 'Structure' --timeout 5000",
     "test:safety": "mocha tests/structure-basic.test.js --grep 'Safety' --timeout 5000",

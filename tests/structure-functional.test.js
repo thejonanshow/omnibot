@@ -142,8 +142,15 @@ describe('OmniBot Safety Tests', () => {
   
   before(() => {
     try {
-      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
-      console.log(`✓ Loaded worker code for safety tests: ${workerCode.length} characters`);
+      // Load modular components for safety tests
+      const indexCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      const routerCode = fs.readFileSync('./cloudflare-worker/src/router.js', 'utf-8');
+      const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+      const editorCode = fs.readFileSync('./cloudflare-worker/src/editor.js', 'utf-8');
+      const githubCode = fs.readFileSync('./cloudflare-worker/src/github.js', 'utf-8');
+      
+      workerCode = indexCode + routerCode + aiCode + editorCode + githubCode;
+      console.log(`✓ Loaded modular worker code for safety tests: ${workerCode.length} characters`);
     } catch (error) {
       console.error('✗ Failed to load worker code:', error.message);
       throw error;
@@ -152,8 +159,8 @@ describe('OmniBot Safety Tests', () => {
   
   it('should validate code structure before commit', () => {
     const validationChecks = [
-      { pattern: 'validateCodeStructure', desc: 'code structure validation function' },
-      { pattern: 'REQUIRED_FUNCTIONS', desc: 'required functions list' }
+      { pattern: 'validateEditInput', desc: 'input validation function' },
+      { pattern: 'validateGeneratedCode', desc: 'code generation validation' }
     ];
     
     for (const check of validationChecks) {
@@ -165,15 +172,15 @@ describe('OmniBot Safety Tests', () => {
     }
   });
   
-  it('should have minimum size check', () => {
-    const sizeChecks = [
-      { pattern: 'code.length < 5000', desc: 'minimum size validation' },
-      { pattern: 'Code seems short', desc: 'size warning message' }
+  it('should have security validation checks', () => {
+    const securityChecks = [
+      { pattern: 'validateOAuthState', desc: 'OAuth state validation' },
+      { pattern: 'RateLimiter', desc: 'rate limiting functionality' }
     ];
     
-    for (const check of sizeChecks) {
+    for (const check of securityChecks) {
       if (!workerCode.includes(check.pattern)) {
-        console.error(`✗ Missing code size validation: ${check.desc}`);
+        console.error(`✗ Missing security check: ${check.desc}`);
         console.error(`  Expected pattern: ${check.pattern}`);
       }
       expect(workerCode).to.include(check.pattern, `Missing ${check.desc} in validation`);
