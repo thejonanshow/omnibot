@@ -98,7 +98,15 @@ export async function verifySessionToken(token, env) {
     const [data, signatureHex] = token.split('.');
     if (!data || !signatureHex) return null;
     
-    const { email, timestamp } = JSON.parse(data);
+    const parsed = JSON.parse(data, (key, value) => {
+      // Prevent prototype pollution
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        return undefined;
+      }
+      return value;
+    });
+    
+    const { email, timestamp } = parsed;
     
     // Check if session is expired
     if (Date.now() - timestamp > SESSION_DURATION_MS) {
