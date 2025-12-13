@@ -41,21 +41,40 @@ Successfully restored the Star Trek LCARS-themed UI from commit 1238720 while in
 - Automatic message submission after successful transcription
 - Error handling for permissions and browser compatibility
 
-### 3. Simplifications
+### 3. Security & Authentication
+
+**Google OAuth Integration**:
+- Authentication overlay shown on first visit
+- "Sign in with Google" button using Google Identity Services
+- Session token stored and verified with backend
+- Only `jonanscheffler@gmail.com` has access
+- Dev bypass available with `?skipauth=1` parameter
+
+**Authentication Flow**:
+1. User visits site → sees auth overlay
+2. Clicks "Sign in with Google"
+3. Redirects to `/auth/google` → Google OAuth
+4. Callback to `/auth/callback` with code
+5. Backend verifies email and creates session token
+6. Redirects back to app with session token in URL
+7. Frontend verifies session with `/api/verify-session`
+8. On success, hides overlay and shows chat
+
+### 4. Simplifications
 
 **Removed for streamlined experience**:
-- Google OAuth authentication overlay
 - Multiple mode switching (edit, context, telemetry views)
 - Promote button (CI/CD specific)
 - Theme switcher (single LCARS theme)
 
-**Retained for compatibility**:
+**Retained for security & compatibility**:
+- **Google OAuth authentication** (CRITICAL FOR SECURITY)
 - Status and Settings buttons in sidebar
 - CSS variables for test compatibility (`--bg-primary`, `--text-primary`)
 - Edit-mode styling class
-- OAuth endpoints in backend
+- OAuth endpoints in backend (`/auth/google`, `/auth/callback`, `/api/verify-session`)
 
-### 4. Technical Implementation
+### 11. Technical Implementation
 
 **Build Process**:
 - Source: `frontend/index.html` (523 lines)

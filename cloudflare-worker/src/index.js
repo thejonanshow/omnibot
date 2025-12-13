@@ -1409,6 +1409,33 @@ const HTML = `<!DOCTYPE html>
     }
     
     /* Mobile Responsive */
+    /* Auth overlay */
+    .auth-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    
+    .auth-overlay.hidden { display: none; }
+    
+    .auth-title {
+      font-family: 'Orbitron', 'Courier New', monospace;
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--lcars-orange);
+      margin-bottom: 40px;
+      text-transform: uppercase;
+      letter-spacing: 8px;
+    }
+    
     @media (max-width: 768px) {
       .lcars-frame {
         grid-template-columns: 80px 1fr;
@@ -1447,10 +1474,21 @@ const HTML = `<!DOCTYPE html>
       .voice-btn, .send-btn {
         flex: 1;
       }
+      
+      .auth-title {
+        font-size: 32px;
+        letter-spacing: 4px;
+      }
     }
   </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-title">OmniBot</div>
+    <div id="googleSignIn"></div>
+  </div>
+
   <div class="lcars-frame">
     <div class="lcars-sidebar">
       <div class="lcars-sidebar-top"></div>
@@ -1470,7 +1508,6 @@ const HTML = `<!DOCTYPE html>
     </div>
     
     <div class="chat-area" id="messages">
-      <div class="msg system">🚀 LCARS System Online - Voice Mode Ready</div>
     </div>
     
     <div class="input-area">
@@ -1498,14 +1535,82 @@ const HTML = `<!DOCTYPE html>
       const $input = document.getElementById('input');
       const $sendBtn = document.getElementById('sendBtn');
       const $voiceBtn = document.getElementById('voiceBtn');
+      const $authOverlay = document.getElementById('authOverlay');
       
       let messages = [];
       let loading = false;
       let recognition = null;
       let isRecording = false;
+      let sessionToken = null;
       
       // Configuration
       const API_URL = window.location.origin;
+      
+      // Google Sign-In
+      function initGoogleAuth() {
+        if (typeof google === 'undefined') {
+          setTimeout(initGoogleAuth, 100);
+          return;
+        }
+        
+        google.accounts.id.initialize({
+          client_id: '107783640386-ja8kfg90o5hfkgdbbv1pg3s753r24mf7.apps.googleusercontent.com',
+          callback: handleCredentialResponse
+        });
+        
+        google.accounts.id.renderButton(
+          document.getElementById('googleSignIn'),
+          { theme: 'filled_black', size: 'large', text: 'signin_with' }
+        );
+      }
+      
+      function handleCredentialResponse(response) {
+        // For Google Sign-In button, redirect to OAuth flow
+        window.location.href = '/auth/google';
+      }
+      
+      // Check for session token in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlSession = urlParams.get('session');
+      const urlEmail = urlParams.get('email');
+      
+      if (urlSession) {
+        sessionToken = urlSession;
+        // Verify session with backend
+        fetch('/api/verify-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: sessionToken })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.valid) {
+            $authOverlay.classList.add('hidden');
+            if (urlEmail) {
+              addMessage('system', '🚀 LCARS System Online - Authorized: ' + urlEmail);
+            }
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else {
+            // Session invalid, show auth overlay
+            initGoogleAuth();
+          }
+        })
+        .catch(err => {
+          console.error('Session verification error:', err);
+          initGoogleAuth();
+        });
+      } else {
+        // No session, check for dev bypass
+        const skipAuth = urlParams.get('skipauth') === '1';
+        if (skipAuth) {
+          $authOverlay.classList.add('hidden');
+          addMessage('system', '🚀 LCARS System Online - Voice Mode Ready (Dev Mode)');
+        } else {
+          // Show auth overlay
+          initGoogleAuth();
+        }
+      }
       
       // Initialize speech recognition
       function setupSpeechRecognition() {
@@ -1668,6 +1773,7 @@ const HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
 
 
 
