@@ -5,9 +5,10 @@
  * Stories 1.1-1.4: Groq, Gemini, Claude, Qwen API Integration
  */
 
+import './test-setup.js';
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { callGroq, callGemini, callClaude, callQwen } from '../cloudflare-worker/src/llm-providers.js';
+import { callQwen } from '../cloudflare-worker/src/llm-providers.js';
 
 describe('Epic 1: LLM Provider Integration', () => {
   let mockEnv;

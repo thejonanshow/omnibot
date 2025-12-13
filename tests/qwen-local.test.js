@@ -3,6 +3,7 @@
  * Tests for local Ollama Qwen integration
  */
 
+import './test-setup.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { callQwen } from '../cloudflare-worker/src/llm-providers.js';
@@ -12,7 +13,8 @@ describe('Local Qwen Integration', () => {
     it('Given local Ollama is running, when asking for code, then return working code', async () => {
       const env = { 
         NODE_ENV: 'development',
-        CONTEXT: null // No context store needed for this test
+        CONTEXT: null, // No context store needed for this test
+        QWEN_API_KEY: 'mock-qwen-key' // Mock API key to prevent the "not configured" error
       };
       
       const message = 'Write a JavaScript function to add two numbers. Just the code, no explanation.';

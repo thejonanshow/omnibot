@@ -2,6 +2,7 @@
  * Unit tests for authentication utilities using Node's native test runner
  */
 
+import './test-setup.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateChallenge, verifyRequest } from '../cloudflare-worker/src/lib/auth.js';
