@@ -151,6 +151,14 @@ export async function handleRequest(request, env) {
         has_ai_providers: !!(env.GROQ_API_KEY || env.GEMINI_API_KEY || env.ANTHROPIC_API_KEY)
       };
       
+      // Feature detection
+      health.features = {
+        webassembly: typeof WebAssembly !== 'undefined',
+        bigint: typeof BigInt !== 'undefined',
+        crypto: typeof crypto !== 'undefined',
+        cache: typeof caches !== 'undefined'
+      };
+      
       return new Response(JSON.stringify(health), {
         headers: { ...cors, 'Content-Type': 'application/json', 'Vary': 'Accept-Encoding' }
       });
