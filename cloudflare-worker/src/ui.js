@@ -5,12 +5,22 @@
 
 import { VERSION_FULL } from './config.js';
 
+// Cache for compiled themes
+const themeCache = new Map();
+
 /**
  * Render the main UI
  */
 export function renderUI(sessionToken = null) {
-  const themes = getThemes();
   const currentTheme = 'lcars'; // Default theme
+  
+  // Use cached theme if available
+  if (!themeCache.has(currentTheme)) {
+    const themes = getThemes();
+    themeCache.set(currentTheme, themes[currentTheme]);
+  }
+  
+  const themeCSS = themeCache.get(currentTheme);
   
   return `<!DOCTYPE html>
 <html lang="en">
@@ -19,7 +29,7 @@ export function renderUI(sessionToken = null) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OmniBot - ${VERSION_FULL}</title>
     <style>
-        ${themes[currentTheme]}
+        ${themeCSS}
         
         /* Base styles */
         * {
