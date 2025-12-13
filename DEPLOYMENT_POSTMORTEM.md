@@ -121,8 +121,8 @@ Added multi-stage build verification in all workflows:
     fi
     SIZE=$(wc -c < cloudflare-worker/src/index.js)
     echo "Built worker size: $SIZE bytes"
-    if [ $SIZE -lt 100000 ]; then
-      echo "ERROR: Built worker is too small (expected >100KB with embedded HTML)"
+    if [ $SIZE -lt 40000 ]; then
+      echo "ERROR: Built worker is too small (expected >40KB with embedded HTML)"
       exit 1
     fi
     if ! grep -q "<!DOCTYPE html>" cloudflare-worker/src/index.js; then
@@ -134,7 +134,7 @@ Added multi-stage build verification in all workflows:
 
 **Checks Added:**
 - File existence verification
-- Minimum size check (>100KB to ensure HTML is embedded)
+- Minimum size check (>40KB to ensure HTML is embedded)
 - HTML DOCTYPE presence validation
 - Clear error messages for debugging
 

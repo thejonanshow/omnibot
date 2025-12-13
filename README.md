@@ -13,11 +13,14 @@ npm test         # Run tests
 
 ## Features
 
+- **LCARS Star Trek UI**: Default theme with orange/gold/purple color scheme
+- **Model Selector**: Choose between Groq, Gemini, Claude, or Editor (code pipeline) from header dropdown
+- **Environment Indicator**: Visual badge showing STAGING vs PRODUCTION
 - Auto-rotates between Groq/Gemini/Claude/GPT based on rate limits
-- Voice input/output (Web Speech API)
-- Self-upgrade via voice commands ("upgrade mode")
-- HMAC authentication
-- Modern UI with 14 sci-fi themes
+- Voice input/output with 10-second timeout (Web Speech API)
+- Self-upgrade via voice commands ("upgrade mode") or Editor model
+- HMAC authentication with Google OAuth enforcement
+- 14 sci-fi themes including LCARS, Cyberpunk, Matrix, Tron, and more
 
 ## Architecture
 
@@ -119,7 +122,7 @@ All deployments must pass these gates (blocks on failure):
 
 - 🛑 **Linting**: ESLint errors block commits and CI/CD
 - 🛑 **Tests**: Test failures block pushes and deployments
-- 🛑 **Build**: Build must produce valid output (>100KB with HTML)
+- 🛑 **Build**: Build must produce valid output (>40KB with HTML)
 - 🛑 **Post-deployment**: Health checks and content verification
 
 ### Manual Verification

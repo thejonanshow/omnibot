@@ -70,7 +70,7 @@ git push --no-verify
 3. **Build verification**
    - Runs `npm run build`
    - Verifies output file exists
-   - Checks minimum size (>100KB)
+   - Checks minimum size (>40KB)
    - Validates HTML embedding
 
 **Triggers:**

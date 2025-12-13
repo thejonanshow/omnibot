@@ -45,13 +45,28 @@ describe('OmniBot Functional Tests', () => {
   });
   
   describe('UI', () => {
-    it('should have themed CSS variables', () => {
-      expect(workerCode).to.include('--bg-primary');
-      expect(workerCode).to.include('--text-primary');
+    it('should have LCARS CSS variables', () => {
+      expect(workerCode).to.include('--lcars-orange');
+      expect(workerCode).to.include('--lcars-blue');
     });
     
     it('should have edit mode styling', () => {
       expect(workerCode).to.include('edit-mode');
+    });
+    
+    it('should have LCARS structure', () => {
+      expect(workerCode).to.include('lcars-frame');
+      expect(workerCode).to.include('lcars-sidebar');
+    });
+    
+    it('should have LCARS buttons', () => {
+      expect(workerCode).to.include('lcars-btn');
+      expect(workerCode).to.include('data-mode="chat"');
+    });
+    
+    it('should have LCARS header', () => {
+      expect(workerCode).to.include('lcars-header');
+      expect(workerCode).to.include('lcars-title');
     });
   });
   

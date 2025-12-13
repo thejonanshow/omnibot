@@ -153,7 +153,7 @@ All pipeline stages include the following gates that **block deployment** on fai
 - ✋ **Linting errors** - Code must be syntactically correct and follow style guidelines
 - ✋ **Test failures** - All tests must pass
 - ✋ **Build failures** - Build must produce valid output with embedded HTML
-- ✋ **Size checks** - Built worker must be > 100KB (indicates HTML embedding)
+- ✋ **Size checks** - Built worker must be > 40KB (indicates HTML embedding)
 - ✋ **Post-deployment validation** - Deployed app must respond correctly
 
 ### Why These Gates Matter

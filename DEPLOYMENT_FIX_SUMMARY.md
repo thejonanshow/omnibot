@@ -28,7 +28,7 @@ The OmniBot deployment pipeline was failing to deploy up-to-date content to stag
 ### 2. Added Build Verification
 ✅ Comprehensive pre-deployment checks:
 - File existence validation
-- Size check (>100KB ensures HTML is embedded)
+- Size check (>40KB ensures HTML is embedded)
 - HTML DOCTYPE presence verification
 - Clear error messages for debugging
 

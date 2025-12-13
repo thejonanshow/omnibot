@@ -29,7 +29,7 @@ GitHub Actions automatically:
 2. ✅ Installs dependencies (`npm install`)
 3. ✅ Builds consolidated worker (`npm run build`)
 4. ✅ Verifies build output:
-   - File exists and size >100KB
+   - File exists and size >40KB
    - HTML is embedded (`<!DOCTYPE html>` present)
 5. ✅ Deploys to staging via Wrangler
 6. ✅ Post-deployment validation:

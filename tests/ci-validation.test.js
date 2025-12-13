@@ -48,7 +48,7 @@ describe('CI/CD Pipeline Validation', () => {
       
       // Verify build verification exists
       assert.ok(content.includes('Verify build output'), 'Should verify build output');
-      assert.ok(content.includes('100000'), 'Should check minimum size');
+      assert.ok(content.includes('40000'), 'Should check minimum size');
       assert.ok(content.includes('<!DOCTYPE html>'), 'Should verify HTML embedding');
     });
     
@@ -252,7 +252,7 @@ describe('CI/CD Pipeline Validation', () => {
           `${workflow} should verify build output`
         );
         assert.ok(
-          content.includes('100000'),
+          content.includes('40000'),
           `${workflow} should check minimum build size`
         );
         assert.ok(

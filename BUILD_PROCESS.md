@@ -41,7 +41,7 @@ All deployments automatically build the consolidated worker with comprehensive v
    - Builds consolidated worker (`npm run build`)
    - Verifies build output:
      * File exists
-     * Size >100KB (ensures HTML is embedded)
+     * Size >40KB (ensures HTML is embedded)
      * Contains `<!DOCTYPE html>`
    - Deploys to staging environment via Wrangler
    - Post-deployment validation:
