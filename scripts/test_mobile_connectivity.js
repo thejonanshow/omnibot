@@ -254,7 +254,7 @@ async function testUIEndpoints() {
     }
     
     // Test authenticated UI
-    const challenge = await getChallenge(WORKER_URL);
+    await getChallenge(WORKER_URL);
     const sessionResponse = await makeRequest(`${WORKER_URL}/?session=test-session`);
     
     return sessionResponse.statusCode === 200;

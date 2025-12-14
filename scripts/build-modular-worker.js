@@ -11,7 +11,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const MODULES_DIR = path.join(__dirname, '../cloudflare-worker/src');
 const FRONTEND_HTML = path.join(__dirname, '../frontend/index.html');
 const OUTPUT_FILE = path.join(__dirname, '../cloudflare-worker/dist/consolidated-worker.js');
 

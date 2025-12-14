@@ -36,8 +36,8 @@ const MALICIOUS_PATTERNS = Object.freeze([
 
 const DANGEROUS_PATTERNS = Object.freeze([
   /process\.exit/gi,
-  /require\s*\(\s*['"`][fs]['"`]\s*\)/gi,
-  /require\s*\(\s*['"`][child_process]['"`]\s*\)/gi,
+  /require\s*\(\s*['"`]fs['"`]\s*\)/gi,
+  /require\s*\(\s*['"`]child_process['"`]\s*\)/gi,
   /fs\.unlink/gi,
   /fs\.rmdir/gi,
   /eval\s*\(/gi,

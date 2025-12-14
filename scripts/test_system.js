@@ -13,13 +13,11 @@ const {
   getChallenge, 
   generateSignature, 
   TestResults,
-  retry,
   validateResponse,
   DEFAULT_CONFIG 
 } = require('./test-utils');
 
 const WORKER_URL = DEFAULT_CONFIG.WORKER_URL;
-const SHARED_SECRET = DEFAULT_CONFIG.SHARED_SECRET;
 
 // Check if this is a real system test
 const isSystemTest = process.env.SYSTEM_TEST === 'true' || process.argv.includes('--system');

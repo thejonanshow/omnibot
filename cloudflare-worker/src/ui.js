@@ -477,7 +477,10 @@ export function renderUI(sessionToken = null) {
             const messagesDiv = document.getElementById('chat-messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = \`message \${role} \${type} fade-in\`;
-            messageDiv.innerHTML = \`<strong>\${role}:</strong> \${content}\`;
+            const strong = document.createElement('strong');
+            strong.textContent = role + ':';
+            messageDiv.appendChild(strong);
+            messageDiv.appendChild(document.createTextNode(' ' + content));
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
