@@ -6,6 +6,7 @@
 - Run with: npm test
   */
 
+import './test-setup.js';
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
 

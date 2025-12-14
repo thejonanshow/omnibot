@@ -12,8 +12,17 @@ describe('OmniBot Structure Tests', () => {
   
   before(async () => {
     try {
-      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
-      console.log(`✓ Loaded worker code: ${workerCode.length} characters`);
+      // Load all modular components for the new architecture
+      const indexCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      const routerCode = fs.readFileSync('./cloudflare-worker/src/router.js', 'utf-8');
+      const uiCode = fs.readFileSync('./cloudflare-worker/src/ui.js', 'utf-8');
+      const authCode = fs.readFileSync('./cloudflare-worker/src/auth.js', 'utf-8');
+      const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+      const editorCode = fs.readFileSync('./cloudflare-worker/src/editor.js', 'utf-8');
+      const githubCode = fs.readFileSync('./cloudflare-worker/src/github.js', 'utf-8');
+      
+      workerCode = indexCode + routerCode + uiCode + authCode + aiCode + editorCode + githubCode;
+      console.log(`✓ Loaded modular worker code: ${workerCode.length} characters`);
     } catch (error) {
       console.error('✗ Failed to load worker code:', error.message);
       console.error('  Current directory:', process.cwd());
@@ -24,12 +33,13 @@ describe('OmniBot Structure Tests', () => {
   
   it('should have all required functions', () => {
     const requiredFunctions = [
-      'async function selfEdit',
+      'export async function selfEdit',
+      'export async function callAI',
       'async function callGroq',
       'async function githubGet',
       'async function githubPut',
-      'function validateCodeStructure',
-      'export default'
+      'export default',
+      'handleRequest'
     ];
     
     for (const func of requiredFunctions) {
@@ -51,46 +61,40 @@ describe('OmniBot Structure Tests', () => {
   });
   
   it('should include HTML UI', () => {
-    // Check for HTML constant
-    if (!workerCode.includes('const HTML =')) {
-      console.error('✗ Missing HTML UI constant');
-      console.error('  Searching for: const HTML =');
+    // Check for UI rendering function (new modular approach)
+    if (!workerCode.includes('renderUI')) {
+      console.error('✗ Missing UI rendering function');
+      console.error('  Searching for: renderUI');
       console.error('  File size:', workerCode.length);
     }
-    expect(workerCode).to.include('const HTML =', 'Missing HTML UI constant declaration');
+    expect(workerCode).to.include('renderUI', 'Missing UI rendering function');
     
     // Check for actual HTML content
-    const htmlMatch = workerCode.match(/<html[\s>]/);
+    const htmlMatch = workerCode.includes('<html');
     if (!htmlMatch) {
       console.error('✗ Missing HTML content');
       console.error('  Searching for: <html tag');
-      const htmlIndex = workerCode.indexOf('const HTML =');
-      if (htmlIndex >= 0) {
-        console.error('  Found HTML constant at position:', htmlIndex);
-        console.error('  Content after HTML constant (first 500 chars):');
-        console.error('  ', workerCode.substring(htmlIndex, htmlIndex + 500));
-      }
     }
-    expect(workerCode).to.match(/<html[\s>]/, 'Missing HTML content - <html> tag not found in code');
+    expect(workerCode).to.include('<html', 'Missing HTML content - <html> tag not found in code');
   });
   
   it('should not use browser-only APIs in worker code', () => {
-    const htmlStart = workerCode.indexOf('const HTML =');
-    const workerCodeOnly = htmlStart > 0 ? workerCode.slice(0, htmlStart) : workerCode;
-    
+    // Check the entire worker code for browser APIs (no need to exclude UI code)
     const browserAPIs = ['DOMParser', 'localStorage', 'sessionStorage'];
     
     for (const api of browserAPIs) {
-      expect(workerCodeOnly).to.not.include(api, 
+      expect(workerCode).to.not.include(api, 
         `Worker code uses browser API: ${api}`);
     }
   });
   
   it('should have API endpoints', () => {
     expect(workerCode).to.include("pathname === '/'");
-    expect(workerCode).to.include("pathname === '/api/health'");
-    expect(workerCode).to.include("pathname === '/api/chat'");
-    expect(workerCode).to.include("pathname === '/api/self-edit'");
+    expect(workerCode).to.include("pathname === '/health'");
+    expect(workerCode).to.include("pathname === '/chat'");
+    expect(workerCode).to.include("pathname === '/edit'");
+    expect(workerCode).to.include("pathname === '/api/context'");
+    expect(workerCode).to.include("pathname === '/api/prompt'");
   });
   
   it('should have CORS headers', () => {
@@ -102,14 +106,17 @@ describe('OmniBot Config Tests', () => {
   let workerCode;
   
   before(() => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    workerCode = fs.readFileSync('./cloudflare-worker/src/config.js', 'utf-8');
   });
   
   it('should have GitHub repo', () => {
-    expect(workerCode).to.include("const GITHUB_REPO = 'thejonanshow/omnibot'");
+    expect(workerCode).to.include("export const GITHUB_REPO");
+    expect(workerCode).to.include("thejonanshow/omnibot");
   });
   
   it('should use Groq', () => {
-    expect(workerCode).to.include('env.GROQ_API_KEY');
+    // Load AI module to check for Groq usage
+    const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+    expect(aiCode).to.include('env.GROQ_API_KEY');
   });
 });

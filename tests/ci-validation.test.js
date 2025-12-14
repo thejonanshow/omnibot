@@ -135,9 +135,9 @@ describe('CI/CD Pipeline Validation', () => {
       assert.ok(packageJson.scripts.lint.includes('eslint'), 'Lint script should use ESLint');
     });
     
-    it('linting should exit with non-zero code on errors', () => {
-      // This test verifies that linting would fail CI on errors
-      // Note: This test depends on pre-existing linting errors in the codebase
+    it('linting should run successfully', () => {
+      // This test verifies that linting runs without errors
+      // Note: Current ESLint config uses warnings for most rules, so this should pass
       let exitCode = 0;
       try {
         execSync('npm run lint', { stdio: 'pipe' });
@@ -145,8 +145,8 @@ describe('CI/CD Pipeline Validation', () => {
         exitCode = error.status;
       }
       
-      // Exit code should be non-zero when there are errors in the codebase
-      assert.ok(exitCode !== 0, 'Linting should exit with non-zero code when errors exist');
+      // Exit code should be 0 when there are no linting errors (warnings are OK)
+      assert.equal(exitCode, 0, 'Linting should exit with code 0 when no errors exist');
     });
   });
   

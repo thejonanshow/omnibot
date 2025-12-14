@@ -5,6 +5,7 @@
  * Stories 2.1-2.5: Challenge, Chat, Status, Health, TTS/STT Endpoints
  */
 
+import './test-setup.js';
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 

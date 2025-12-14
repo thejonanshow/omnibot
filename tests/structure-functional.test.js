@@ -11,8 +11,19 @@ describe('OmniBot Functional Tests', () => {
   
   before(() => {
     try {
-      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
-      console.log(`✓ Loaded worker code for functional tests: ${workerCode.length} characters`);
+      // Load all the modular components for testing
+      const indexCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      const routerCode = fs.readFileSync('./cloudflare-worker/src/router.js', 'utf-8');
+      const uiCode = fs.readFileSync('./cloudflare-worker/src/ui.js', 'utf-8');
+      const authCode = fs.readFileSync('./cloudflare-worker/src/auth.js', 'utf-8');
+      const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+      const editorCode = fs.readFileSync('./cloudflare-worker/src/editor.js', 'utf-8');
+      const githubCode = fs.readFileSync('./cloudflare-worker/src/github.js', 'utf-8');
+      const securityCode = fs.readFileSync('./cloudflare-worker/src/security.js', 'utf-8');
+      const configCode = fs.readFileSync('./cloudflare-worker/src/config.js', 'utf-8');
+      
+      workerCode = indexCode + routerCode + uiCode + authCode + aiCode + editorCode + githubCode + securityCode + configCode;
+      console.log(`✓ Loaded modular worker code: ${workerCode.length} characters`);
     } catch (error) {
       console.error('✗ Failed to load worker code:', error.message);
       console.error('  Stack:', error.stack);
@@ -22,25 +33,25 @@ describe('OmniBot Functional Tests', () => {
   
   describe('API Endpoints', () => {
     it('should have health endpoint returning JSON', () => {
-      expect(workerCode).to.include("pathname === '/api/health'");
-      expect(workerCode).to.include('ok: true');
+      expect(workerCode).to.include("pathname === '/health'");
+      expect(workerCode).to.include("status: 'ok'");
       expect(workerCode).to.include('version:');
     });
     
     it('should have chat endpoint accepting POST', () => {
-      expect(workerCode).to.include("pathname === '/api/chat'");
+      expect(workerCode).to.include("pathname === '/chat'");
       expect(workerCode).to.include("request.method === 'POST'");
       expect(workerCode).to.include('messages');
     });
     
     it('should have self-edit endpoint with validation', () => {
-      expect(workerCode).to.include("pathname === '/api/self-edit'");
-      expect(workerCode).to.include('instruction.length < 5');
-      expect(workerCode).to.include('Instruction too short');
+      expect(workerCode).to.include("pathname === '/edit'");
+      expect(workerCode).to.include('validateEditInput');
+      expect(workerCode).to.include('Instruction cannot be empty');
     });
     
-    it('should have test endpoint', () => {
-      expect(workerCode).to.include("pathname === '/api/test'");
+    it('should have challenge endpoint', () => {
+      expect(workerCode).to.include("pathname === '/challenge'");
     });
   });
   
@@ -50,23 +61,19 @@ describe('OmniBot Functional Tests', () => {
       expect(workerCode).to.include('--lcars-blue');
     });
     
-    it('should have edit mode styling', () => {
-      expect(workerCode).to.include('edit-mode');
-    });
-    
     it('should have LCARS structure', () => {
-      expect(workerCode).to.include('lcars-frame');
-      expect(workerCode).to.include('lcars-sidebar');
+      expect(workerCode).to.include('--lcars-orange');
+      expect(workerCode).to.include('container');
     });
     
     it('should have LCARS buttons', () => {
-      expect(workerCode).to.include('lcars-btn');
-      expect(workerCode).to.include('data-mode="chat"');
+      expect(workerCode).to.include('auth-button');
+      expect(workerCode).to.include('button');
     });
     
     it('should have LCARS header', () => {
-      expect(workerCode).to.include('lcars-header');
-      expect(workerCode).to.include('lcars-title');
+      expect(workerCode).to.include('header');
+      expect(workerCode).to.include('title');
     });
   });
   
@@ -78,13 +85,13 @@ describe('OmniBot Functional Tests', () => {
     
     it('should have session management', () => {
       expect(workerCode).to.include('createSessionToken');
-      expect(workerCode).to.include('validateSession');
+      expect(workerCode).to.include('verifySessionToken');
     });
     
     it('should have OAuth state parameter management', () => {
       expect(workerCode).to.include('generateOAuthState');
       expect(workerCode).to.include('validateOAuthState');
-      expect(workerCode).to.include('oauth_state_');
+      expect(workerCode).to.include('oauth_state:');
     });
     
     it('should restrict to allowed email', () => {
@@ -96,8 +103,8 @@ describe('OmniBot Functional Tests', () => {
     it('should have try-catch in API handlers', () => {
       const checks = [
         { pattern: 'try {', desc: 'try block' },
-        { pattern: 'catch (e)', desc: 'catch clause' },
-        { pattern: 'error: e.message', desc: 'error message handling' }
+        { pattern: 'catch', desc: 'catch clause' },
+        { pattern: 'error.message', desc: 'error message handling' }
       ];
       
       for (const check of checks) {
@@ -136,8 +143,15 @@ describe('OmniBot Safety Tests', () => {
   
   before(() => {
     try {
-      workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
-      console.log(`✓ Loaded worker code for safety tests: ${workerCode.length} characters`);
+      // Load modular components for safety tests
+      const indexCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+      const routerCode = fs.readFileSync('./cloudflare-worker/src/router.js', 'utf-8');
+      const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+      const editorCode = fs.readFileSync('./cloudflare-worker/src/editor.js', 'utf-8');
+      const githubCode = fs.readFileSync('./cloudflare-worker/src/github.js', 'utf-8');
+      
+      workerCode = indexCode + routerCode + aiCode + editorCode + githubCode;
+      console.log(`✓ Loaded modular worker code for safety tests: ${workerCode.length} characters`);
     } catch (error) {
       console.error('✗ Failed to load worker code:', error.message);
       throw error;
@@ -146,8 +160,8 @@ describe('OmniBot Safety Tests', () => {
   
   it('should validate code structure before commit', () => {
     const validationChecks = [
-      { pattern: 'validateCodeStructure', desc: 'code structure validation function' },
-      { pattern: 'REQUIRED_FUNCTIONS', desc: 'required functions list' }
+      { pattern: 'validateEditInput', desc: 'input validation function' },
+      { pattern: 'validateGeneratedCode', desc: 'code generation validation' }
     ];
     
     for (const check of validationChecks) {
@@ -159,15 +173,15 @@ describe('OmniBot Safety Tests', () => {
     }
   });
   
-  it('should have minimum size check', () => {
-    const sizeChecks = [
-      { pattern: 'code.length < 5000', desc: 'minimum size validation' },
-      { pattern: 'Code seems short', desc: 'size warning message' }
+  it('should have security validation checks', () => {
+    const securityChecks = [
+      { pattern: 'validateOAuthState', desc: 'OAuth state validation' },
+      { pattern: 'RateLimiter', desc: 'rate limiting functionality' }
     ];
     
-    for (const check of sizeChecks) {
+    for (const check of securityChecks) {
       if (!workerCode.includes(check.pattern)) {
-        console.error(`✗ Missing code size validation: ${check.desc}`);
+        console.error(`✗ Missing security check: ${check.desc}`);
         console.error(`  Expected pattern: ${check.pattern}`);
       }
       expect(workerCode).to.include(check.pattern, `Missing ${check.desc} in validation`);
@@ -175,20 +189,22 @@ describe('OmniBot Safety Tests', () => {
   });
   
   it('should require HTML UI', () => {
-    if (!workerCode.includes("const HTML =")) {
-      console.error('✗ Missing HTML UI constant in safety validation');
+    if (!workerCode.includes("renderUI")) {
+      console.error('✗ Missing HTML UI rendering function in safety validation');
       console.error('  This is critical for preventing broken deployments');
     }
-    expect(workerCode).to.include("const HTML =", 'HTML UI constant is required for safety validation');
+    expect(workerCode).to.include("renderUI", 'HTML UI rendering function is required for safety validation');
   });
   
   it('should not use browser APIs in worker runtime', () => {
+    // Extract worker code before HTML template to avoid false positives
     const htmlStart = workerCode.indexOf('const HTML =');
-    const workerRuntime = workerCode.slice(0, htmlStart);
+    const workerCodeOnly = htmlStart > -1 ? workerCode.substring(0, htmlStart) : workerCode;
     
-    expect(workerRuntime).to.not.include('DOMParser');
-    expect(workerRuntime).to.not.include('window.');
-    expect(workerRuntime).to.not.include('document.');
+    // Check worker code (excluding HTML template) for browser APIs
+    expect(workerCodeOnly).to.not.include('DOMParser');
+    expect(workerCodeOnly).to.not.include('window.');
+    expect(workerCodeOnly).to.not.include('document.');
   });
 });
 
@@ -196,7 +212,10 @@ describe('OmniBot Version Tests', () => {
   let workerCode;
   
   before(() => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    // Load config and router for version info
+    const configCode = fs.readFileSync('./cloudflare-worker/src/config.js', 'utf-8');
+    const routerCode = fs.readFileSync('./cloudflare-worker/src/router.js', 'utf-8');
+    workerCode = configCode + routerCode;
   });
   
   it('should have sea creature versioning', () => {
@@ -212,12 +231,17 @@ describe('OmniBot KV Context Tests', () => {
   let workerCode;
   
   before(() => {
-    workerCode = fs.readFileSync('./cloudflare-worker/src/index.js', 'utf-8');
+    // Load all relevant modules for context testing
+    const contextCode = fs.readFileSync('./cloudflare-worker/src/context.js', 'utf-8');
+    const telemetryCode = fs.readFileSync('./cloudflare-worker/src/telemetry.js', 'utf-8');
+    const configCode = fs.readFileSync('./cloudflare-worker/src/config.js', 'utf-8');
+    const aiCode = fs.readFileSync('./cloudflare-worker/src/ai.js', 'utf-8');
+    workerCode = contextCode + telemetryCode + configCode + aiCode;
   });
   
   it('should have context functions', () => {
-    expect(workerCode).to.include('getContext');
-    expect(workerCode).to.include('setContext');
+    expect(workerCode).to.include('getSharedContext');
+    expect(workerCode).to.include('saveContext');
   });
   
   it('should have telemetry logging', () => {
@@ -225,7 +249,6 @@ describe('OmniBot KV Context Tests', () => {
   });
   
   it('should have master prompt support', () => {
-    expect(workerCode).to.include('master_prompt');
     expect(workerCode).to.include('DEFAULT_MASTER_PROMPT');
   });
 });

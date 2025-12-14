@@ -268,7 +268,7 @@ changes_analyzed: changes
 - @param {string} token - GitHub token
 - @returns {Promise<string>} Commit SHA
   */
-  async function getLatestCommitSha(repo, branch, token) {
+  async function _getLatestCommitSha(repo, branch, token) {
   const url = `${GITHUB_API}/repos/${repo}/git/ref/heads/${branch}`;
 
 const response = await fetch(url, {
@@ -296,7 +296,7 @@ return data.object.sha;
 - @param {string} token - GitHub token
 - @returns {Promise<string>} Blob SHA
   */
-  async function createBlob(repo, content, token) {
+  async function _createBlob(repo, content, token) {
   const url = `${GITHUB_API}/repos/${repo}/git/blobs`;
 
 const response = await fetch(url, {
