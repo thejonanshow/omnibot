@@ -227,7 +227,7 @@ async function testRateLimiting() {
     const responses = await Promise.allSettled(rapidRequests);
     
     // Check if any requests were rate limited
-    const rateLimited = responses.some(r => 
+    responses.some(r => 
       r.status === 'fulfilled' && 
       r.value.statusCode === 429
     );

@@ -161,12 +161,10 @@ export async function getRepositoryContents(path = '', env) {
 export async function createOrUpdateFileWithPR(filePath, content, commitMessage, env) {
   try {
     // Get current file SHA if it exists
-    let _currentFile;
     try {
-      _currentFile = await githubGet(filePath, env);
+      await githubGet(filePath, env);
     } catch (error) {
       // File doesn't exist, which is fine for creation
-      _currentFile = null;
     }
     
     // Create a new branch

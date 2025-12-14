@@ -4,21 +4,21 @@
  */
 
 // GitHub configuration
-export const GITHUB_REPO = process.env.GITHUB_REPO || 'thejonanshow/omnibot';
+export const GITHUB_REPO = 'thejonanshow/omnibot';
 export const GITHUB_API_URL = 'https://api.github.com';
 
 // Authentication configuration
-export const ALLOWED_EMAIL = process.env.ALLOWED_EMAIL || 'jonanscheffler@gmail.com';
-export const SESSION_DURATION_MS = parseInt(process.env.SESSION_DURATION_MS) || 24 * 60 * 60 * 1000; // 24 hours
+export const ALLOWED_EMAIL = 'jonanscheffler@gmail.com';
+export const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Version information
 export const VERSION = {
-  major: parseInt(process.env.VERSION_MAJOR) || 1,
-  minor: parseInt(process.env.VERSION_MINOR) || 1,
-  patch: parseInt(process.env.VERSION_PATCH) || 1,
-  codename: process.env.VERSION_CODENAME || 'Electric Eel',
-  emoji: process.env.VERSION_EMOJI || '⚡',
-  wiki: process.env.VERSION_WIKI || 'https://en.wikipedia.org/wiki/Electric_eel'
+  major: 1,
+  minor: 1,
+  patch: 1,
+  codename: 'Electric Eel',
+  emoji: '⚡',
+  wiki: 'https://en.wikipedia.org/wiki/Electric_eel'
 };
 
 export const VERSION_STRING = `v${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
@@ -97,16 +97,16 @@ export const QWEN_API_ENDPOINT = 'https://dashscope.aliyuncs.com/api/v1/services
 export const QWEN_OPENAI_ENDPOINT = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
 
 // Rate limiting
-export const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000; // 1 minute
-export const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100;
+export const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+export const RATE_LIMIT_MAX_REQUESTS = 100;
 
 // Circuit breaker configuration
-export const CIRCUIT_BREAKER_THRESHOLD = parseInt(process.env.CIRCUIT_BREAKER_THRESHOLD) || 5;
-export const CIRCUIT_BREAKER_TIMEOUT_MS = parseInt(process.env.CIRCUIT_BREAKER_TIMEOUT_MS) || 60 * 1000; // 1 minute
+export const CIRCUIT_BREAKER_THRESHOLD = 5;
+export const CIRCUIT_BREAKER_TIMEOUT_MS = 60 * 1000; // 1 minute
 
 // Distributed locking
-export const LOCK_TIMEOUT_MS = parseInt(process.env.LOCK_TIMEOUT_MS) || 30 * 1000; // 30 seconds
-export const LOCK_RETRY_DELAY_MS = parseInt(process.env.LOCK_RETRY_DELAY_MS) || 1000; // 1 second
+export const LOCK_TIMEOUT_MS = 30 * 1000; // 30 seconds
+export const LOCK_RETRY_DELAY_MS = 1000; // 1 second
 
 export default {
   GITHUB_REPO,

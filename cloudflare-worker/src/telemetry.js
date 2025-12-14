@@ -75,7 +75,7 @@ export async function* queryTelemetry(env, eventFilter = null, startTime = null,
   
   const prefix = eventFilter ? `telemetry:${eventFilter}:` : 'telemetry:';
   
-  for await (const { key, value } of paginateKV(env.TELEMETRY, prefix, 50)) {
+  for await (const { value } of paginateKV(env.TELEMETRY, prefix, 50)) {
     if (!value) continue;
     
     try {
