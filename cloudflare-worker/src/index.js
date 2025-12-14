@@ -11,76 +11,13 @@ import {
   ALLOWED_EMAIL, 
   GITHUB_API_URL, 
   GITHUB_REPO,
-  VERSION_FULL 
+  VERSION,
+  VERSION_STRING,
+  VERSION_FULL,
+  AI_PROVIDERS,
+  REQUIRED_FUNCTIONS,
+  DEFAULT_MASTER_PROMPT
 } from './config.js';
-
-// Semantic version
-const VERSION = {
-  major: 1,
-  minor: 1,
-  patch: 1,
-  codename: 'Electric Eel',
-  emoji: '⚡',
-  wiki: 'https://en.wikipedia.org/wiki/Electric_eel'
-};
-const VERSION_STRING = `v${VERSION.major}.${VERSION.minor}.${VERSION.patch}`;
-const VERSION_FULL = `${VERSION.emoji} ${VERSION.codename} ${VERSION_STRING}`;
-
-// ============== MULTI-PROVIDER AI CONFIG ==============
-// Fallback chain: try each provider/model in order until one works
-const AI_PROVIDERS = {
-  // Purpose-based model chains (will try in order)
-  planning: [
-    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-    { provider: 'groq', model: 'openai/gpt-oss-120b' },
-    { provider: 'gemini', model: 'gemini-2.0-flash' },
-    { provider: 'groq', model: 'llama-3.1-8b-instant' }
-  ],
-  coding: [
-    { provider: 'groq', model: 'llama-3.1-8b-instant' },
-    { provider: 'groq', model: 'openai/gpt-oss-20b' },
-    { provider: 'gemini', model: 'gemini-2.0-flash' },
-    { provider: 'groq', model: 'llama-3.3-70b-versatile' }
-  ],
-  review: [
-    { provider: 'gemini', model: 'gemini-2.0-flash' },
-    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-    { provider: 'groq', model: 'openai/gpt-oss-120b' }
-  ],
-  chat: [
-    { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-    { provider: 'groq', model: 'openai/gpt-oss-20b' },
-    { provider: 'gemini', model: 'gemini-2.0-flash' }
-  ]
-};
-
-const REQUIRED_FUNCTIONS = [
-  'async function selfEdit',
-  'async function callAI',
-  'async function githubGet',
-  'async function githubPut',
-  'export default'
-];
-
-const DEFAULT_MASTER_PROMPT = `You are OmniBot, a self-editing AI assistant.
-
-Project Context:
-- Repository: thejonanshow/omnibot
-- Platform: Cloudflare Workers
-- LLM Provider: Groq (Llama 3.3 70B, Qwen 2.5)
-- Version: ${VERSION}
-
-Capabilities:
-- Chat with users
-- Edit your own source code
-- Access shared context via KV
-- Full safety validation before commits
-
-Rules:
-- Never remove required functions
-- Always preserve HTML UI
-- Code must work in Cloudflare Workers (no browser APIs in runtime)
-- Validate all changes before committing`;
 
 // ============== GOOGLE OAUTH ==============
 
@@ -2773,6 +2710,9 @@ const HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
+
+
 
 
 
