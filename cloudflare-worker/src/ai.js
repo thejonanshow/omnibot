@@ -11,6 +11,7 @@ import { callQwen } from './llm-providers.js';
 // Micro-cache for AI responses (5 second TTL)
 const responseCache = new Map();
 const CACHE_TTL = 5000;
+const CLEANUP_MULTIPLIER = 2; // Clean up entries when they're twice as old as TTL
 
 // Request coalescing to prevent duplicate calls
 const pendingRequests = new Map();
@@ -19,7 +20,7 @@ const pendingRequests = new Map();
 function cleanupExpiredCache() {
   const now = Date.now();
   for (const [key, value] of responseCache.entries()) {
-    if (now - value.timestamp > CACHE_TTL * 2) {
+    if (now - value.timestamp > CACHE_TTL * CLEANUP_MULTIPLIER) {
       responseCache.delete(key);
     }
   }
