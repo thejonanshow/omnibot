@@ -15,15 +15,15 @@ const CACHE_TTL = 5000;
 // Request coalescing to prevent duplicate calls
 const pendingRequests = new Map();
 
-// Periodic cache cleanup
-setInterval(() => {
+// Lazy cache cleanup function (called on each cache access)
+function cleanupExpiredCache() {
   const now = Date.now();
   for (const [key, value] of responseCache.entries()) {
     if (now - value.timestamp > CACHE_TTL * 2) {
       responseCache.delete(key);
     }
   }
-}, CACHE_TTL);
+}
 
 // Initialize circuit breakers for each provider
 const circuitBreakers = {
@@ -37,6 +37,9 @@ const circuitBreakers = {
  * Call AI with provider fallback
  */
 export async function callAI(message, conversation, env, purpose = 'chat') {
+  // Lazy cleanup of expired cache entries
+  cleanupExpiredCache();
+  
   // Create cache key from message and conversation hash
   const cacheKey = `${purpose}:${message}:${JSON.stringify(conversation)}`;
   
